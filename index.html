@@ -130,6 +130,78 @@
       <p class="example"><b>Example: wheat</b>, base 6, s₀ = 50%, e = 1. At 50% full: 6 × (50 ÷ 50) = <b>6</b>. At 10% full: 6 × (50 ÷ 10) = <b>30</b>.</p>
     </div>
 
+    <details class="explainer">
+      <summary>What each number means</summary>
+      <div class="xgrid">
+        <div class="x">
+          <h4>Price</h4>
+          <p>What one unit sells for on the market right now. Every player buys and sells at this price.</p>
+        </div>
+        <div class="x">
+          <h4>Base</h4>
+          <p>The price when everything is normal: stockpiles balanced, demand normal, no inflation yet. Think of it as the commodity's "fair value".</p>
+          <p>Raw resources and wastes have a base set by hand (wheat is 6). Made goods work theirs out from their recipe, so a smartphone's base comes from the bases of its circuit board, battery and glass.</p>
+        </div>
+        <div class="x">
+          <h4>Markup <span>1.3</span></h4>
+          <p>How much a factory adds on top of what its inputs cost. At 1.3, a business that buys its inputs at base prices sells its output for 30% more. That gap is the profit that makes running a factory worthwhile.</p>
+        </div>
+        <div class="x">
+          <h4>Share, s</h4>
+          <p>How much of all players' stockpile space, added together, is filled with this commodity right now.</p>
+          <p class="eg">If all players together have room for 1,000 crates and 100 of them hold wheat, wheat's share is 10%.</p>
+        </div>
+        <div class="x">
+          <h4>Balanced share, s₀</h4>
+          <p>The share at which the price equals the base: the "healthy" amount of this commodity to have in the economy. Bulk goods like wheat have a large balanced share; rare, high-end goods like wind turbines have a tiny one.</p>
+          <p>The balanced shares of all 50 commodities add up to 100%, so a perfectly balanced market has every stockpile full.</p>
+        </div>
+        <div class="x">
+          <h4>Scarcity</h4>
+          <p>How much the price is pushed up or down by supply: (s₀ ÷ s)<sup>e</sup>. Above 1 means scarce, so the price is higher; below 1 means plentiful, so it's lower.</p>
+          <p class="eg">Wheat with s₀ 50% and s 10%: 50 ÷ 10 = 5, so wheat costs 5 times its base.</p>
+        </div>
+        <div class="x">
+          <h4>Elasticity, e</h4>
+          <p>How strongly the price reacts when stock runs short or piles up. Higher means wilder swings.</p>
+          <p class="eg">At half the balanced share: e = 1 doubles the price (×2.0), e = 1.4 gives ×2.6, and e = 1.6 gives ×3.0.</p>
+          <p>Staples like wheat and water use 1.0. Specialised goods with no substitute, like chips or motors, use up to 1.6, because when you need one there's nothing else you can buy.</p>
+        </div>
+        <div class="x">
+          <h4>Price limits <span>×10</span></h4>
+          <p>For the price, a share never counts as more than 10 times below or above balance. This stops a commodity that runs out completely from costing infinity, or a flooded one from becoming free.</p>
+          <p class="eg">Wheat at 1% is priced as if it were at 5%: 6 × 10 = 60, not 300.</p>
+        </div>
+        <div class="x">
+          <h4>Demand</h4>
+          <p>How badly factories need this commodity compared with normal. 1.0 is normal, 1.5 means they want 50% more, and 0.5 means half as much. It multiplies the price directly.</p>
+          <p>It will be worked out from how many factories are running and what their recipes use. For now you can type it in.</p>
+        </div>
+        <div class="x">
+          <h4>Inflation</h4>
+          <p>Prices creep up over time, the same for everything: (1 + rate)<sup>round</sup>.</p>
+          <p class="eg">At 2% a round: ×1.02 after round 1, ×1.22 after round 10, and ×2.69 after round 50.</p>
+        </div>
+        <div class="x">
+          <h4>Round</h4>
+          <p>One game day (morning, midday, afternoon and overnight). Inflation is applied once per round.</p>
+        </div>
+        <div class="x">
+          <h4>Waste fees</h4>
+          <p>Tailings and chemical waste have no use, so their price is negative: you pay to get rid of them. Their scarcity term is flipped, (s ÷ s₀)<sup>e</sup>, so the more that piles up across all players, the higher the fee gets. Demand doesn't apply, since nobody wants them.</p>
+          <p>Slag, fly ash and sawdust can be recycled, so they're priced like any other good.</p>
+        </div>
+        <div class="x">
+          <h4>vs base</h4>
+          <p>How far the current price is from the base, in percent. Orange means above base and blue means below.</p>
+        </div>
+        <div class="x">
+          <h4>Stockpile space used</h4>
+          <p>All 50 current shares added together. It can't go over 100%, because players can't hold more than their space allows. It shows red if your edits push it past 100%.</p>
+        </div>
+      </div>
+    </details>
+
     <div class="mctl">
       <label>Round <input type="range" id="roundSlider" min="0" max="50" value="0"> <b id="mround">0</b></label>
       <label>Inflation per round <input type="number" id="rateInput" step="0.5" min="-20" max="50">%</label>
