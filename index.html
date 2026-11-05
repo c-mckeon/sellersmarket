@@ -4,12 +4,65 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Sellers Market</title>
-<style>
-  body { font-family: system-ui, sans-serif; margin: 0; min-height: 100vh; display: grid; place-items: center; background: #fafafa; color: #222; }
-  @media (prefers-color-scheme: dark) { body { background: #151515; color: #eee; } }
-</style>
+<link rel="stylesheet" href="css/style.css">
 </head>
 <body>
-  <h1>Sellers Market</h1>
+<header class="top">
+  <div class="brand">Sellers <span>Market</span></div>
+  <nav class="tabs" id="mainTabs">
+    <a href="#/game" data-tab="game">Game</a>
+    <a href="#/mechanics/commodities" data-tab="mechanics">Mechanics</a>
+  </nav>
+</header>
+
+<nav class="subtabs" id="subTabs" hidden>
+  <a href="#/mechanics/gameplay" data-sub="gameplay">Gameplay</a>
+  <a href="#/mechanics/commodities" data-sub="commodities">Commodities</a>
+  <a href="#/mechanics/dashboard" data-sub="dashboard">Dashboard</a>
+</nav>
+
+<main>
+  <section id="view-game" class="view">
+    <div class="placeholder">
+      <h1>Game</h1>
+      <p>The game will live here.</p>
+    </div>
+  </section>
+
+  <section id="view-gameplay" class="view">
+    <div class="placeholder">
+      <h1>Gameplay</h1>
+      <p>How a turn works, how you buy and sell, and how you win. Coming soon.</p>
+    </div>
+  </section>
+
+  <section id="view-dashboard" class="view">
+    <div class="placeholder">
+      <h1>Dashboard</h1>
+      <p>Prices, supply and demand at a glance. Coming soon.</p>
+    </div>
+  </section>
+
+  <section id="view-commodities" class="view">
+    <div class="intro">
+      <h1>Commodities</h1>
+      <p id="summary"></p>
+    </div>
+
+    <div class="legend" id="legend"></div>
+
+    <div class="netwrap">
+      <div class="graph" id="graph"></div>
+      <aside class="panel" id="panel"></aside>
+    </div>
+
+    <h2 class="listhead">All commodities</h2>
+    <input id="search" class="search" type="search" placeholder="Filter, e.g. coal or waste" autocomplete="off">
+    <div class="tablewrap"><table id="table"></table></div>
+  </section>
+</main>
+
+<script src="js/commodities.js"></script>
+<script src="js/app.js"></script>
 </body>
 </html>

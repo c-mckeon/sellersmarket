@@ -1,0 +1,98 @@
+// Sellers Market: commodity network.
+// Each commodity is "raw" (dug up or grown), "made" (produced by a recipe) or "waste" (a by-product).
+// Whether a made good is an intermediate or a finished good is worked out from the recipes.
+
+const COMMODITIES = [
+  // Raw resources
+  { id: "wheat",          name: "Wheat",          type: "raw",   desc: "Grown on farmland. The start of the food chain." },
+  { id: "water",          name: "Water",          type: "raw",   desc: "Pumped from rivers and wells. Used almost everywhere." },
+  { id: "wood",           name: "Wood",           type: "raw",   desc: "Logged from forests." },
+  { id: "sand",           name: "Sand",           type: "raw",   desc: "Quarried silica sand. Becomes glass, silicon and concrete." },
+  { id: "clay",           name: "Clay",           type: "raw",   desc: "Dug from riverbanks. Fired into ceramic." },
+  { id: "limestone",      name: "Limestone",      type: "raw",   desc: "Quarried rock. Used for glass, cement and lithium processing." },
+  { id: "coal",           name: "Coal",           type: "raw",   desc: "Mined fuel. Heats most furnaces and kilns." },
+  { id: "iron_ore",       name: "Iron ore",       type: "raw",   desc: "Mined rock rich in iron." },
+  { id: "copper_ore",     name: "Copper ore",     type: "raw",   desc: "Mined rock with a small share of copper." },
+  { id: "gold_ore",       name: "Gold ore",       type: "raw",   desc: "Mined rock with tiny flecks of gold." },
+  { id: "bauxite",        name: "Bauxite",        type: "raw",   desc: "Red clay-like ore. The only practical source of aluminium." },
+  { id: "crude_oil",      name: "Crude oil",      type: "raw",   desc: "Drilled from underground. Refined into fuel and plastic." },
+  { id: "latex",          name: "Latex",          type: "raw",   desc: "Tapped from rubber trees." },
+  { id: "lithium_brine",  name: "Lithium brine",  type: "raw",   desc: "Salty water from desert salt flats, carrying dissolved lithium." },
+  { id: "rare_earth_ore", name: "Rare earth ore", type: "raw",   desc: "Mined ore holding neodymium and other rare metals." },
+
+  // Waste and by-products
+  { id: "slag",           name: "Slag",           type: "waste", desc: "Glassy leftovers from smelting. Can be ground into cement." },
+  { id: "fly_ash",        name: "Fly ash",        type: "waste", desc: "Fine ash from burning coal. Can be mixed into concrete." },
+  { id: "sawdust",        name: "Sawdust",        type: "waste", desc: "Offcuts from the sawmill. Can be pulped into paper." },
+  { id: "tailings",       name: "Tailings",       type: "waste", desc: "Crushed rock left after the metal is removed. No use; costs money to store." },
+  { id: "chemical_waste", name: "Chemical waste", type: "waste", desc: "Toxic leftovers from refining and fabrication. No use; costs money to dispose of." },
+
+  // Processed materials
+  { id: "flour",          name: "Flour",          type: "made",  desc: "Milled wheat." },
+  { id: "lumber",         name: "Lumber",         type: "made",  desc: "Sawn planks, sold to builders." },
+  { id: "iron",           name: "Iron",           type: "made",  desc: "Smelted pig iron." },
+  { id: "copper",         name: "Copper",         type: "made",  desc: "Refined copper metal. Carries electricity well." },
+  { id: "gold",           name: "Gold",           type: "made",  desc: "Refined gold. Used for chip contacts that never corrode." },
+  { id: "aluminium",      name: "Aluminium",      type: "made",  desc: "Light metal smelted from bauxite." },
+  { id: "glass",          name: "Glass",          type: "made",  desc: "Melted sand and limestone." },
+  { id: "ceramic",        name: "Ceramic",        type: "made",  desc: "Fired clay. Heat-proof and insulating." },
+  { id: "fuel",           name: "Fuel",           type: "made",  desc: "Refined from crude oil. Sold to drivers and hauliers." },
+  { id: "plastic",        name: "Plastic",        type: "made",  desc: "Made from oil. Cheap insulation and casing." },
+  { id: "rubber",         name: "Rubber",         type: "made",  desc: "Latex hardened with heat." },
+  { id: "lithium",        name: "Lithium",        type: "made",  desc: "The lightest metal. The heart of every battery." },
+  { id: "rare_earths",    name: "Rare earths",    type: "made",  desc: "Separated neodymium and friends." },
+  { id: "silicon",        name: "Silicon",        type: "made",  desc: "Ultra-pure silicon, the base for chips and solar cells." },
+  { id: "cement",         name: "Cement",         type: "made",  desc: "Powdered binder made from limestone and slag." },
+  { id: "paper",          name: "Paper",          type: "made",  desc: "Pulped sawdust. Sold for packaging and print." },
+
+  // Components and goods
+  { id: "bread",          name: "Bread",          type: "made",  desc: "Baked daily. Cheap, but everyone needs it." },
+  { id: "steel",          name: "Steel",          type: "made",  desc: "Iron refined to be strong and tough." },
+  { id: "wire",           name: "Wire",           type: "made",  desc: "Copper wire with a plastic coat." },
+  { id: "magnets",        name: "Magnets",        type: "made",  desc: "Powerful neodymium magnets." },
+  { id: "chips",          name: "Chips",          type: "made",  desc: "Silicon microchips with gold contacts." },
+  { id: "battery",        name: "Battery",        type: "made",  desc: "Lithium cells in aluminium casing." },
+  { id: "solar_panel",    name: "Solar panel",    type: "made",  desc: "Silicon cells under glass. Turns sunlight into power." },
+  { id: "concrete",       name: "Concrete",       type: "made",  desc: "Cement, sand and fly ash. Foundations for anything big." },
+  { id: "tyres",          name: "Tyres",          type: "made",  desc: "Rubber over a steel belt." },
+  { id: "motor",          name: "Electric motor", type: "made",  desc: "Magnets and copper coils. Spins when powered; makes power when spun." },
+  { id: "circuit_board",  name: "Circuit board",  type: "made",  desc: "Chips mounted on a ceramic board." },
+  { id: "smartphone",     name: "Smartphone",     type: "made",  desc: "Circuit board, battery and glass in your pocket." },
+  { id: "electric_car",   name: "Electric car",   type: "made",  desc: "Motors, a big battery pack and four tyres." },
+  { id: "wind_turbine",   name: "Wind turbine",   type: "made",  desc: "A motor run backwards on a steel tower and a concrete base." },
+];
+
+// Each recipe turns inputs into outputs. The first output is the main product;
+// any further outputs are by-products (usually waste).
+const RECIPES = [
+  { at: "Flour mill",          in: { wheat: 3, water: 1 },                  out: { flour: 2 } },
+  { at: "Sawmill",             in: { wood: 2 },                             out: { lumber: 1, sawdust: 1 } },
+  { at: "Blast furnace",       in: { iron_ore: 2, coal: 1 },                out: { iron: 1, slag: 1 } },
+  { at: "Copper smelter",      in: { copper_ore: 3, coal: 1 },              out: { copper: 1, tailings: 2 } },
+  { at: "Gold refinery",       in: { gold_ore: 5, water: 2 },               out: { gold: 1, tailings: 4, chemical_waste: 1 } },
+  { at: "Aluminium smelter",   in: { bauxite: 4, coal: 2 },                 out: { aluminium: 1, chemical_waste: 2 } },
+  { at: "Glassworks",          in: { sand: 2, limestone: 1 },               out: { glass: 2 } },
+  { at: "Kiln",                in: { clay: 2, coal: 1 },                    out: { ceramic: 1, fly_ash: 1 } },
+  { at: "Oil refinery",        in: { crude_oil: 2, water: 1 },              out: { fuel: 1, chemical_waste: 1 } },
+  { at: "Plastics plant",      in: { crude_oil: 2, coal: 1 },               out: { plastic: 2, chemical_waste: 1 } },
+  { at: "Vulcaniser",          in: { latex: 2, coal: 1 },                   out: { rubber: 1, fly_ash: 1 } },
+  { at: "Lithium plant",       in: { lithium_brine: 4, limestone: 1 },      out: { lithium: 1, chemical_waste: 1 } },
+  { at: "Rare earth separator",in: { rare_earth_ore: 4, water: 2 },         out: { rare_earths: 1, chemical_waste: 1, tailings: 2 } },
+  { at: "Arc furnace",         in: { sand: 2, coal: 2 },                    out: { silicon: 1, slag: 1 } },
+  { at: "Cement kiln",         in: { limestone: 2, slag: 1 },               out: { cement: 2 } },
+  { at: "Paper mill",          in: { sawdust: 2, water: 2 },                out: { paper: 1 } },
+  { at: "Bakery",              in: { flour: 2, water: 1 },                  out: { bread: 3 } },
+  { at: "Steelworks",          in: { iron: 1, coal: 1 },                    out: { steel: 1, slag: 1 } },
+  { at: "Wire mill",           in: { copper: 1, plastic: 1 },               out: { wire: 2 } },
+  { at: "Magnet works",        in: { rare_earths: 1, iron: 2 },             out: { magnets: 2 } },
+  { at: "Chip fab",            in: { silicon: 1, gold: 1 },                 out: { chips: 4, chemical_waste: 2 } },
+  { at: "Battery plant",       in: { lithium: 2, aluminium: 1 },            out: { battery: 1, chemical_waste: 1 } },
+  { at: "Solar plant",         in: { silicon: 2, glass: 2 },                out: { solar_panel: 1 } },
+  { at: "Concrete plant",      in: { cement: 1, sand: 3, fly_ash: 1 },      out: { concrete: 4 } },
+  { at: "Tyre factory",        in: { rubber: 2, steel: 1 },                 out: { tyres: 2 } },
+  { at: "Motor factory",       in: { magnets: 2, wire: 3 },                 out: { motor: 1 } },
+  { at: "Circuit board plant", in: { chips: 2, ceramic: 1 },                out: { circuit_board: 1, chemical_waste: 1 } },
+  { at: "Phone assembly",      in: { circuit_board: 1, battery: 1, glass: 1 }, out: { smartphone: 1 } },
+  { at: "Car plant",           in: { motor: 2, battery: 6, tyres: 4 },      out: { electric_car: 1 } },
+  { at: "Turbine works",       in: { motor: 1, steel: 8, concrete: 20 },    out: { wind_turbine: 1 } },
+];
