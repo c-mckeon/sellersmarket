@@ -18,6 +18,7 @@
 <nav class="subtabs" id="subTabs" hidden>
   <a href="#/mechanics/gameplay" data-sub="gameplay">Gameplay</a>
   <a href="#/mechanics/commodities" data-sub="commodities">Commodities</a>
+  <a href="#/mechanics/market" data-sub="market">Market dynamics</a>
   <a href="#/mechanics/dashboard" data-sub="dashboard">Dashboard</a>
 </nav>
 
@@ -34,6 +35,40 @@
       <h1>Gameplay</h1>
       <p>How a turn works, how you buy and sell, and how you win. Coming soon.</p>
     </div>
+  </section>
+
+  <section id="view-market" class="view">
+    <div class="intro">
+      <h1>Market dynamics</h1>
+      <p>Every commodity's price moves with how much of it players are holding. When stockpiles are full the price falls; when the stuff is scarce it climbs.</p>
+    </div>
+
+    <div class="eqcard">
+      <div class="big">Price = Base × Scarcity × Demand × Inflation</div>
+      <dl>
+        <div><dt>Scarcity</dt><dd>(s₀ ÷ s)<sup>e</sup>. <b>s</b> is the share of all players' combined stockpile space holding this commodity. <b>s₀</b> is its balanced share, where the price equals the base price. <b>e</b> sets how sharply the price reacts. Shares are held between s₀ ÷ 10 and s₀ × 10, so prices can't run away.</dd></div>
+        <div><dt>Demand</dt><dd>Units all factories need ÷ units they normally need. 1.0 is normal. This will come from the factories in play; for now you can set it by hand.</dd></div>
+        <div><dt>Inflation</dt><dd>(1 + rate)<sup>round</sup>. Everything creeps up over time.</dd></div>
+        <div><dt>Base</dt><dd>Set by hand for raw resources and wastes. Every made good gets its base from its recipe: the base cost of its inputs, minus any by-products it can sell, plus any disposal fees, × 1.3 markup, ÷ the units it makes.</dd></div>
+        <div><dt>Waste</dt><dd>Wastes with no use have a negative price: a disposal fee. Their fee grows as more piles up, so their scarcity term flips to (s ÷ s₀)<sup>e</sup>.</dd></div>
+      </dl>
+      <p class="example"><b>Example: wheat</b>, base 6, s₀ = 50%, e = 1. At 50% full: 6 × (50 ÷ 50) = <b>6</b>. At 10% full: 6 × (50 ÷ 10) = <b>30</b>.</p>
+    </div>
+
+    <div class="mctl">
+      <label>Round <input type="range" id="roundSlider" min="0" max="50" value="0"> <b id="mround">0</b></label>
+      <label>Inflation per round <input type="number" id="rateInput" step="0.5" min="-20" max="50">%</label>
+      <span>Inflation now <b id="minfl">×1.00</b></span>
+      <span>Stockpile space used <b id="mused">100%</b></span>
+      <button id="shuffleBtn">Shuffle stockpiles</button>
+      <button id="resetBtn" class="ghost">Reset</button>
+    </div>
+
+    <div class="mgrid">
+      <div class="tablewrap"><table id="mtable" class="mtable"></table></div>
+      <aside class="panel curvepanel" id="mcurve"></aside>
+    </div>
+    <p class="muted small">Edit any current share or demand to see its price move. Click a row to plot its price curve.</p>
   </section>
 
   <section id="view-dashboard" class="view">
@@ -64,5 +99,7 @@
 
 <script src="js/commodities.js"></script>
 <script src="js/app.js"></script>
+<script src="js/market.js"></script>
+<script src="js/marketview.js"></script>
 </body>
 </html>
