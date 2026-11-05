@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Sellers Market</title>
-<link rel="stylesheet" href="css/style.css">
+<link rel="stylesheet" href="css/style.css?v=__V__">
 </head>
 <body>
 <header class="top">
@@ -36,9 +36,58 @@
       <p>Each round is one day with two phases where players act: <b>morning</b> and <b>afternoon</b>. Between them, the game runs things automatically: once at <b>midday</b> and again <b>overnight</b>. <span class="sketch">Design sketch, not built yet</span></p>
     </div>
 
-    <div class="daygrid">
-      <div class="stepcard night">
-        <h3>Overnight <span>automatic, afternoon → morning</span></h3>
+    <div class="cyclegrid">
+      <div class="cg-svg">
+        <svg class="cycle" viewBox="0 0 440 520" role="img" aria-label="A game day: Morning, then midday automatic steps, Afternoon, then overnight automatic steps, back to Morning">
+          <defs>
+            <marker id="hMid" viewBox="0 0 10 10" refX="3" refY="5" markerWidth="30" markerHeight="30" orient="auto" markerUnits="userSpaceOnUse"><path d="M0,0 L10,5 L0,10 z" class="hd-mid" fill="#d9a21b"/></marker>
+            <marker id="hNight" viewBox="0 0 10 10" refX="3" refY="5" markerWidth="30" markerHeight="30" orient="auto" markerUnits="userSpaceOnUse"><path d="M0,0 L10,5 L0,10 z" class="hd-night" fill="#4b55b8"/></marker>
+          </defs>
+          <circle class="ring" cx="220" cy="260" r="180" fill="none" stroke="#dcd8cf" stroke-dasharray="2 6"/>
+          <path class="arc mid" d="M325.8,114.4 A180,180 0 0 1 349.5,385.0" fill="none" stroke="#d9a21b" stroke-width="13" stroke-linecap="round" marker-end="url(#hMid)"/>
+          <path class="arc night" d="M114.2,405.6 A180,180 0 0 1 90.5,135.0" fill="none" stroke="#4b55b8" stroke-width="13" stroke-linecap="round" marker-end="url(#hNight)"/>
+          <text class="centre" x="220" y="256" text-anchor="middle" fill="#1d1d1b" font-size="19" font-weight="800">One game day</text>
+          <text class="arcsub" x="220" y="276" text-anchor="middle" fill="#6b6860" font-size="12">repeats every round</text>
+          <g class="phase morning" transform="translate(220,80)">
+            <rect x="-95" y="-30" width="190" height="60" rx="14" fill="#fff" stroke="#d9a21b" stroke-width="2.5"/>
+            <circle cx="-62" cy="0" r="10" class="sun" fill="#d9a21b"/>
+            <g class="rays" stroke="#d9a21b" stroke-width="2.5" stroke-linecap="round"><line x1="-48.0" y1="0.0" x2="-43.0" y2="0.0"/><line x1="-52.1" y1="9.9" x2="-48.6" y2="13.4"/><line x1="-62.0" y1="14.0" x2="-62.0" y2="19.0"/><line x1="-71.9" y1="9.9" x2="-75.4" y2="13.4"/><line x1="-76.0" y1="0.0" x2="-81.0" y2="0.0"/><line x1="-71.9" y1="-9.9" x2="-75.4" y2="-13.4"/><line x1="-62.0" y1="-14.0" x2="-62.0" y2="-19.0"/><line x1="-52.1" y1="-9.9" x2="-48.6" y2="-13.4"/></g>
+            <text class="ph" x="-36" y="7" fill="#1d1d1b" font-size="20" font-weight="800">Morning</text>
+          </g>
+          <g class="phase afternoon" transform="translate(220,440)">
+            <rect x="-95" y="-30" width="190" height="60" rx="14" fill="#fff" stroke="#d4682a" stroke-width="2.5"/>
+            <circle cx="-62" cy="4" r="11" class="sun2" fill="#d4682a"/>
+            <rect x="-80" y="4" width="36" height="14" class="horizon" fill="#fff"/>
+            <text class="ph" x="-36" y="7" fill="#1d1d1b" font-size="20" font-weight="800">Afternoon</text>
+          </g>
+        </svg>
+      </div>
+
+      <div class="cg cg-morning">
+        <h3>Morning <span>players trade</span></h3>
+        <p>Players buy and sell on the market to get the inputs their businesses need for the day. Whatever a business holds when morning ends is what it produces with at midday.</p>
+      </div>
+
+      <div class="cg cg-mid">
+        <h3>Midday <span>automatic</span></h3>
+        <ol>
+          <li>Businesses turn their inputs into products</li>
+          <li>Markets reprice, now that stockpiles have changed</li>
+          <li class="tbc">Something else? <em>not decided</em></li>
+        </ol>
+      </div>
+
+      <div class="cg cg-aft">
+        <h3>Afternoon <span>players act</span></h3>
+        <p>Players play action cards that decide how the market moves overnight, for example triggering a pandemic.</p>
+        <ul>
+          <li class="tbc">Set up new businesses <em>not decided</em></li>
+          <li class="tbc">Move around the map <em>not decided</em></li>
+        </ul>
+      </div>
+
+      <div class="cg cg-night">
+        <h3>Overnight <span>automatic</span></h3>
         <ol>
           <li>Markets reprice, based on the action cards played this afternoon</li>
           <li>Loan repayments are charged</li>
@@ -47,67 +96,6 @@
           <li>Workers are paid</li>
           <li class="tbc">Some open orders get filled <em>not decided</em></li>
         </ol>
-      </div>
-
-      <div class="cyclewrap">
-<svg class="cycle" viewBox="-70 0 660 560" role="img" aria-label="A game day: Morning, then midday automatic steps, Afternoon, then overnight automatic steps, back to Morning">
-  <defs>
-    <marker id="hMid" viewBox="0 0 10 10" refX="3" refY="5" markerWidth="34" markerHeight="34" orient="auto" markerUnits="userSpaceOnUse"><path d="M0,0 L10,5 L0,10 z" class="hd-mid"/></marker>
-    <marker id="hNight" viewBox="0 0 10 10" refX="3" refY="5" markerWidth="34" markerHeight="34" orient="auto" markerUnits="userSpaceOnUse"><path d="M0,0 L10,5 L0,10 z" class="hd-night"/></marker>
-  </defs>
-  <circle class="ring" cx="260" cy="280" r="190"/>
-  <path class="arc mid" d="M392.0,143.3 A190,190 0 0 1 405.5,402.1" marker-end="url(#hMid)"/>
-  <path class="arc night" d="M128.0,416.7 A190,190 0 0 1 114.5,157.9" marker-end="url(#hNight)"/>
-
-  <text class="arclbl mid" x="466" y="276">Midday</text>
-  <text class="arcsub" x="466" y="294">automatic</text>
-  <text class="arclbl night" x="54" y="276" text-anchor="end">Overnight</text>
-  <text class="arcsub" x="54" y="294" text-anchor="end">automatic</text>
-
-  <text class="centre" x="260" y="276" text-anchor="middle">One game day</text>
-  <text class="arcsub" x="260" y="296" text-anchor="middle">repeats every round</text>
-
-  <g class="phase morning" transform="translate(260,90)">
-    <rect x="-130" y="-44" width="260" height="88" rx="16"/>
-    <circle cx="-86" cy="-6" r="11" class="sun"/>
-    <g class="rays"><line x1="-71.0" y1="-6.0" x2="-66.0" y2="-6.0"/><line x1="-75.4" y1="4.6" x2="-71.9" y2="8.1"/><line x1="-86.0" y1="9.0" x2="-86.0" y2="14.0"/><line x1="-96.6" y1="4.6" x2="-100.1" y2="8.1"/><line x1="-101.0" y1="-6.0" x2="-106.0" y2="-6.0"/><line x1="-96.6" y1="-16.6" x2="-100.1" y2="-20.1"/><line x1="-86.0" y1="-21.0" x2="-86.0" y2="-26.0"/><line x1="-75.4" y1="-16.6" x2="-71.9" y2="-20.1"/></g>
-    <text class="ph" x="-62" y="-4">Morning</text>
-    <text class="phs" x="-62" y="16">Players trade on the market</text>
-    <text class="phs" x="-62" y="31">to stock their businesses</text>
-  </g>
-  <g class="phase afternoon" transform="translate(260,470)">
-    <rect x="-130" y="-44" width="260" height="88" rx="16"/>
-    <circle cx="-86" cy="-2" r="11" class="sun2"/>
-    <rect x="-104" y="-2" width="36" height="16" class="horizon"/>
-    <text class="ph" x="-62" y="-4">Afternoon</text>
-    <text class="phs" x="-62" y="16">Players play action cards</text>
-    <text class="phs" x="-62" y="31">and make their moves</text>
-  </g>
-</svg>
-      </div>
-
-      <div class="stepcard mid">
-        <h3>Midday <span>automatic, morning → afternoon</span></h3>
-        <ol>
-          <li>Businesses turn their inputs into products</li>
-          <li>Markets reprice, now that stockpiles have changed</li>
-          <li class="tbc">Something else? <em>not decided</em></li>
-        </ol>
-      </div>
-    </div>
-
-    <div class="phasegrid">
-      <div class="phasecard morning">
-        <h3>Morning: trade</h3>
-        <p>Players buy and sell on the market to get the inputs their businesses need for the day. Whatever is in a business's stockpile when morning ends is what it can produce with at midday.</p>
-      </div>
-      <div class="phasecard afternoon">
-        <h3>Afternoon: act</h3>
-        <p>Players play action cards that decide how the market moves overnight. For example, triggering a pandemic.</p>
-        <ul>
-          <li class="tbc">Set up new businesses <em>not decided</em></li>
-          <li class="tbc">Move around the map <em>not decided</em></li>
-        </ul>
       </div>
     </div>
   </section>
@@ -244,9 +232,9 @@
   </section>
 </main>
 
-<script src="js/commodities.js"></script>
-<script src="js/app.js"></script>
-<script src="js/market.js"></script>
-<script src="js/marketview.js"></script>
+<script src="js/commodities.js?v=__V__"></script>
+<script src="js/app.js?v=__V__"></script>
+<script src="js/market.js?v=__V__"></script>
+<script src="js/marketview.js?v=__V__"></script>
 </body>
 </html>
