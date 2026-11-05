@@ -1,6 +1,6 @@
 // ---------- Routing ----------
 function route() {
-  const parts = (location.hash || "#/mechanics/commodities").slice(2).split("/");
+  const parts = (location.hash || "#/game").slice(2).split("/");
   const tab = parts[0] === "game" ? "game" : "mechanics";
   const sub = tab === "mechanics" ? (["gameplay", "commodities", "territories", "market", "broker", "cards", "database"].includes(parts[1]) ? parts[1] : "commodities") : null;
   document.querySelectorAll("#mainTabs a").forEach(a => a.classList.toggle("on", a.dataset.tab === tab));
