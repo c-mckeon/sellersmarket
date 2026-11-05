@@ -2,7 +2,7 @@
 function route() {
   const parts = (location.hash || "#/mechanics/commodities").slice(2).split("/");
   const tab = parts[0] === "game" ? "game" : "mechanics";
-  const sub = tab === "mechanics" ? (["gameplay", "commodities", "market", "dashboard"].includes(parts[1]) ? parts[1] : "commodities") : null;
+  const sub = tab === "mechanics" ? (["gameplay", "commodities", "market", "broker"].includes(parts[1]) ? parts[1] : "commodities") : null;
   document.querySelectorAll("#mainTabs a").forEach(a => a.classList.toggle("on", a.dataset.tab === tab));
   document.querySelectorAll("#subTabs a").forEach(a => a.classList.toggle("on", a.dataset.sub === sub));
   document.getElementById("subTabs").hidden = tab !== "mechanics";

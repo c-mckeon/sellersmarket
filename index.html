@@ -19,7 +19,7 @@
   <a href="#/mechanics/gameplay" data-sub="gameplay">Gameplay</a>
   <a href="#/mechanics/commodities" data-sub="commodities">Commodities</a>
   <a href="#/mechanics/market" data-sub="market">Market dynamics</a>
-  <a href="#/mechanics/dashboard" data-sub="dashboard">Dashboard</a>
+  <a href="#/mechanics/broker" data-sub="broker">Broker dynamics</a>
 </nav>
 
 <main>
@@ -206,11 +206,102 @@
     <p class="muted small">Edit any current share or demand to see its price move. Click a row to plot its price curve.</p>
   </section>
 
-  <section id="view-dashboard" class="view">
-    <div class="placeholder">
-      <h1>Dashboard</h1>
-      <p>Prices, supply and demand at a glance. Coming soon.</p>
+  <section id="view-broker" class="view">
+    <div class="intro">
+      <h1>Broker dynamics</h1>
+      <p>The money side of the game: what it costs to borrow, how much you can borrow, and three ways to bet on prices. Every rate is <b>per round</b> (one game day). Change any input to see the maths update.</p>
     </div>
+
+    <div class="bsec">
+      <div class="eqcard">
+        <div class="kicker">1 · Central bank</div>
+        <div class="big">Base rate = neutral + 1.5 × (inflation − target)</div>
+        <p class="lead">The central bank sets the base rate: what it costs to borrow from the government. Every other rate in the game is the base rate plus something on top. The bank's job is to keep inflation near its target.</p>
+        <dl>
+          <div><dt>Neutral</dt><dd>2.5%. The base rate when inflation is exactly on target.</dd></div>
+          <div><dt>Target</dt><dd>2% inflation a round, the rate of price rises the bank is happy with.</dd></div>
+          <div><dt>× 1.5</dt><dd>How hard the bank reacts. Inflation 1% over target raises the base rate by 1.5%. Reacting by more than 1-for-1 is what real central banks do (the "Taylor rule"), so borrowing actually gets more expensive in real terms.</dd></div>
+          <div><dt>Limits</dt><dd>Never below 0.25% or above 10%. The bank only changes the rate every 5 rounds, so players can see it coming.</dd></div>
+        </dl>
+      </div>
+      <div class="panel calc" id="calcBase"></div>
+    </div>
+
+    <div class="bsec">
+      <div class="eqcard">
+        <div class="kicker">2 · Government loans</div>
+        <div class="big">Credit limit = 50% of stockpile + 60% of businesses + 90% of bonds</div>
+        <p class="lead">You borrow from the government against what you own. Your businesses are the main collateral. If you can't pay, the bank takes your stuff.</p>
+        <dl>
+          <div><dt>Haircut</dt><dd>Each kind of collateral only counts for part of its value, because its price might fall before the bank can sell it. Stockpiles swing most (50% counts), businesses are steadier (60%), and government bonds are nearly cash (90%).</dd></div>
+          <div><dt>LTV</dt><dd>Loan-to-value: loan ÷ everything you own. 30% LTV means you've borrowed 30% of your total worth.</dd></div>
+          <div><dt>Loan rate</dt><dd>base + 0.5% + 3% × LTV. The more you've borrowed relative to what you own, the riskier you are and the more you pay.</dd></div>
+          <div><dt>Overnight</dt><dd>Each overnight you're charged interest (loan × rate) plus 5% of the loan as repayment, so a loan is paid off in about 20 rounds.</dd></div>
+          <div><dt>Margin call</dt><dd>If prices fall and your loan ends up above your limit, you must pay down the difference by next morning. If you can't, the bank sells your stockpile at 20% under market, then your businesses, until you're back under.</dd></div>
+        </dl>
+      </div>
+      <div class="panel calc" id="calcLoan"></div>
+    </div>
+
+    <div class="bsec">
+      <div class="eqcard">
+        <div class="kicker">3 · Leverage</div>
+        <div class="big">Position = your money × leverage</div>
+        <p class="lead">Buy more of a commodity than you can afford, with the broker lending you the rest. Gains and losses are multiplied, and so is the risk.</p>
+        <dl>
+          <div><dt>Leverage</dt><dd>1× to 5×. At 3×, 1,000 of your own money buys 3,000 worth of goods; the broker lends the other 2,000.</dd></div>
+          <div><dt>Interest</dt><dd>base + 2% a round on the borrowed part, for as long as you hold.</dd></div>
+          <div><dt>Your stake</dt><dd>What the goods are worth now − what you borrowed − interest. A 10% price rise at 3× is roughly a 30% gain on your money; a 10% fall is a 30% loss.</dd></div>
+          <div><dt>Liquidation</dt><dd>Your stake must stay at least 25% of the position. If the price falls far enough that it doesn't, the broker sells everything to get its money back. The liquidation price = entry × (leverage − 1) ÷ (leverage × 0.75).</dd></div>
+        </dl>
+      </div>
+      <div class="panel calc" id="calcLev"></div>
+    </div>
+
+    <div class="bsec">
+      <div class="eqcard">
+        <div class="kicker">4 · Futures</div>
+        <div class="big">Futures price = spot × (1 + base + storage)<sup>rounds</sup></div>
+        <p class="lead">A contract to buy (long) or sell (short) a commodity at a fixed price on a later round. Farmers use them to lock in a price for their harvest; traders use them to bet on where prices are going.</p>
+        <dl>
+          <div><dt>Spot</dt><dd>Today's market price.</dd></div>
+          <div><dt>Why higher</dt><dd>The futures price is above spot because the seller has to fund and store the goods until then: base rate plus 0.5% a round of storage. This is called the "cost of carry".</dd></div>
+          <div><dt>Margin</dt><dd>You don't pay the full price up front, just 10% as a deposit. Every overnight your gain or loss so far is added to or taken from it. Below 7.5%, you must top it up.</dd></div>
+          <div><dt>Settlement</dt><dd>Up to 10 rounds ahead. On the day, no goods change hands: you're just paid (or pay) the difference. Long: (price then − futures price) × units. Short: the reverse.</dd></div>
+        </dl>
+      </div>
+      <div class="panel calc" id="calcFut"></div>
+    </div>
+
+    <div class="bsec">
+      <div class="eqcard">
+        <div class="kicker">5 · Government bonds</div>
+        <div class="big">Bond price = coupons left + 100, each discounted at today's yield</div>
+        <p class="lead">Lend the government 100 for 5, 10 or 20 rounds. It pays you a fixed amount every overnight (the coupon) and gives your 100 back at the end. Safe, unless you need to sell early after rates have risen.</p>
+        <dl>
+          <div><dt>Coupon</dt><dd>Fixed on the day you buy: base rate then + 0.05% for every round of the bond's length. Longer bonds pay a little more for tying your money up.</dd></div>
+          <div><dt>Yield</dt><dd>What a new bond with the same rounds left would pay today: base now + 0.05% × rounds left.</dd></div>
+          <div><dt>Price</dt><dd>You can sell a bond to other players before it ends. Its fair price is everything it still pays, each payment discounted by (1 + yield) for every round you'd wait for it.</dd></div>
+          <div><dt>Rates ↑ price ↓</dt><dd>When the base rate rises, new bonds pay more, so old bonds paying less are worth less. Long bonds swing the most. This is the main risk of holding bonds.</dd></div>
+        </dl>
+      </div>
+      <div class="panel calc" id="calcBond"></div>
+    </div>
+
+    <details class="explainer">
+      <summary>Glossary</summary>
+      <div class="xgrid">
+        <div class="x"><h4>Round</h4><p>One game day. All rates here are per round. Interest, loan repayments, coupons and futures margin changes all happen overnight.</p></div>
+        <div class="x"><h4>Inflation</h4><p>How fast prices rise on average each round. The same number drives the inflation term on the Market dynamics tab.</p></div>
+        <div class="x"><h4>Real rate</h4><p>Base rate minus inflation. If it's negative, holding goods beats holding cash, and borrowing to buy is tempting. If it's positive, cash and bonds look better.</p></div>
+        <div class="x"><h4>Collateral</h4><p>Things you own that the lender can take and sell if you don't pay: your stockpile, your businesses and your bonds.</p></div>
+        <div class="x"><h4>Premium / spread</h4><p>The extra a lender charges on top of the base rate for the risk of lending to you. Government loans: 0.5% + 3% × LTV. Broker leverage: a flat 2%.</p></div>
+        <div class="x"><h4>Long / short</h4><p>Long means you profit when the price rises. Short means you profit when it falls.</p></div>
+        <div class="x"><h4>Liquidation</h4><p>The broker or bank selling your position or property without asking, to get its money back.</p></div>
+        <div class="x"><h4>Discounting</h4><p>Money later is worth less than money now, because money now could be earning interest. 100 paid in 2 rounds at 3% is worth 100 ÷ 1.03² = 94.26 today.</p></div>
+        <div class="x"><h4>Face value</h4><p>The 100 a bond pays back on its final round.</p></div>
+      </div>
+    </details>
   </section>
 
   <section id="view-commodities" class="view">
@@ -236,5 +327,7 @@
 <script src="js/app.js?v=__V__"></script>
 <script src="js/market.js?v=__V__"></script>
 <script src="js/marketview.js?v=__V__"></script>
+<script src="js/broker.js?v=__V__"></script>
+<script src="js/brokerview.js?v=__V__"></script>
 </body>
 </html>
