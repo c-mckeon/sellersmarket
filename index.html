@@ -20,6 +20,7 @@
   <a href="#/mechanics/commodities" data-sub="commodities">Commodities</a>
   <a href="#/mechanics/market" data-sub="market">Market dynamics</a>
   <a href="#/mechanics/broker" data-sub="broker">Broker dynamics</a>
+  <a href="#/mechanics/cards" data-sub="cards">Action cards</a>
 </nav>
 
 <main>
@@ -321,6 +322,92 @@
     <input id="search" class="search" type="search" placeholder="Filter, e.g. coal or waste" autocomplete="off">
     <div class="tablewrap"><table id="table"></table></div>
   </section>
+  <section id="view-cards" class="view">
+    <div class="intro">
+      <h1>Action cards</h1>
+      <p>Cards are played in the afternoon and change the market overnight. There are 50 so far, covering commodities, businesses, sectors, whole markets, credit and defaults, and new government regulations. <span class="sketch">Designed, not wired in yet</span></p>
+    </div>
+
+    <article class="howto">
+      <h2>How cards will plug into the maths</h2>
+
+      <div class="hsec">
+        <h3><span>1</span>Cards change numbers, not formulas</h3>
+        <p>Every card is a short list of <b>effects</b>. Each effect says which existing variable it nudges (its <b>hook</b>), what it applies to, by how much, and for how long. The pricing, production and broker formulas stay exactly as they are; they just read the nudged numbers.</p>
+        <div class="example-card"><b>Drought</b>
+          <ul class="fx">
+            <li><span class="hook">Demand</span> <span class="on">Water</span> <b>×2</b> <span class="dur">3 rounds</span></li>
+            <li><span class="hook">Raw supply</span> <span class="on">Water</span> <b>×0.5</b> <span class="dur">3 rounds</span></li>
+          </ul>
+        </div>
+        <p>This keeps the game fair and easy to balance. A new card never needs new maths, just a new list of effects, and any card's impact can be worked out with the calculators on the other tabs.</p>
+      </div>
+
+      <div class="hsec">
+        <h3><span>2</span>Where the effects go</h3>
+        <p>The formulas we already have gain a slot for active card effects. They're shown in <span class="mod">orange</span>; with no cards in play, each one is ×1 or +0 and nothing changes.</p>
+        <div class="formulas">
+          <div><b>Price</b> = Base × (s₀ ÷ s)<sup>e <span class="mod">× card e</span></sup> × Demand <span class="mod">× card demand</span> × Inflation<sub>(rate <span class="mod">+ card inflation</span>)</sub>, then held under any <span class="mod">price cap</span></div>
+          <div><b>Share s</b> = stock after <span class="mod">stockpile shocks</span>, ÷ total space. New raw units each morning = normal supply <span class="mod">× card supply</span></div>
+          <div><b>Business output</b> = recipe output <span class="mod">× card output</span>, running costs <span class="mod">× card costs</span>, value <span class="mod">× card value</span></div>
+          <div><b>Base rate</b> = central bank rate <span class="mod">+ card changes</span>. <b>Credit limit</b> uses haircuts <span class="mod">+ card changes</span>. <b>Loan rate</b> = base + premium <span class="mod">+ card premium</span>. <b>Bond yield</b> = base + term premium <span class="mod">+ card change</span></div>
+        </div>
+        <details class="explainer inner">
+          <summary>Every hook a card can use</summary>
+          <div class="tablewrap"><table class="hooks"><thead><tr><th>Hook</th><th>What it changes</th><th class="n">Cards using it</th></tr></thead><tbody id="hookTable"></tbody></table></div>
+        </details>
+      </div>
+
+      <div class="hsec">
+        <h3><span>3</span>When they happen</h3>
+        <p>Cards are played face down in the afternoon. Overnight they're revealed and settled in a fixed order, so the result never depends on who played first:</p>
+        <ol class="order">
+          <li><b>Counters</b>: cards like Insurance payout or Bailout cancel what they target.</li>
+          <li><b>Regulations</b> switch on (or off, once we add repeal cards).</li>
+          <li><b>One-off shocks</b>: stockpiles destroyed or added, loans called in, contracts torn up.</li>
+          <li><b>Markets reprice</b>, using every effect still active.</li>
+          <li><b>Money</b>: the base rate moves, haircuts change (which can trigger margin calls), then interest, coupons and futures settle.</li>
+          <li><b>Timers tick</b>: each effect loses a round, and finished ones are removed.</li>
+        </ol>
+        <p>Next morning, players trade at the new prices.</p>
+      </div>
+
+      <div class="hsec">
+        <h3><span>4</span>Stacking and limits</h3>
+        <p>Effects on the same hook and the same target combine: multipliers multiply (two ×1.5 demand cards make ×2.25), additions add. To stop a pile of cards breaking the economy, the combined multiplier on any one thing is held between <b>×0.25 and ×4</b>, and the base rate still stays between 0.25% and 10%.</p>
+      </div>
+
+      <div class="hsec">
+        <h3><span>5</span>How long they last</h3>
+        <p>Each effect lasts <b>once</b> (it happens overnight and is done), for a set number of <b>rounds</b>, or <b>until repealed</b> (mostly regulations). Effects stay at full strength until they run out. If markets feel too jumpy when they switch off, we can make effects fade out over their last few rounds instead.</p>
+      </div>
+
+      <div class="hsec">
+        <h3><span>6</span>Why play a card: you know first</h3>
+        <p>The player holding a card knows what's coming before anyone else. Holding Drought? Buy water in the morning, play the card that afternoon, and sell the next morning once the price jumps. Or take a futures position on it. Planning a day ahead around your hand is the heart of the strategy. Other players' defence is to read the market and keep counter cards ready.</p>
+      </div>
+
+      <div class="hsec">
+        <h3><span>7</span>Still to decide</h3>
+        <ul class="open">
+          <li>How players get cards: a few drawn each morning, bought, or earned?</li>
+          <li>Whether playing a card costs money, and whether rare cards cost more.</li>
+          <li>How many cards one player can play in an afternoon.</li>
+          <li>Whether cards are revealed with the player's name, or anonymously.</li>
+          <li>How often each rarity turns up (for example common 60%, uncommon 30%, rare 10%).</li>
+        </ul>
+      </div>
+    </article>
+
+    <h2 class="listhead">Sectors</h2>
+    <p class="muted">Some cards hit a whole sector. Each commodity belongs to one.</p>
+    <div class="sectors" id="sectorList"></div>
+
+    <h2 class="listhead">The 50 cards</h2>
+    <div class="cfilter" id="cardFilter"></div>
+    <div class="cardgrid" id="cardGrid"></div>
+  </section>
+
 </main>
 
 <script src="js/commodities.js?v=__V__"></script>
@@ -329,5 +416,7 @@
 <script src="js/marketview.js?v=__V__"></script>
 <script src="js/broker.js?v=__V__"></script>
 <script src="js/brokerview.js?v=__V__"></script>
+<script src="js/cards.js?v=__V__"></script>
+<script src="js/cardsview.js?v=__V__"></script>
 </body>
 </html>
