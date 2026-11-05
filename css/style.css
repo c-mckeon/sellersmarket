@@ -171,3 +171,49 @@ input[type=number] { font: inherit; font-size: 13px; padding: 3px 5px; border: 1
 .curvepanel .dotc { fill: var(--accent); stroke: var(--surface); stroke-width: 2; }
 .curvepanel .note { font-size: 11.5px; fill: var(--muted); }
 .curvepanel .note.cur { fill: var(--ink); font-weight: 700; }
+
+/* gameplay: day cycle */
+:root { --mor: #d9a21b; --aft: #d4682a; --night: #4b55b8; }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { --mor: #f0c04a; --aft: #ef8a4e; --night: #8f97ee; } }
+:root[data-theme="dark"] { --mor: #f0c04a; --aft: #ef8a4e; --night: #8f97ee; }
+.sketch { display: inline-block; font-size: 12px; font-weight: 700; color: var(--accent); border: 1px dashed var(--accent); border-radius: 999px; padding: 0 9px; margin-left: 4px; }
+.daygrid { display: grid; grid-template-columns: 1fr minmax(320px, 540px) 1fr; gap: 20px; align-items: center; margin: 10px 0 20px; }
+@media (max-width: 1000px) { .daygrid { grid-template-columns: 1fr; } .cyclewrap { order: -1; max-width: 540px; margin: 0 auto; width: 100%; } }
+.cycle { width: 100%; height: auto; display: block; }
+.cycle .ring { fill: none; stroke: var(--line); stroke-width: 1; stroke-dasharray: 2 6; }
+.cycle .arc { fill: none; stroke-width: 14; stroke-linecap: round; }
+.cycle .arc.mid { stroke: var(--mor); }
+.cycle .arc.night { stroke: var(--night); }
+.cycle .hd-mid { fill: var(--mor); }
+.cycle .hd-night { fill: var(--night); }
+.cycle .arclbl { font-size: 17px; font-weight: 800; }
+.cycle .arclbl.mid { fill: var(--mor); }
+.cycle .arclbl.night { fill: var(--night); }
+.cycle .arcsub { font-size: 12px; fill: var(--muted); }
+.cycle .centre { font-size: 19px; font-weight: 800; fill: var(--ink); }
+.cycle .phase rect:first-child { fill: var(--surface); stroke-width: 2.5; }
+.cycle .morning rect:first-child { stroke: var(--mor); }
+.cycle .afternoon rect:first-child { stroke: var(--aft); }
+.cycle .sun { fill: var(--mor); }
+.cycle .rays line { stroke: var(--mor); stroke-width: 2.5; stroke-linecap: round; }
+.cycle .sun2 { fill: var(--aft); }
+.cycle .horizon { fill: var(--surface); }
+.cycle .ph { font-size: 19px; font-weight: 800; fill: var(--ink); }
+.cycle .phs { font-size: 12.5px; fill: var(--muted); }
+.stepcard, .phasecard { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 16px 18px; box-shadow: var(--shadow); }
+.stepcard { border-top: 5px solid; }
+.stepcard.night { border-top-color: var(--night); }
+.stepcard.mid { border-top-color: var(--mor); }
+.stepcard h3, .phasecard h3 { margin: 0 0 8px; font-size: 18px; }
+.stepcard h3 span { display: block; font-size: 12px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: .05em; margin-top: 2px; }
+.stepcard ol { margin: 0; padding-left: 20px; }
+.stepcard li, .phasecard li { margin: 5px 0; }
+.tbc { color: var(--muted); }
+.tbc em { font-style: normal; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; border: 1px dashed var(--muted); border-radius: 4px; padding: 0 5px; margin-left: 4px; white-space: nowrap; }
+.phasegrid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+@media (max-width: 700px) { .phasegrid { grid-template-columns: 1fr; } }
+.phasecard { border-left: 5px solid; }
+.phasecard.morning { border-left-color: var(--mor); }
+.phasecard.afternoon { border-left-color: var(--aft); }
+.phasecard p { margin: 0 0 8px; color: var(--muted); }
+.phasecard ul { margin: 0; padding-left: 20px; }
