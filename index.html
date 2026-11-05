@@ -22,6 +22,7 @@
   <a href="#/mechanics/market" data-sub="market">Market dynamics</a>
   <a href="#/mechanics/broker" data-sub="broker">Broker dynamics</a>
   <a href="#/mechanics/cards" data-sub="cards">Action cards</a>
+  <a href="#/mechanics/database" data-sub="database">Database</a>
 </nav>
 
 <main>
@@ -470,6 +471,27 @@
     <div class="cardgrid" id="cardGrid"></div>
   </section>
 
+  <section id="view-database" class="view">
+    <div class="intro">
+      <h1>Database</h1>
+      <p>How the game would be stored in a SQL database: which tables, which columns, and what points to what. It's a simulation: the rows are filled from this site's data and the example game, nothing is saved. <span class="sketch">Design sketch</span></p>
+    </div>
+    <details class="explainer">
+      <summary>How to read this</summary>
+      <div class="xgrid">
+        <div class="x"><h4>Table</h4><p>A grid of one kind of thing: one row per player, per business, per trade.</p></div>
+        <div class="x"><h4>Primary key (PK)</h4><p>The column, or columns together, that identify each row. No two rows can share it. <code>players.id</code> 1 is always the same player.</p></div>
+        <div class="x"><h4>Foreign key (→)</h4><p>A column holding another table's id: <code>businesses.owner_id</code> = 1 means "owned by player 1". Click any → column, or any value in one, to jump there.</p></div>
+        <div class="x"><h4>Design data vs game data</h4><p>Design data (commodities, recipes, territories, cards) is the rulebook and is the same in every game. Everything else belongs to one game through <code>game_id</code>, so many games can run side by side.</p></div>
+        <div class="x"><h4>One row per thing</h4><p>Lists live in their own tables. A recipe's inputs aren't squeezed into one column; each input is a row in <code>recipe_inputs</code>. That makes questions like "which businesses use coal?" easy to answer.</p></div>
+        <div class="x"><h4>History</h4><p><code>market_prices</code> and <code>trades</code> are only ever added to, never changed, so we can replay a game and draw price charts.</p></div>
+      </div>
+    </details>
+    <div class="dbnav" id="dbNav"></div>
+    <input id="dbFilter" class="search" type="search" placeholder="Filter rows, e.g. coal or sweden" autocomplete="off">
+    <div id="dbMain"></div>
+  </section>
+
 </main>
 
 <script src="js/commodities.js?v=__V__"></script>
@@ -485,6 +507,8 @@
 <script src="js/businesses.js?v=__V__"></script>
 <script src="js/hud.js?v=__V__"></script>
 <script src="js/territoriesview.js?v=__V__"></script>
+<script src="js/dbschema.js?v=__V__"></script>
+<script src="js/dbview.js?v=__V__"></script>
 <script src="js/cardsview.js?v=__V__"></script>
 </body>
 </html>

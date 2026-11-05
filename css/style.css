@@ -413,3 +413,42 @@ input[type=number] { font: inherit; font-size: 13px; padding: 3px 5px; border: 1
 .clickrows tbody tr { cursor: pointer; }
 .clickrows tbody tr:hover { background: var(--bg); }
 .clickrows td.name { font-weight: 600; white-space: nowrap; }
+
+/* database */
+code { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: .92em; background: var(--bg); padding: 0 4px; border-radius: 4px; }
+.dbnav { display: grid; gap: 8px; margin-bottom: 14px; }
+.dbgroup { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.dbgroup > span { font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: .07em; color: var(--muted); width: 110px; flex: none; }
+.dbgroup button { font: 600 13px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; padding: 4px 10px; border-radius: 6px; border: 1px solid var(--line); background: var(--surface); color: var(--ink); cursor: pointer; }
+.dbgroup button em { font-style: normal; color: var(--muted); font-weight: 400; margin-left: 2px; }
+.dbgroup button:hover { border-color: var(--ink); }
+.dbgroup button.on { background: var(--ink); color: var(--bg); border-color: var(--ink); }
+.dbgroup button.on em { color: var(--bg); opacity: .7; }
+@media (max-width: 600px) { .dbgroup > span { width: 100%; } }
+#dbMain { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 16px 18px; box-shadow: var(--shadow); }
+.dbhead h2 { margin: 0; font: 800 22px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+.dbhead > p { margin: 4px 0 10px; color: var(--muted); }
+.dbrel { display: grid; gap: 5px; font-size: 14px; margin-bottom: 10px; }
+.dbrel b { display: inline-block; width: 110px; color: var(--muted); font-size: 12px; text-transform: uppercase; letter-spacing: .05em; }
+.tlink { font: 600 13px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; padding: 2px 8px; border-radius: 5px; border: 1px solid var(--mid); color: var(--mid); background: transparent; cursor: pointer; margin: 2px 2px 2px 0; }
+.tlink small { opacity: .65; font-weight: 400; }
+.tlink:hover { background: var(--mid); color: #fff; }
+.sql summary { cursor: pointer; font-size: 13px; font-weight: 700; color: var(--accent); }
+.sql pre { background: var(--bg); border-radius: 8px; padding: 10px 12px; font-size: 12.5px; overflow-x: auto; margin: 6px 0 10px; }
+.dbtablewrap { overflow: auto; max-height: 560px; border: 1px solid var(--line); border-radius: 8px; }
+.dbt { border-collapse: collapse; font: 13px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; width: 100%; }
+.dbt th { position: sticky; top: 0; z-index: 1; text-align: left; vertical-align: bottom; background: var(--bg); padding: 6px 10px; border-bottom: 2px solid var(--line); text-transform: none; letter-spacing: 0; color: var(--ink); white-space: nowrap; }
+.dbt th.fkh { cursor: pointer; }
+.dbt th.fkh:hover { background: color-mix(in srgb, var(--mid) 12%, var(--bg)); }
+.dbt .cn { display: block; font-size: 13px; font-weight: 700; }
+.dbt .ct { display: block; font-size: 11px; color: var(--muted); font-weight: 400; }
+.dbt .cnote { display: block; font: italic 11px system-ui, sans-serif; color: var(--muted); white-space: normal; max-width: 180px; }
+.dbt b.pk { color: var(--accent); }
+.dbt b.fk { color: var(--mid); }
+.dbt td { padding: 4px 10px; border-bottom: 1px solid var(--line); white-space: nowrap; max-width: 420px; overflow: hidden; text-overflow: ellipsis; }
+.dbt td.n { text-align: right; }
+.dbt tr.hl td { background: color-mix(in srgb, var(--accent) 18%, transparent); }
+.dbt .null { color: var(--muted); font-style: italic; }
+.dbt .bool { color: var(--fin); }
+.fkv { font: inherit; color: var(--mid); background: none; border: none; padding: 0; cursor: pointer; text-decoration: underline; text-decoration-style: dotted; text-underline-offset: 3px; }
+.fkv:hover { text-decoration-style: solid; }
