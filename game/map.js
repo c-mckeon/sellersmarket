@@ -18,8 +18,9 @@
   };
   // pid: the player building (their own businesses add S.ownedCostStep each)
   G.buildCost = (st, b, tid, pid) => {
-    const n = st.businesses.filter(x => x.territory === tid).length;
-    const owned = pid ? st.businesses.filter(x => x.owner === pid).length : 0;
+    const list = st.costBasis || st.businesses; // while orders resolve, prices are as at the start of the afternoon
+    const n = list.filter(x => x.territory === tid).length;
+    const owned = pid ? list.filter(x => x.owner === pid).length : 0;
     return Math.round(b.base * S.buildCostScale * (TERRITORY_INFO[tid].cost ?? 1) * (1 + BUILD.crowding * n) * (1 + S.ownedCostStep * owned));
   };
   G.buildable = (st, tid, pid) => G.BIZ.filter(b => G.canBuildAt(b, tid)).map(b => ({ b, cost: G.buildCost(st, b, tid, pid) }));

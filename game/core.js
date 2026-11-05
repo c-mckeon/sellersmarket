@@ -65,8 +65,9 @@ const SMG = (() => {
   // config.players: [{ name, colour, bot, start: territoryId, business: businessTypeId }]
   G.newGame = config => {
     const st = {
-      version: 2, seed: config.seed ?? Math.floor(Math.random() * 1e9),
-      round: 1, rounds: config.rounds ?? S.rounds, phase: "morning", turn: 0, over: false,
+      version: 3, seed: config.seed ?? Math.floor(Math.random() * 1e9),
+      round: 1, rounds: config.rounds ?? S.rounds, phase: "morning", over: false,
+      orders: {},
       players: [], businesses: [], nextBizId: 1,
       priceLevel: 1, prices: {}, lastPrices: {}, history: [],
       effects: [], pending: [], log: [],
@@ -88,51 +89,100 @@ const SMG = (() => {
     st.history.push({ round: 0, prices: { ...st.prices } });
     st.startWorth = Object.fromEntries(st.players.map(p => [p.id, G.netWorth(st, p)]));
     G.log(st, `Game started with ${st.players.length} players. Round 1, morning.`);
-    G.runBots(st);
+    G.botOrders(st);
+    if (!G.waitingFor(st).length) G.resolve(st); // all computer players: play the whole game
     return st;
   };
 
-  // ---------- Turns and phases ----------
-  // Morning and afternoon: each player takes a turn in order. Then the automatic step runs.
-  G.current = st => st.players[st.turn];
-
-  G.act = (st, pid, name, args = {}) => {
-    if (st.over) return { ok: false, msg: "The game is over." };
-    if (G.current(st).id !== pid) return { ok: false, msg: "It's not your turn." };
-    const fn = G.actions[name];
-    if (!fn) return { ok: false, msg: `Unknown action: ${name}` };
-    try { const msg = fn(st, G.player(st, pid), args); if (msg) G.log(st, msg, pid); return { ok: true, msg }; }
-    catch (e) { return { ok: false, msg: e.message }; }
-  };
+  // ---------- Phases: everyone orders, then it all happens at once ----------
+  // Morning and afternoon: every player submits a list of orders, privately.
+  // Once all have submitted, the orders are carried out together, then the automatic step runs.
+  //   - Morning trades only touch the trader's own cash and stockpile, at fixed prices.
+  //   - Afternoon moves: if two or more players move into the same territory, none of them gets in.
+  //   - Afternoon builds: costs are worked out from the businesses there at the start of the afternoon.
+  const clone = x => JSON.parse(JSON.stringify(x));
   G.fail = msg => { throw new Error(msg); };
   G.need = (cond, msg) => { if (!cond) G.fail(msg); };
 
-  // Move on to the next player, running the automatic steps when a phase ends.
-  function nextTurn(st) {
-    st.turn++;
-    if (st.turn < st.players.length) return;
-    st.turn = 0;
-    if (st.phase === "morning") {
-      st.phase = "midday"; G.steps.midday.forEach(f => f(st));
-      st.phase = "afternoon"; st.players.forEach(p => { p.acted = false; p.cardsPlayed = 0; });
-    } else if (st.phase === "afternoon") {
-      st.phase = "overnight"; G.steps.overnight.forEach(f => f(st));
-      if (st.round >= st.rounds) { st.over = true; st.phase = "over"; G.log(st, "Game over."); return; }
-      st.round++; st.phase = "morning";
-      G.log(st, `Round ${st.round}, morning.`);
-    }
-  }
+  // Carry out one action now. Used when resolving orders, and on draft copies of the game.
+  G.act = (st, pid, name, args = {}) => {
+    if (st.over) return { ok: false, msg: "The game is over." };
+    const fn = G.actions[name];
+    if (!fn) return { ok: false, msg: `Unknown action: ${name}` };
+    try {
+      const msg = fn(st, G.player(st, pid), args);
+      if (msg) G.log(st, msg, pid);
+      if (st.recording) st.recording.push({ name, args });
+      return { ok: true, msg };
+    } catch (e) { return { ok: false, msg: e.message }; }
+  };
 
-  // A human ends their turn: move on, then let any computer players take theirs.
-  G.endTurn = st => { if (st.over) return; nextTurn(st); G.runBots(st); };
+  // What the game would look like for one player if their orders went through.
+  // Used to check orders as they're entered, and to show the player their projected cash and stock.
+  G.draft = (st, pid, orders) => {
+    const c = clone(st); c.log = []; c.drafting = true;
+    for (const o of orders) { const r = G.act(c, pid, o.name, o.args); if (!r.ok) return { state: c, error: r.msg, at: o }; }
+    return { state: c, error: null };
+  };
 
-  G.runBots = st => {
+  G.waitingFor = st => st.players.filter(p => !st.orders[p.id]);
+
+  G.submit = (st, pid, orders) => {
+    if (st.over) return { ok: false, msg: "The game is over." };
+    if (st.orders[pid]) return { ok: false, msg: "You've already submitted." };
+    const d = G.draft(st, pid, orders);
+    if (d.error) return { ok: false, msg: d.error };
+    st.orders[pid] = orders;
+    if (!G.waitingFor(st).length) G.resolve(st);
+    return { ok: true };
+  };
+
+  // Everyone has submitted: carry out the orders, then run the automatic steps.
+  G.resolve = st => {
     let guard = 0;
-    while (!st.over && G.current(st).bot && guard++ < 100000) {
-      const p = G.current(st), bot = G.bots[st.phase];
-      if (bot) bot(st, p);
-      nextTurn(st);
-    }
+    do {
+      if (st.phase === "morning") {
+        st.players.forEach(p => (st.orders[p.id] || []).forEach(o => G.act(st, p.id, o.name, o.args)));
+        st.orders = {};
+        st.phase = "midday"; G.steps.midday.forEach(f => f(st));
+        st.phase = "afternoon"; st.players.forEach(p => { p.acted = false; p.cardsPlayed = 0; });
+        G.log(st, `Round ${st.round}, afternoon.`);
+      } else if (st.phase === "afternoon") {
+        // Moves into the same territory bounce
+        const moves = {};
+        st.players.forEach(p => (st.orders[p.id] || []).filter(o => o.name === "move").forEach(o => (moves[o.args.to] ||= []).push(p)));
+        const bounced = new Set();
+        Object.entries(moves).forEach(([to, ps]) => {
+          if (ps.length < 2) return;
+          ps.forEach(p => bounced.add(p.id));
+          const names = ps.map(p => p.name), who = names.length === 2 ? `${names[0]} and ${names[1]} both` : `${names.slice(0, -1).join(", ")} and ${names.at(-1)} all`;
+          G.log(st, `${who} tried to move into ${G.TERR[to].name} at the same time. Nobody got in.`);
+        });
+        st.costBasis = st.businesses.map(b => ({ territory: b.territory, owner: b.owner })); // build prices as at the start
+        st.players.forEach(p => (st.orders[p.id] || []).forEach(o => {
+          if (o.name === "move" && bounced.has(p.id)) return;
+          G.act(st, p.id, o.name, o.args);
+        }));
+        delete st.costBasis;
+        st.orders = {};
+        st.phase = "overnight"; G.steps.overnight.forEach(f => f(st));
+        if (st.round >= st.rounds) { st.over = true; st.phase = "over"; G.log(st, "Game over."); return; }
+        st.round++; st.phase = "morning";
+        st.players.forEach(p => { p.acted = false; p.cardsPlayed = 0; });
+        G.log(st, `Round ${st.round}, morning.`);
+      }
+      if (!st.over) G.botOrders(st);
+    } while (!st.over && !G.waitingFor(st).length && guard++ < 10000);
+  };
+
+  // Computer players decide on a draft copy of the game; whatever they did there becomes their orders.
+  G.botOrders = st => {
+    st.players.filter(p => p.bot && !st.orders[p.id]).forEach(p => {
+      const c = clone(st); c.log = []; c.recording = []; c.drafting = true;
+      const bot = G.bots[st.phase];
+      if (bot) bot(c, G.player(c, p.id));
+      st.orders[p.id] = c.recording;
+    });
   };
 
   // ---------- Net worth ----------

@@ -454,7 +454,7 @@ code { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; fo
 .fkv:hover { text-decoration-style: solid; }
 
 /* ===== Game ===== */
-#view-game { margin: -8px -8px 0; }
+
 .gbtn { font: inherit; font-size: 14px; font-weight: 700; padding: 7px 14px; border-radius: 8px; border: 1px solid var(--ink); background: var(--ink); color: var(--bg); cursor: pointer; white-space: nowrap; }
 .gbtn.ghost { background: transparent; color: var(--ink); border-color: var(--line); }
 .gbtn:disabled { opacity: .4; cursor: default; }
@@ -547,3 +547,18 @@ code { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; fo
 .gmain.morning .gmap { max-width: 760px; }
 .gmain .gmap { max-width: 900px; }
 .gseg button:disabled { opacity: .4; cursor: default; }
+
+/* simultaneous orders */
+.gready { display: inline-flex; gap: 4px; }
+.gready i { width: 12px; height: 12px; border-radius: 50%; display: inline-block; }
+.gorders { border: 1px dashed var(--line); border-radius: 8px; padding: 8px 10px; margin-bottom: 10px; font-size: 14px; }
+.gorders > div { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 5px; }
+.gorder { display: inline-flex; align-items: center; gap: 6px; background: var(--bg); border: 1px solid var(--line); border-radius: 6px; padding: 2px 4px 2px 8px; font-size: 13px; font-weight: 600; }
+.gorder em { font-style: normal; font-weight: 400; color: var(--muted); }
+.gorder button { border: none; background: none; color: var(--muted); cursor: pointer; font-size: 12px; }
+.gnews { background: var(--surface); border: 1px solid var(--line); border-left: 4px solid var(--accent); border-radius: 8px; padding: 8px 12px; margin-bottom: 10px; display: grid; gap: 2px; font-size: 13px; max-height: 220px; overflow-y: auto; }
+.gnews > div { display: flex; justify-content: space-between; }
+.gnews span { color: var(--muted); }
+.gpass { text-align: center; padding: 70px 16px; }
+.gpass h2 { font-size: 28px; margin: 14px 0 6px; }
+.gpass h2 i { display: inline-block; width: 18px; height: 18px; border-radius: 50%; margin-right: 10px; }

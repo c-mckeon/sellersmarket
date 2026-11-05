@@ -31,7 +31,7 @@
       <div class="gsetup">
         <h1>New game</h1>
         <p class="muted">Pick who's playing. Each player starts with ${S.startCash} cash, ${S.startSpace} crates of stockpile space, ${S.cardsPerRound} cards and one free business where they start. Highest net worth after the last round wins.</p>
-        ${saved && saved.version === 2 && !saved.over ? `<div class="gresume">A game in round ${saved.round} is saved in this browser. <button class="gbtn" id="gResume">Continue it</button></div>` : ""}
+        ${saved && saved.version === 3 && !saved.over ? `<div class="gresume">A game in round ${saved.round} is saved in this browser. <button class="gbtn" id="gResume">Continue it</button></div>` : ""}
         <table class="gplayers"><thead><tr><th></th><th>Name</th><th>Who</th><th>Starts in</th><th>Free business</th><th></th></tr></thead><tbody>
         ${setup.players.map((p, i) => {
           const opts = G.BIZ.filter(b => G.canBuildAt(b, p.start));
@@ -74,16 +74,38 @@
   }
 
   // ================= Game screen =================
-  const me = () => G.current(st);
+  // Everyone orders in secret, then it all happens at once. On one device, humans take it in turns
+  // to enter their orders; a "pass" screen in between keeps them private.
+  let vw = null;               // draft copy of the game: what it looks like if your orders go through
+  ui.orders = [];
+  ui.seat = null;              // the human whose orders are being entered
+  ui.passed = null;            // which human last confirmed they're at the screen
+  ui.seenBy = {};              // for each human: how much of the log they've already seen
+  const humans = () => st.players.filter(p => !p.bot);
+  const nextSeat = () => G.waitingFor(st).find(p => !p.bot) || null;
+  const me = () => G.player(vw, ui.seat);
   const needsOf = p => {
     const need = {};
-    G.myBusinesses(st, p.id).forEach(b => Object.entries(G.BIZ_BY[b.type].inputs).forEach(([c, q]) => need[c] = (need[c] || 0) + q));
+    G.myBusinesses(vw, p.id).forEach(b => Object.entries(G.BIZ_BY[b.type].inputs).forEach(([c, q]) => need[c] = (need[c] || 0) + q));
     return need;
   };
-  const doAct = (name, args) => {
-    const r = G.act(st, me().id, name, args);
-    flash(r.ok ? "" : r.msg);
-    save(); render();
+  // Add an order, if it would work given everything else you've ordered
+  const tryOrder = (name, args) => {
+    const next = [...ui.orders, { name, args }];
+    const d = G.draft(st, ui.seat, next);
+    if (d.error) return d.error;
+    ui.orders = next; return "";
+  };
+  const doAct = (name, args) => { flash(tryOrder(name, args)); render(); };
+  const orderText = o => {
+    const a = o.args || {};
+    if (o.name === "buy") return `Buy ${a.qty} ${G.COM[a.id].name} <em>${m(a.qty * st.prices[a.id])}</em>`;
+    if (o.name === "sell") return `${st.prices[a.id] < 0 ? "Dump" : "Sell"} ${a.qty} ${G.COM[a.id].name} <em>${m(a.qty * st.prices[a.id])}</em>`;
+    if (o.name === "upgradeSpace") return `+${S.spaceUpgrade.crates} crates of space`;
+    if (o.name === "move") return `Move to ${G.TERR[a.to].name}`;
+    if (o.name === "build") return `Build a ${G.BIZ_BY[a.type].name.toLowerCase()}`;
+    if (o.name === "playCard") return `Play ${G.CARD[a.card].name}`;
+    return o.name;
   };
   let flashMsg = "";
   const flash = msg => { flashMsg = msg; };
@@ -91,20 +113,33 @@
   function render() {
     if (!st) return renderSetup();
     if (st.over) return renderEnd();
+    const seat = nextSeat();
+    if (!seat) { G.resolve(st); save(); return render(); } // shouldn't happen, but never get stuck
+    if (ui.seat !== seat.id) { ui.seat = seat.id; ui.orders = []; ui.card = null; }
+    if (humans().length > 1 && ui.passed !== seat.id) return renderPass(seat);
+    vw = G.draft(st, ui.seat, ui.orders).state;
     const p = me();
+    const news = st.log.slice(ui.seenBy[p.id] ?? st.log.length).filter(l => l.pid === null || l.pid === p.id);
     root.innerHTML = `
       <div class="gbar">
         <span class="gphase ${st.phase}">Round ${st.round} of ${st.rounds} · ${st.phase === "morning" ? "Morning: trade" : "Afternoon: move or build, and play a card"}</span>
-        <span class="gturn"><i style="background:${p.colour}"></i>${p.name === "You" ? "Your" : esc(p.name) + "'s"} turn</span>
+        <span class="gturn"><i style="background:${p.colour}"></i>${p.name === "You" ? "Your" : esc(p.name) + "'s"} orders</span>
+        <span class="gready">${st.players.map(x => `<i title="${esc(x.name)}${st.orders[x.id] ? " is ready" : " is deciding"}" style="background:${x.colour};opacity:${st.orders[x.id] ? 1 : .25}"></i>`).join("")}</span>
         <span class="gsp"></span>
-        <button class="gbtn" id="gEnd">${st.phase === "morning" ? "Done trading" : "End turn"} →</button>
+        <button class="gbtn" id="gEnd">Submit${ui.orders.length ? ` ${ui.orders.length} order${ui.orders.length > 1 ? "s" : ""}` : " (no orders)"} →</button>
         <button class="gbtn ghost" id="gNew" title="Start a new game">New game</button>
       </div>
       ${flashMsg ? `<div class="gflash">${esc(flashMsg)}</div>` : ""}
+      ${news.length ? `<div class="gnews"><div><b>Since your last orders</b><button class="glink" id="gNewsOk">✕</button></div>${news.slice(-14).map(l => `<span>${l.pid ? "" : "· "}${esc(l.msg)}</span>`).join("")}</div>` : ""}
       <div class="glay">
         <div class="gmain ${st.phase}">
           <div class="gmap" id="gMap"></div>
-          <div class="gpanel">${st.phase === "morning" ? marketPanel(p) : afternoonPanel(p)}</div>
+          <div class="gpanel">
+            <div class="gorders"><b>Your orders</b> <span class="muted small">Nothing happens until everyone has submitted; then all orders go through at once.</span>
+              <div>${ui.orders.map((o, i) => `<span class="gorder">${orderText(o)}<button data-undo="${i}" title="Remove">✕</button></span>`).join("") || `<span class="muted">None yet.</span>`}</div>
+            </div>
+            ${st.phase === "morning" ? marketPanel(p) : afternoonPanel(p)}
+          </div>
         </div>
         <aside class="gdash">${dashboard(p)}</aside>
       </div>`;
@@ -113,11 +148,20 @@
     wire(p);
   }
 
+  function renderPass(seat) {
+    root.innerHTML = `<div class="gpass">
+      <span class="gphase ${st.phase}">Round ${st.round} · ${st.phase}</span>
+      <h2><i style="background:${seat.colour}"></i>Pass to ${esc(seat.name)}</h2>
+      <p class="muted">Everyone's orders stay secret until they all go through at once.</p>
+      <button class="gbtn" id="gImHere">I'm ${esc(seat.name)}: show my orders</button></div>`;
+    root.querySelector("#gImHere").addEventListener("click", () => { ui.passed = seat.id; render(); });
+  }
+
   // ----- Dashboard: only what's ours -----
   function dashboard(p) {
-    const used = G.used(p), worth = G.netWorth(st, p), need = needsOf(p);
-    const biz = G.myBusinesses(st, p.id);
-    const stock = Object.entries(p.stock).sort((a, b) => b[1] * st.prices[b[0]] - a[1] * st.prices[a[0]]);
+    const used = G.used(p), worth = G.netWorth(vw, p), need = needsOf(p);
+    const biz = G.myBusinesses(vw, p.id);
+    const stock = Object.entries(p.stock).sort((a, b) => b[1] * vw.prices[b[0]] - a[1] * vw.prices[a[0]]);
     const mine = st.log.filter(l => l.pid === p.id || l.pid === null).slice(-8).reverse();
     const rank = [...st.players].sort((a, b) => G.netWorth(st, b) - G.netWorth(st, a));
     return `
@@ -128,10 +172,10 @@
       <div class="dsec">
         <h4>Stockpile <em>${used}/${p.space}</em></h4>
         <div class="dspace"><span style="width:${Math.min(100, used / p.space * 100)}%"></span></div>
-        ${stock.length ? `<div class="dchips">${stock.map(([c, q]) => `<span title="${m(q * st.prices[c])}">${q} ${G.COM[c].name}</span>`).join("")}</div>` : `<p class="dnone">Empty</p>`}
+        ${stock.length ? `<div class="dchips">${stock.map(([c, q]) => `<span title="${m(q * vw.prices[c])}">${q} ${G.COM[c].name}</span>`).join("")}</div>` : `<p class="dnone">Empty</p>`}
       </div>
       <div class="dsec">
-        <h4>Businesses <em>${biz.length}${S.wageRate ? ` · wages ${m(biz.reduce((s, b) => s + G.wage(st, b), 0))}/night` : ""}</em></h4>
+        <h4>Businesses <em>${biz.length}${S.wageRate ? ` · wages ${m(biz.reduce((s, b) => s + G.wage(vw, b), 0))}/night` : ""}</em></h4>
         ${biz.map(b => {
           const t = G.BIZ_BY[b.type];
           const miss = Object.entries(t.inputs).filter(([c, q]) => (p.stock[c] || 0) < q);
@@ -153,14 +197,14 @@
   function marketPanel(p) {
     const need = needsOf(p);
     const missing = Object.entries(need).filter(([c, q]) => (p.stock[c] || 0) < q);
-    const missCost = missing.reduce((s, [c, q]) => s + (q - (p.stock[c] || 0)) * st.prices[c], 0);
+    const missCost = missing.reduce((s, [c, q]) => s + (q - (p.stock[c] || 0)) * vw.prices[c], 0);
     const anyMine = COMMODITIES.some(c => p.stock[c.id] || need[c.id]);
     const filter = anyMine ? ui.filter : "all";
     const rows = COMMODITIES.filter(c => {
       if (ui.search) return c.name.toLowerCase().includes(ui.search);
       return filter === "all" || p.stock[c.id] || need[c.id];
     });
-    const chg = c => { const a = st.lastPrices[c] ?? st.prices[c], b = st.prices[c]; return a ? b / a - 1 : 0; };
+    const chg = c => { const a = vw.lastPrices[c] ?? vw.prices[c], b = vw.prices[c]; return a ? b / a - 1 : 0; };
     return `
       <div class="ghead">
         <h3>Market</h3>
@@ -173,7 +217,7 @@
       </div>
       <table class="gmkt"><thead><tr><th>Commodity</th><th class="n">Price</th><th class="n">Change</th><th class="n">Have</th><th class="n">Need</th><th></th></tr></thead><tbody>
       ${rows.map(c => {
-        const pr = st.prices[c.id], ch = chg(c.id), have = p.stock[c.id] || 0;
+        const pr = vw.prices[c.id], ch = chg(c.id), have = p.stock[c.id] || 0;
         return `<tr><td>${c.name}</td><td class="n"><b>${m(pr)}</b></td>
           <td class="n ${ch > 0.005 ? "up" : ch < -0.005 ? "dn" : ""}">${Math.abs(ch) < 0.005 ? "—" : (ch > 0 ? "▲" : "▼") + Math.abs(ch * 100).toFixed(0) + "%"}</td>
           <td class="n">${have || ""}</td><td class="n">${need[c.id] || ""}</td>
@@ -189,7 +233,7 @@
   // ----- Afternoon: move or build, and cards -----
   function afternoonPanel(p) {
     const here = p.pos, info = TERRITORY_INFO[here];
-    const opts = G.buildable(st, here, p.id).map(o => ({ ...o, profit: G.bizProfit(st, o.b, here) })).sort((a, b) => b.profit / b.cost - a.profit / a.cost);
+    const opts = G.buildable(vw, here, p.id).map(o => ({ ...o, profit: G.bizProfit(vw, o.b, here) })).sort((a, b) => b.profit / b.cost - a.profit / a.cost);
     const res = Object.entries(info.res).sort((a, b) => b[1] - a[1]);
     const card = ui.card && p.hand.includes(ui.card) ? G.CARD[ui.card] : null;
     const needs = card ? G.cardNeeds(card) : {};
@@ -211,8 +255,8 @@
           ${card ? `<div class="gplay">
             <b>Play ${card.name}?</b> It takes effect overnight.
             ${needs.commodity ? `<label>Commodity <select id="gcCom">${COMMODITIES.map(c => `<option value="${c.id}">${c.name}</option>`).join("")}</select></label>` : ""}
-            ${needs.ownBusiness ? `<label>Your business <select id="gcOwn">${G.myBusinesses(st, p.id).map(b => `<option value="${b.id}">${G.BIZ_BY[b.type].name}, ${G.TERR[b.territory].name}</option>`).join("")}</select></label>` : ""}
-            ${needs.targetBusiness ? `<label>Target <select id="gcTgt">${st.businesses.filter(b => b.owner !== p.id).map(b => `<option value="${b.id}">${esc(G.player(st, b.owner).name)}'s ${G.BIZ_BY[b.type].name}, ${G.TERR[b.territory].name}</option>`).join("")}</select></label>` : ""}
+            ${needs.ownBusiness ? `<label>Your business <select id="gcOwn">${G.myBusinesses(vw, p.id).map(b => `<option value="${b.id}">${G.BIZ_BY[b.type].name}, ${G.TERR[b.territory].name}</option>`).join("")}</select></label>` : ""}
+            ${needs.targetBusiness ? `<label>Target <select id="gcTgt">${vw.businesses.filter(b => b.owner !== p.id).map(b => `<option value="${b.id}">${esc(G.player(vw, b.owner).name)}'s ${G.BIZ_BY[b.type].name}, ${G.TERR[b.territory].name}</option>`).join("")}</select></label>` : ""}
             <button class="gbtn" id="gPlay">Play it</button> <button class="gbtn ghost" id="gCancel">Cancel</button>
           </div>` : ""}
         </div>
@@ -224,20 +268,20 @@
     let { svg, below } = europeMapSVG("tOutlineGame");
     svg = svg.replace(/<\/svg>$/, "");
     const marks = {};
-    st.businesses.forEach(b => (marks[b.territory] ||= []).push({ kind: "biz", b }));
-    st.players.forEach(x => (marks[x.pos] ||= []).push({ kind: "pawn", x }));
+    vw.businesses.forEach(b => (marks[b.territory] ||= []).push({ kind: "biz", b }));
+    vw.players.forEach(x => (marks[x.pos] ||= []).push({ kind: "pawn", x }));
     Object.entries(marks).forEach(([tid, list]) => {
       const [x] = TERRITORY_LABELS[tid], y = below[tid] + 20, step = 28;
       const show = list.length > 6 ? [...list.filter(l => l.kind === "pawn"), ...list.filter(l => l.kind === "biz").slice(0, 5)] : list;
       show.forEach((mk, i) => {
         const cx = x + (i - (show.length - 1) / 2) * step;
-        if (mk.kind === "biz") { const o = G.player(st, mk.b.owner), t = G.BIZ_BY[mk.b.type]; svg += `<g><title>${esc(o.name)}: ${t.name}</title><rect x="${cx - 11}" y="${y - 11}" width="22" height="22" rx="5" fill="${o.colour}" stroke="#fff" stroke-width="2.5"/><text x="${cx}" y="${y + 5}" text-anchor="middle" font-size="12" font-weight="800" fill="#fff">${t.name[0]}</text></g>`; }
+        if (mk.kind === "biz") { const o = G.player(vw, mk.b.owner), t = G.BIZ_BY[mk.b.type]; svg += `<g><title>${esc(o.name)}: ${t.name}</title><rect x="${cx - 11}" y="${y - 11}" width="22" height="22" rx="5" fill="${o.colour}" stroke="#fff" stroke-width="2.5"/><text x="${cx}" y="${y + 5}" text-anchor="middle" font-size="12" font-weight="800" fill="#fff">${t.name[0]}</text></g>`; }
         else svg += `<g><title>${esc(mk.x.name)}</title><circle cx="${cx}" cy="${y}" r="${mk.x.id === p.id ? 15 : 12}" fill="${mk.x.colour}" stroke="#fff" stroke-width="3"/><circle cx="${cx}" cy="${y}" r="4.5" fill="#fff"/></g>`;
       });
       if (show.length < list.length) svg += `<text x="${x}" y="${y + 30}" text-anchor="middle" font-size="12" font-weight="700" fill="#4a4232">+${list.length - show.length} more</text>`;
     });
     document.getElementById("gMap").innerHTML = `<div class="bd-scroll">${svg}</svg></div>`;
-    const near = st.phase === "afternoon" && !p.acted ? G.neighbours(p.pos) : [];
+    const near = vw.phase === "afternoon" && !p.acted ? G.neighbours(p.pos) : [];
     document.querySelectorAll("#gMap .terr").forEach(g => {
       const t = g.dataset.t;
       if (t === p.pos) g.classList.add("here");
@@ -247,7 +291,21 @@
 
   // ----- Clicks -----
   function wire(p) {
-    root.querySelector("#gEnd").addEventListener("click", () => { ui.card = null; G.endTurn(st); save(); render(); });
+    root.querySelector("#gEnd").addEventListener("click", () => {
+      const before = st.log.length, who = ui.seat;
+      const r = G.submit(st, ui.seat, ui.orders);
+      if (!r.ok) { flash(r.msg); return render(); }
+      ui.orders = []; ui.card = null;
+      ui.seenBy[who] = before; // next time they look, show everything since they submitted
+      save(); render();
+    });
+    root.querySelector("#gNewsOk")?.addEventListener("click", () => { ui.seenBy[ui.seat] = st.log.length; render(); });
+    root.querySelectorAll("[data-undo]").forEach(b => b.addEventListener("click", () => {
+      const next = ui.orders.filter((_, i) => i !== +b.dataset.undo);
+      const d = G.draft(st, ui.seat, next);
+      if (d.error) flash("Can't remove that: later orders depend on it. Remove those first."); else ui.orders = next;
+      render();
+    }));
     root.querySelector("#gNew").addEventListener("click", () => { if (confirm("Abandon this game and start a new one?")) { st = null; localStorage.removeItem(KEY); render(); } });
     root.querySelectorAll("[data-f]").forEach(b => b.addEventListener("click", () => { ui.filter = b.dataset.f; ui.search = ""; render(); }));
     const s = root.querySelector("#gSearch");
@@ -259,9 +317,9 @@
       const need = needsOf(p); let msg = "";
       for (const [c, q] of Object.entries(need)) {
         const miss = q - (p.stock[c] || 0);
-        if (miss > 0) { const r = G.act(st, p.id, "buy", { id: c, qty: miss }); if (!r.ok) { msg = r.msg; break; } }
+        if (miss > 0) { msg = tryOrder("buy", { id: c, qty: miss }); if (msg) break; }
       }
-      flash(msg); save(); render();
+      flash(msg); render();
     });
     root.querySelectorAll("[data-move]").forEach(b => b.addEventListener("click", () => doAct("move", { to: b.dataset.move })));
     root.querySelectorAll("[data-build]").forEach(b => b.addEventListener("click", () => doAct("build", { type: b.dataset.build })));
@@ -287,6 +345,6 @@
 
   // Start: continue a saved game in progress, or show setup
   const saved = load();
-  st = saved && saved.version === 2 && !saved.over ? saved : null;
+  st = saved && saved.version === 3 && !saved.over ? saved : null;
   render();
 })();
