@@ -385,3 +385,31 @@ input[type=number] { font: inherit; font-size: 13px; padding: 3px 5px; border: 1
 #board { min-width: 0; }
 #board .bd-scroll { overflow-x: auto; border-radius: 12px; }
 @media (max-width: 800px) { #board svg.board { min-width: 760px; } }
+
+/* territories */
+.tctl { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 18px; margin: 4px 0 12px; font-size: 14px; }
+.tctl select { font: inherit; font-size: 14px; padding: 6px 8px; border: 1px solid var(--line); border-radius: 6px; background: var(--surface); color: var(--ink); margin-left: 6px; }
+.tctl .sw { display: inline-block; width: 12px; height: 12px; border-radius: 3px; vertical-align: -1px; margin: 0 3px 0 8px; }
+.tgrid { display: grid; grid-template-columns: minmax(0, 1fr) 360px; gap: 16px; align-items: start; }
+@media (max-width: 1000px) { .tgrid { grid-template-columns: 1fr; } }
+#tmap .terr { transition: opacity .15s; }
+#tmap .terr.dim { opacity: .3; }
+#tmap .terr.sel path { stroke: #1d1d1b; stroke-width: 6; }
+@media (max-width: 800px) { #tmap svg.board { min-width: 760px; } }
+#tpanel h3 { margin: 0 0 6px; font-size: 22px; }
+#tpanel h4 { margin: 16px 0 6px; font-size: 12px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); }
+#tpanel h4 em { font-style: normal; }
+#tpanel .desc { color: var(--muted); margin: 8px 0 0; }
+.ttags { display: flex; flex-wrap: wrap; gap: 6px; }
+.ttags span { font-size: 12px; font-weight: 700; padding: 2px 8px; border-radius: 999px; background: var(--bg); border: 1px solid var(--line); }
+#tpanel .tres { list-style: none; margin: 0; padding: 0; display: grid; gap: 3px; }
+#tpanel .tres li { display: flex; justify-content: space-between; font-size: 14px; }
+.stars { color: var(--accent); letter-spacing: 1px; }
+.stars .off { color: var(--line); }
+.stars.sm { font-size: 11px; }
+.herectl { display: flex; align-items: center; gap: 10px; font-size: 13px; }
+.herectl input { width: 60px; }
+.facs summary { cursor: pointer; font-size: 13px; color: var(--accent); font-weight: 600; margin-bottom: 4px; }
+.clickrows tbody tr { cursor: pointer; }
+.clickrows tbody tr:hover { background: var(--bg); }
+.clickrows td.name { font-weight: 600; white-space: nowrap; }

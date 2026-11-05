@@ -18,7 +18,8 @@ const PLOTS = [
 // Where each player's pawn stands
 const PAWNS = { you: "paris", ana: "ruhr", ben: "danube", cleo: "spain" };
 
-function drawBoard() {
+// Draws the map. Returns the SVG as text plus where each name ends (for markers).
+function europeMapSVG(fid) {
   const [W, H] = MAP_SIZE;
   const LAND = ["#eadfb8", "#d8e3b5", "#efd3b1", "#d9d6bd", "#e6cbbf", "#cfe1c6"];
   const SEA = ["#bcd5e9", "#a8c8e2", "#c7dcec"];
@@ -31,7 +32,7 @@ function drawBoard() {
   });
 
   let s = `<svg class="board" viewBox="0 0 ${W} ${H}" role="img" aria-label="Map of Europe split into ${TERRITORIES.length} territories">
-    <defs><filter id="tOutline" x="-5%" y="-5%" width="110%" height="110%">
+    <defs><filter id="${fid}" x="-5%" y="-5%" width="110%" height="110%">
       <feMorphology in="SourceAlpha" operator="erode" radius="2.2" result="in"/>
       <feComposite in="SourceAlpha" in2="in" operator="out" result="ring"/>
       <feFlood flood-color="#5d5543" flood-opacity=".75"/>
@@ -41,7 +42,7 @@ function drawBoard() {
     <rect width="${W}" height="${H}" fill="#cfc8a6"/>`;
   TERRITORIES.forEach(t => {
     const c = colour[t.id];
-    s += `<g class="terr${t.sea ? " sea" : ""}" data-t="${t.id}" filter="url(#tOutline)"><title>${t.name}</title>` +
+    s += `<g class="terr${t.sea ? " sea" : ""}" data-t="${t.id}" filter="url(#${fid})" data-c="${c}"><title>${t.name}</title>` +
       t.provinces.map(p => `<path d="${PROVINCE_PATHS[p]}" fill="${c}" stroke="${c}" stroke-width="1.5"/>`).join("") + `</g>`;
   });
 
@@ -58,6 +59,12 @@ function drawBoard() {
     });
   });
 
+  return { svg: s + "</svg>", below };
+}
+
+function drawBoard() {
+  let { svg: s, below } = europeMapSVG("tOutlineBoard");
+  s = s.replace(/<\/svg>$/, "");
   // Markers: one row under each name, businesses (squares) then pawns (circles)
   const marks = {};
   PLOTS.forEach(([tid, who, biz]) => (marks[tid] ||= []).push({ kind: "biz", who, biz }));
@@ -74,7 +81,6 @@ function drawBoard() {
   s += `</svg>`;
 
   const legend = Object.values(PLAYERS).map(p => `<span><i style="background:${p.color}"></i>${p.name}</span>`).join("");
-  const mine = PLOTS.filter(p => p[1] === "you").map(p => `${p[2]} in ${TERRITORIES.find(t => t.id === p[0]).name}`).join(", ");
   document.getElementById("board").innerHTML = `<div class="bd-scroll">${s}</div>` +
     `<div class="bd-legend">${legend}<span class="muted">Square = a business (its first letter; hover for the name) · ring = where a player is standing</span></div>
      <p class="bd-credit">Map outlines: Diplicity's classic Europe map, from <a href="https://github.com/zond/godip" rel="noopener">godip</a> (GPL-3.0). A placeholder until we draw our own.</p>`;

@@ -18,6 +18,7 @@
 <nav class="subtabs" id="subTabs" hidden>
   <a href="#/mechanics/gameplay" data-sub="gameplay">Gameplay</a>
   <a href="#/mechanics/commodities" data-sub="commodities">Commodities</a>
+  <a href="#/mechanics/territories" data-sub="territories">Territories</a>
   <a href="#/mechanics/market" data-sub="market">Market dynamics</a>
   <a href="#/mechanics/broker" data-sub="broker">Broker dynamics</a>
   <a href="#/mechanics/cards" data-sub="cards">Action cards</a>
@@ -118,6 +119,41 @@
     <h2 class="listhead">Player dashboard <span class="sketch">Sketch with example data</span></h2>
     <p class="muted">What a player sees during the game: their money, their stockpile, what their businesses need today, and live market and broker prices. No leverage for now.</p>
     <div class="hud" id="hud"></div>
+  </section>
+
+  <section id="view-territories" class="view">
+    <div class="intro">
+      <h1>Territories</h1>
+      <p>Each of the 60 territories has its own character, based on real geography: what's in the ground, whether it's on the coast, and how expensive it is to build there. Mines and farms can only go where their resource is; most factories can go anywhere.</p>
+    </div>
+
+    <div class="eqcard">
+      <div class="big">Build cost = base cost × territory cost level × (1 + 25% × businesses already there)</div>
+      <dl>
+        <div><dt>Base cost</dt><dd>Set for each kind of business. A farm is 100, a gold mine 260, an offshore oil rig 450. A factory costs 150, 250, 400 or 700, depending on how advanced its product is.</dd></div>
+        <div><dt>Cost level</dt><dd>Land and wages differ. London is ×2.0 and Paris ×1.8; Ukraine is ×0.7 and North Africa ×0.6.</dd></div>
+        <div><dt>Crowding</dt><dd>Every business already in a territory, anyone's, makes the next one 25% dearer. The first is ×1, the fifth is ×2. Popular spots fill up and get expensive, which spreads players out.</dd></div>
+        <div><dt>Richness</dt><dd>Mines, farms and wells produce more where the deposit is richer: ★ ×1, ★★ ×1.5, ★★★ ×2. Swedish iron mines out-produce Scottish ones.</dd></div>
+        <div><dt>Where</dt><dd>Extraction only where the resource is. Oil refineries and plastics plants need the coast or a local oil field. Every other factory can go on any land. At sea you can only build oil rigs, where there's offshore oil.</dd></div>
+      </dl>
+      <p class="example"><b>Example:</b> a coal mine (base 140) in the Ruhr (×1.2) with 2 businesses already there: 140 × 1.2 × 1.5 = <b>252</b>. It makes 4 × 2 = 8 coal a round, since the Ruhr's coal is ★★★.</p>
+    </div>
+
+    <div class="tctl">
+      <label>Show where you can build <select id="tfilter"></select></label>
+      <span id="tlegend" class="muted"></span>
+    </div>
+    <div class="tgrid">
+      <div id="tmap"></div>
+      <aside class="panel" id="tpanel"></aside>
+    </div>
+
+    <h2 class="listhead">All land territories</h2>
+    <div class="tablewrap"><table id="ttable" class="clickrows"></table></div>
+
+    <h2 class="listhead">All businesses</h2>
+    <p class="muted">Click one to see where it can go on the map. No rubber grows in Europe, so latex can only be imported.</p>
+    <div class="tablewrap"><table id="btable" class="clickrows"></table></div>
   </section>
 
   <section id="view-market" class="view">
@@ -445,7 +481,10 @@
 <script src="js/brokerview.js?v=__V__"></script>
 <script src="maps/europe.js?v=__V__"></script>
 <script src="js/map.js?v=__V__"></script>
+<script src="js/territories.js?v=__V__"></script>
+<script src="js/businesses.js?v=__V__"></script>
 <script src="js/hud.js?v=__V__"></script>
+<script src="js/territoriesview.js?v=__V__"></script>
 <script src="js/cardsview.js?v=__V__"></script>
 </body>
 </html>
