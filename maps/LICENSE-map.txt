@@ -1,0 +1,10 @@
+The file maps/europe.js contains map outlines adapted from the godip project
+(https://github.com/zond/godip), file variants/classical/svg/map.svg, as used by
+Diplicity (https://diplicity.com).
+
+godip is free software, licensed under the GNU General Public License, version 3
+(https://www.gnu.org/licenses/gpl-3.0.html). The adapted outlines in maps/europe.js
+are distributed under the same licence. Changes made: other layers removed,
+coordinates rounded to two decimal places, and provinces grouped into territories.
+
+This map is a temporary placeholder and will be replaced by an original map.

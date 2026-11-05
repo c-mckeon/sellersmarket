@@ -323,7 +323,7 @@ input[type=number] { font: inherit; font-size: 13px; padding: 3px 5px; border: 1
 
 /* gameplay: board + dashboard sketch */
 .listhead .sketch { vertical-align: 3px; }
-.boardwrap { display: grid; grid-template-columns: minmax(0, 620px) 1fr; gap: 24px; align-items: start; }
+.boardwrap { display: grid; grid-template-columns: minmax(0, 3fr) minmax(240px, 1fr); gap: 24px; align-items: start; }
 @media (max-width: 900px) { .boardwrap { grid-template-columns: 1fr; } }
 .board { width: 100%; height: auto; display: block; background: var(--surface); border: 1px solid var(--line); border-radius: 12px; }
 .bd-legend { display: flex; flex-wrap: wrap; gap: 6px 14px; font-size: 13px; margin-top: 8px; }
@@ -379,3 +379,9 @@ input[type=number] { font: inherit; font-size: 13px; padding: 3px 5px; border: 1
 .etfmini { display: grid; grid-template-columns: repeat(4, 1fr); gap: 4px; margin-top: 8px; }
 .etfmini span { background: var(--bg); border-radius: 6px; padding: 3px 6px; font-size: 12px; display: grid; font-variant-numeric: tabular-nums; }
 .etfmini b { font-size: 10.5px; letter-spacing: .05em; color: var(--muted); }
+.board .terr { cursor: pointer; }
+.board .terr:hover path { filter: brightness(1.06); }
+.bd-credit { font-size: 12px; color: var(--muted); margin: 6px 0 0; }
+#board { min-width: 0; }
+#board .bd-scroll { overflow-x: auto; border-radius: 12px; }
+@media (max-width: 800px) { #board svg.board { min-width: 760px; } }

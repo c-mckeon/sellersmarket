@@ -1,73 +1,83 @@
 // ---------- Gameplay sketches: board and player dashboard ----------
 // Everything here is example data to show the layout. Nothing is wired to a real game yet.
 
-// ----- Board -----
-const DISTRICT = {
-  food:         { label: "Farmland",       fill: "#8fbf5a" },
-  forestry:     { label: "Forest",         fill: "#3f8f5a" },
-  mining:       { label: "Mines",          fill: "#9a8a78" },
-  metals:       { label: "Steel town",     fill: "#7d8fa3" },
-  energy:       { label: "Refinery coast", fill: "#d9a21b" },
-  construction: { label: "Building yards", fill: "#c98a5a" },
-  electronics:  { label: "Tech park",      fill: "#5a7fd4" },
-  machinery:    { label: "Factory row",    fill: "#a06ad4" },
-};
-const BOARD = [
-  ["food", "food", "food", "forestry", "forestry"],
-  ["mining", "metals", "metals", "energy", "forestry"],
-  ["mining", "metals", "centre", "energy", "energy"],
-  ["mining", "construction", "electronics", "electronics", "electronics"],
-  ["construction", "construction", "machinery", "machinery", "machinery"],
-];
+// ----- Board: a map of Europe -----
 const PLAYERS = {
   you:  { name: "You",  color: "#d4682a" },
   ana:  { name: "Ana",  color: "#2f6db5" },
   ben:  { name: "Ben",  color: "#8a4fc0" },
-  cleo: { name: "Cleo", color: "#3f8f5a" },
+  cleo: { name: "Cleo", color: "#2e8b57" },
 };
-// Businesses on the board: [row, col, owner, business]
+// Example businesses: [territory, owner, business]
 const PLOTS = [
-  [0, 0, "you", "Flour mill"], [0, 1, "you", "Bakery"], [0, 3, "you", "Sawmill"],
-  [1, 1, "ana", "Blast furnace"], [1, 2, "ana", "Steelworks"], [1, 3, "ben", "Oil refinery"],
-  [2, 4, "ben", "Plastics plant"], [3, 2, "cleo", "Chip fab"], [3, 3, "cleo", "Battery plant"],
-  [4, 0, "ana", "Cement kiln"], [4, 3, "ben", "Motor factory"], [2, 0, "cleo", "Copper smelter"],
+  ["ukraine", "you", "Flour mill"], ["paris", "you", "Bakery"], ["sweden", "you", "Sawmill"],
+  ["ruhr", "ana", "Blast furnace"], ["berlin", "ana", "Steelworks"], ["bohemia", "ana", "Cement kiln"],
+  ["danube", "ben", "Oil refinery"], ["lowlands", "ben", "Plastics plant"], ["munich", "ben", "Motor factory"],
+  ["spain", "cleo", "Copper smelter"], ["london", "cleo", "Chip fab"], ["finland", "cleo", "Battery plant"],
 ];
-// Where each player's pawn stands: [row, col]
-const PAWNS = { you: [0, 2], ana: [1, 1], ben: [2, 3], cleo: [3, 2] };
+// Where each player's pawn stands
+const PAWNS = { you: "paris", ana: "ruhr", ben: "danube", cleo: "spain" };
 
 function drawBoard() {
-  const T = 118, G = 6, PAD = 10, N = 5, W = PAD * 2 + N * T + (N - 1) * G;
-  const xy = (r, c) => [PAD + c * (T + G), PAD + r * (T + G)];
-  let s = `<svg class="board" viewBox="0 0 ${W} ${W}" role="img" aria-label="Sketch of the game board">`;
-  BOARD.forEach((row, r) => row.forEach((d, c) => {
-    if (d === "centre") return;
-    const [x, y] = xy(r, c), D = DISTRICT[d];
-    s += `<rect x="${x}" y="${y}" width="${T}" height="${T}" rx="10" fill="${D.fill}" fill-opacity=".22" stroke="${D.fill}" stroke-width="1.5"/>`;
-    s += `<text class="bd-lbl" x="${x + 8}" y="${y + 17}" fill="${D.fill}" font-size="11" font-weight="800">${D.label.toUpperCase()}</text>`;
-  }));
-  // Centre: market and bank
-  const [mx, my] = xy(2, 2);
-  s += `<rect x="${mx}" y="${my}" width="${T}" height="${T}" rx="10" fill="#1d1d1b" class="bd-centre"/>`;
-  s += `<text x="${mx + T / 2}" y="${my + 48}" text-anchor="middle" fill="#fff" font-size="15" font-weight="800">Market</text>`;
-  s += `<text x="${mx + T / 2}" y="${my + 68}" text-anchor="middle" fill="#fff" font-size="12" opacity=".75">&amp; central bank</text>`;
-  s += `<text x="${mx + T / 2}" y="${my + 90}" text-anchor="middle" fill="#e0954f" font-size="11" font-weight="700">BROKER · ETFs</text>`;
-  // Businesses
-  PLOTS.forEach(([r, c, who, biz]) => {
-    const [x, y] = xy(r, c), P = PLAYERS[who];
-    s += `<rect x="${x + 8}" y="${y + 30}" width="${T - 16}" height="30" rx="6" fill="#fff" stroke="${P.color}" stroke-width="2.5" class="bd-biz"/>`;
-    s += `<text x="${x + T / 2 + 3}" y="${y + 49}" text-anchor="middle" font-size="10.5" font-weight="700" fill="#1d1d1b" class="bd-biz-t">${biz}</text>`;
-    s += `<rect x="${x + 8}" y="${y + 30}" width="6" height="30" rx="2" fill="${P.color}"/>`;
+  const [W, H] = MAP_SIZE;
+  const LAND = ["#eadfb8", "#d8e3b5", "#efd3b1", "#d9d6bd", "#e6cbbf", "#cfe1c6"];
+  const SEA = ["#bcd5e9", "#a8c8e2", "#c7dcec"];
+  // Give neighbours different colours.
+  const colour = {};
+  TERRITORIES.forEach(t => {
+    const pal = t.sea ? SEA : LAND;
+    const taken = new Set((TERRITORY_NEIGHBOURS[t.id] || []).map(n => colour[n]));
+    colour[t.id] = pal.find(c => !taken.has(c)) || pal[0];
   });
-  // Pawns
-  Object.entries(PAWNS).forEach(([who, [r, c]], i) => {
-    const [x, y] = xy(r, c), P = PLAYERS[who];
-    const py = y + T - 22;
-    s += `<circle cx="${x + T - 24}" cy="${py}" r="14" fill="${P.color}" stroke="#fff" stroke-width="2.5"/>`;
-    s += `<text x="${x + T - 24}" y="${py + 4.5}" text-anchor="middle" font-size="12" font-weight="800" fill="#fff">${P.name[0]}</text>`;
+
+  let s = `<svg class="board" viewBox="0 0 ${W} ${H}" role="img" aria-label="Map of Europe split into ${TERRITORIES.length} territories">
+    <defs><filter id="tOutline" x="-5%" y="-5%" width="110%" height="110%">
+      <feMorphology in="SourceAlpha" operator="erode" radius="2.2" result="in"/>
+      <feComposite in="SourceAlpha" in2="in" operator="out" result="ring"/>
+      <feFlood flood-color="#5d5543" flood-opacity=".75"/>
+      <feComposite in2="ring" operator="in" result="edge"/>
+      <feMerge><feMergeNode in="SourceGraphic"/><feMergeNode in="edge"/></feMerge>
+    </filter></defs>
+    <rect width="${W}" height="${H}" fill="#cfc8a6"/>`;
+  TERRITORIES.forEach(t => {
+    const c = colour[t.id];
+    s += `<g class="terr${t.sea ? " sea" : ""}" data-t="${t.id}" filter="url(#tOutline)"><title>${t.name}</title>` +
+      t.provinces.map(p => `<path d="${PROVINCE_PATHS[p]}" fill="${c}" stroke="${c}" stroke-width="1.5"/>`).join("") + `</g>`;
+  });
+
+  // Names, sized to fit the room inside each territory
+  const below = {};
+  TERRITORIES.forEach(t => {
+    const [x, y, room] = TERRITORY_LABELS[t.id];
+    const fs = Math.max(12, Math.min(t.sea ? 22 : 20, room / 3.2));
+    const words = t.name.split(" ");
+    const lines = t.name.length > 11 && words.length > 1 ? [words.slice(0, Math.ceil(words.length / 2)).join(" "), words.slice(Math.ceil(words.length / 2)).join(" ")] : [t.name];
+    below[t.id] = y + ((lines.length - 1) / 2) * fs * 1.05 + fs * .35;
+    lines.forEach((ln, i) => {
+      s += `<text x="${x}" y="${y + (i - (lines.length - 1) / 2) * fs * 1.05 + fs * .35}" text-anchor="middle" font-size="${fs.toFixed(1)}" class="tname${t.sea ? " sea" : ""}" fill="${t.sea ? "#3d6a8f" : "#4a4232"}" ${t.sea ? 'font-style="italic"' : 'font-weight="700"'} paint-order="stroke" stroke="${colour[t.id]}" stroke-width="3">${ln}</text>`;
+    });
+  });
+
+  // Markers: one row under each name, businesses (squares) then pawns (circles)
+  const marks = {};
+  PLOTS.forEach(([tid, who, biz]) => (marks[tid] ||= []).push({ kind: "biz", who, biz }));
+  Object.entries(PAWNS).forEach(([who, tid]) => (marks[tid] ||= []).push({ kind: "pawn", who }));
+  Object.entries(marks).forEach(([tid, list]) => {
+    const [x] = TERRITORY_LABELS[tid], y = below[tid] + 20, step = 30;
+    list.forEach((m, i) => {
+      const cx = x + (i - (list.length - 1) / 2) * step, P = PLAYERS[m.who];
+      s += m.kind === "biz"
+        ? `<g><title>${P.name}: ${m.biz}</title><rect x="${cx - 12}" y="${y - 12}" width="24" height="24" rx="5" fill="${P.color}" stroke="#fff" stroke-width="2.5"/><text x="${cx}" y="${y + 5}" text-anchor="middle" font-size="13" font-weight="800" fill="#fff">${m.biz[0]}</text></g>`
+        : `<g><title>${P.name} is here</title><circle cx="${cx}" cy="${y}" r="14" fill="${P.color}" stroke="#fff" stroke-width="3"/><circle cx="${cx}" cy="${y}" r="5" fill="#fff"/></g>`;
+    });
   });
   s += `</svg>`;
+
   const legend = Object.values(PLAYERS).map(p => `<span><i style="background:${p.color}"></i>${p.name}</span>`).join("");
-  document.getElementById("board").innerHTML = s + `<div class="bd-legend">${legend}<span class="muted">Box = a business · circle = where a player is standing</span></div>`;
+  const mine = PLOTS.filter(p => p[1] === "you").map(p => `${p[2]} in ${TERRITORIES.find(t => t.id === p[0]).name}`).join(", ");
+  document.getElementById("board").innerHTML = `<div class="bd-scroll">${s}</div>` +
+    `<div class="bd-legend">${legend}<span class="muted">Square = a business (its first letter; hover for the name) · ring = where a player is standing</span></div>
+     <p class="bd-credit">Map outlines: Diplicity's classic Europe map, from <a href="https://github.com/zond/godip" rel="noopener">godip</a> (GPL-3.0). A placeholder until we draw our own.</p>`;
 }
 
 // ----- Dashboard -----
