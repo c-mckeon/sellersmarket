@@ -12,6 +12,7 @@
 //     With empty stockpiles s = s₀, so every price starts at base.
 //   Demand = 1 + weight × unmet need ÷ (need + held + background × s₀)
 //     unmet need = what all businesses need for one run, minus what players hold.
+//   Card effects = card demand ÷ card supply, held between ×0.25 and ×4.
 //
 // Prices are set at midday and overnight, and stay fixed while players trade,
 // so the order players take their turns in doesn't matter.
@@ -56,8 +57,10 @@
         price = base * Math.pow(s / s0, e) * st.priceLevel; // a disposal fee grows as waste piles up
       } else {
         const n = need[id] || 0, unmet = Math.max(0, n - h);
-        const demand = (1 + PS.demandWeight * unmet / (n + h + bg * s0)) * (m.demand || 1);
-        price = base * Math.pow(s0 / s, e) * demand * st.priceLevel * Math.pow(1 / (m.supply || 1), e);
+        const demand = 1 + PS.demandWeight * unmet / (n + h + bg * s0);
+        // Card effects: demand ×, and supply cuts push the price up (×0.5 supply = ×2 price). Held to ×0.25–×4.
+        const cards = Math.min(4, Math.max(0.25, (m.demand || 1) / (m.supply || 1)));
+        price = base * Math.pow(s0 / s, e) * demand * cards * st.priceLevel;
         if (m.cap) price = Math.min(price, m.cap * base * st.priceLevel);
       }
       st.prices[id] = Math.round(price * 100) / 100;

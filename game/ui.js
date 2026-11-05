@@ -31,7 +31,7 @@
       <div class="gsetup">
         <h1>New game</h1>
         <p class="muted">Pick who's playing. Each player starts with ${S.startCash} cash, ${S.startSpace} crates of stockpile space, ${S.cardsPerRound} cards and one free business where they start. Highest net worth after the last round wins.</p>
-        ${saved && !saved.over ? `<div class="gresume">A game in round ${saved.round} is saved in this browser. <button class="gbtn" id="gResume">Continue it</button></div>` : ""}
+        ${saved && saved.version === 2 && !saved.over ? `<div class="gresume">A game in round ${saved.round} is saved in this browser. <button class="gbtn" id="gResume">Continue it</button></div>` : ""}
         <table class="gplayers"><thead><tr><th></th><th>Name</th><th>Who</th><th>Starts in</th><th>Free business</th><th></th></tr></thead><tbody>
         ${setup.players.map((p, i) => {
           const opts = G.BIZ.filter(b => G.canBuildAt(b, p.start));
@@ -131,7 +131,7 @@
         ${stock.length ? `<div class="dchips">${stock.map(([c, q]) => `<span title="${m(q * st.prices[c])}">${q} ${G.COM[c].name}</span>`).join("")}</div>` : `<p class="dnone">Empty</p>`}
       </div>
       <div class="dsec">
-        <h4>Businesses <em>${biz.length}</em></h4>
+        <h4>Businesses <em>${biz.length}${S.wageRate ? ` · wages ${m(biz.reduce((s, b) => s + G.wage(st, b), 0))}/night` : ""}</em></h4>
         ${biz.map(b => {
           const t = G.BIZ_BY[b.type];
           const miss = Object.entries(t.inputs).filter(([c, q]) => (p.stock[c] || 0) < q);
@@ -189,7 +189,7 @@
   // ----- Afternoon: move or build, and cards -----
   function afternoonPanel(p) {
     const here = p.pos, info = TERRITORY_INFO[here];
-    const opts = G.buildable(st, here).map(o => ({ ...o, profit: G.bizProfit(st, o.b, here) })).sort((a, b) => b.profit / b.cost - a.profit / a.cost);
+    const opts = G.buildable(st, here, p.id).map(o => ({ ...o, profit: G.bizProfit(st, o.b, here) })).sort((a, b) => b.profit / b.cost - a.profit / a.cost);
     const res = Object.entries(info.res).sort((a, b) => b[1] - a[1]);
     const card = ui.card && p.hand.includes(ui.card) ? G.CARD[ui.card] : null;
     const needs = card ? G.cardNeeds(card) : {};
@@ -203,7 +203,7 @@
           ${opts.length ? `<table class="gmkt"><thead><tr><th>Business</th><th class="n">Crates*</th><th class="n">Earns/round*</th><th class="n">Cost</th><th></th></tr></thead><tbody>
             ${opts.map(o => { const crates = Object.values(o.b.inputs).reduce((x, y) => x + y, 0); return `<tr><td>${o.b.name}</td><td class="n ${crates > p.space ? "dn" : ""}">${crates || "—"}</td><td class="n ${o.profit > 0 ? "up" : "dn"}">${m(o.profit)}</td><td class="n">${m(o.cost)}</td>
               <td class="acts"><button data-build="${o.b.id}" ${p.acted || o.cost > p.cash ? "disabled" : ""}>Build</button></td></tr>`; }).join("")}
-          </tbody></table><p class="muted small">* Crates: stockpile space its inputs take each round (you have ${p.space}). Earns: outputs minus inputs at today's prices.</p>` : `<p class="muted">Nothing can be built here.</p>`}
+          </tbody></table><p class="muted small">* Crates: stockpile space its inputs take each round (you have ${p.space}). Earns: outputs minus inputs and wages, at today's prices.</p>` : `<p class="muted">Nothing can be built here.</p>`}
         </div>
         <div>
           <h4>Your cards <em>${p.hand.length}/${S.handMax}</em> ${p.cardsPlayed ? "· played one ✓" : ""}</h4>
@@ -287,6 +287,6 @@
 
   // Start: continue a saved game in progress, or show setup
   const saved = load();
-  st = saved && saved.version === 1 && !saved.over ? saved : null;
+  st = saved && saved.version === 2 && !saved.over ? saved : null;
   render();
 })();

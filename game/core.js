@@ -65,11 +65,12 @@ const SMG = (() => {
   // config.players: [{ name, colour, bot, start: territoryId, business: businessTypeId }]
   G.newGame = config => {
     const st = {
-      version: 1, seed: config.seed ?? Math.floor(Math.random() * 1e9),
+      version: 2, seed: config.seed ?? Math.floor(Math.random() * 1e9),
       round: 1, rounds: config.rounds ?? S.rounds, phase: "morning", turn: 0, over: false,
       players: [], businesses: [], nextBizId: 1,
       priceLevel: 1, prices: {}, lastPrices: {}, history: [],
       effects: [], pending: [], log: [],
+      stats: { runs: 0, idle: 0, overflow: 0 },
     };
     config.players.forEach((c, i) => {
       st.players.push({ id: i + 1, name: c.name, colour: c.colour, bot: !!c.bot,
@@ -79,12 +80,13 @@ const SMG = (() => {
     // Free starting business, where each player starts
     config.players.forEach((c, i) => {
       const b = G.BIZ_BY[c.business];
-      if (b && G.canBuildAt(b, c.start)) st.businesses.push({ id: st.nextBizId++, owner: i + 1, type: b.id, territory: c.start, built: 0, cost: G.buildCost(st, b, c.start) });
+      if (b && G.canBuildAt(b, c.start)) st.businesses.push({ id: st.nextBizId++, owner: i + 1, type: b.id, territory: c.start, built: 0, cost: G.buildCost(st, b, c.start, i + 1) });
     });
     G.onSetup.forEach(f => f(st));
     G.reprice(st);
     st.lastPrices = { ...st.prices };
     st.history.push({ round: 0, prices: { ...st.prices } });
+    st.startWorth = Object.fromEntries(st.players.map(p => [p.id, G.netWorth(st, p)]));
     G.log(st, `Game started with ${st.players.length} players. Round 1, morning.`);
     G.runBots(st);
     return st;

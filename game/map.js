@@ -16,11 +16,13 @@
     if (b.where === "oil") return G.coastal(tid) || !!info.res.crude_oil;
     return true;
   };
-  G.buildCost = (st, b, tid) => {
+  // pid: the player building (their own businesses add S.ownedCostStep each)
+  G.buildCost = (st, b, tid, pid) => {
     const n = st.businesses.filter(x => x.territory === tid).length;
-    return Math.round(b.base * (TERRITORY_INFO[tid].cost ?? 1) * (1 + BUILD.crowding * n));
+    const owned = pid ? st.businesses.filter(x => x.owner === pid).length : 0;
+    return Math.round(b.base * S.buildCostScale * (TERRITORY_INFO[tid].cost ?? 1) * (1 + BUILD.crowding * n) * (1 + S.ownedCostStep * owned));
   };
-  G.buildable = (st, tid) => G.BIZ.filter(b => G.canBuildAt(b, tid)).map(b => ({ b, cost: G.buildCost(st, b, tid) }));
+  G.buildable = (st, tid, pid) => G.BIZ.filter(b => G.canBuildAt(b, tid)).map(b => ({ b, cost: G.buildCost(st, b, tid, pid) }));
 
   const afternoon = (st, p) => {
     G.need(st.phase === "afternoon", "You can only move or build in the afternoon.");
@@ -39,7 +41,7 @@
     const b = G.BIZ_BY[type];
     G.need(b, "Unknown business.");
     G.need(G.canBuildAt(b, p.pos), `A ${b.name.toLowerCase()} can't be built in ${G.TERR[p.pos].name}.`);
-    const cost = G.buildCost(st, b, p.pos);
+    const cost = G.buildCost(st, b, p.pos, p.id);
     G.need(p.cash >= cost, `It costs ${cost}; you have ${G.money(p.cash)}.`);
     p.cash -= cost; p.acted = true;
     st.businesses.push({ id: st.nextBizId++, owner: p.id, type: b.id, territory: p.pos, built: st.round, cost });

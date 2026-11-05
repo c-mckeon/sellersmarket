@@ -8,6 +8,7 @@ SMG.steps.midday = [
 
 SMG.steps.overnight = [
   SMG.resolveCards,   // cards played this afternoon are revealed and take effect
+  SMG.payWages,       // businesses' running costs
   SMG.inflate,        // prices creep up
   SMG.repriceStep,    // prices for tomorrow morning
   SMG.expireEffects,  // card effects that have run their course end
