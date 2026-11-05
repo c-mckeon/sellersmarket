@@ -99,6 +99,24 @@
         </ol>
       </div>
     </div>
+
+    <h2 class="listhead">The board <span class="sketch">Sketch</span></h2>
+    <div class="boardwrap">
+      <div id="board"></div>
+      <div class="boardnotes">
+        <p>A 5 × 5 town. The <b>market and central bank</b> sit in the middle; around them are eight districts, one for each sector, with three plots each.</p>
+        <ul>
+          <li>Businesses are built on plots in their sector's district: flour mills on farmland, chip fabs in the tech park.</li>
+          <li>Players move their pawn around the town in the afternoon.</li>
+          <li class="tbc">Being in a district might give cheaper building there, or let you play cards on its businesses <em>not decided</em></li>
+          <li class="tbc">Moving might cost money or take a turn <em>not decided</em></li>
+        </ul>
+      </div>
+    </div>
+
+    <h2 class="listhead">Player dashboard <span class="sketch">Sketch with example data</span></h2>
+    <p class="muted">What a player sees during the game: their money, their stockpile, what their businesses need today, and live market and broker prices. No leverage for now.</p>
+    <div class="hud" id="hud"></div>
   </section>
 
   <section id="view-market" class="view">
@@ -424,6 +442,7 @@
 <script src="js/broker.js?v=__V__"></script>
 <script src="js/cards.js?v=__V__"></script>
 <script src="js/brokerview.js?v=__V__"></script>
+<script src="js/hud.js?v=__V__"></script>
 <script src="js/cardsview.js?v=__V__"></script>
 </body>
 </html>
