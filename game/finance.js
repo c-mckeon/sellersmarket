@@ -37,6 +37,17 @@
   G.futureValue = (st, f) => (f.side === "long" ? 1 : -1) * (G.futuresPrice(st, f.cid, Math.max(0, f.settle - st.round)) - f.price) * f.qty + f.deposit;
   G.bizValue = (st, b) => b.cost * S.businessValue * (b.valueMul || 1);
 
+  // Everything a player owns and owes, valued at today's prices
+  G.balanceSheet = (st, p) => {
+    const stock = Object.entries(p.stock).reduce((s, [c, q]) => s + q * st.prices[c], 0);
+    const businesses = G.myBusinesses(st, p.id).reduce((s, b) => s + G.bizValue(st, b), 0);
+    const bonds = p.bonds.reduce((s, b) => s + b.count * G.bondValue(st, b), 0);
+    const etfs = Object.entries(p.etf).reduce((s, [k, u]) => s + u * G.etfPrice(st, k), 0);
+    const futures = p.futures.reduce((s, f) => s + G.futureValue(st, f), 0);
+    const worth = p.cash + stock + businesses + bonds + etfs + futures - p.loan;
+    return { cash: p.cash, stock, businesses, bonds, etfs, futures, loan: p.loan, worth };
+  };
+
   // What the bank lends against: stockpile, businesses, bonds and ETFs
   G.collateral = (st, p) => Math.max(0, Object.entries(p.stock).reduce((s, [c, q]) => s + q * Math.max(0, st.prices[c]), 0))
     + G.myBusinesses(st, p.id).reduce((s, b) => s + G.bizValue(st, b), 0)
@@ -45,20 +56,20 @@
   G.borrowLimit = (st, p) => G.collateral(st, p) * G.borrowLimitShare(st);
 
   // ---------- Morning actions ----------
-  const morning = st => G.need(st.phase === "morning", "The broker only deals in the morning.");
+  const morning = st => G.need(st.phase === "morning" || st.phase === "afternoon", "The broker is closed right now.");
   const amt = x => { x = Math.round(+x * 100) / 100; G.need(x > 0, "Enter an amount."); return x; };
 
   G.actions.borrow = (st, p, { amount }) => {
     morning(st); amount = amt(amount);
     const room = G.borrowLimit(st, p) - p.loan;
     G.need(amount <= room + 1e-6, `You can borrow up to ${G.money(Math.max(0, room))} more.`);
-    p.loan += amount; p.cash += amount;
+    p.loan += amount; p.cash += amount; G.book(st, p, "Loan taken", amount);
     return `borrowed ${G.money(amount)} at ${(G.loanRate(st, p) * 100).toFixed(2)}% a round`;
   };
   G.actions.repay = (st, p, { amount }) => {
     morning(st); amount = Math.min(amt(amount), p.loan);
     G.need(p.loan > 0, "You have no loan."); G.need(p.cash >= amount, "Not enough cash.");
-    p.loan -= amount; p.cash -= amount;
+    p.loan -= amount; p.cash -= amount; G.book(st, p, "Loan repaid", -amount);
     return `repaid ${G.money(amount)} of their loan`;
   };
   G.actions.buyBond = (st, p, { length, count = 1 }) => {
@@ -66,7 +77,7 @@
     G.need(BROKER.bonds.lengths.includes(+length), "Bonds last 5, 10 or 20 rounds."); G.need(count > 0, "Buy at least one.");
     const cost = BROKER.bonds.face * count;
     G.need(p.cash >= cost, `${count} bond${count > 1 ? "s" : ""} cost ${cost}.`);
-    p.cash -= cost;
+    p.cash -= cost; G.book(st, p, "Bonds bought", -cost);
     const rate = G.bondRateNow(st);
     p.bonds.push({ id: st.nextFinId++, count, length: +length, left: +length, rate });
     return `bought ${count} ${length}-round bond${count > 1 ? "s" : ""} paying ${(rate * 100).toFixed(2)}%`;
@@ -75,7 +86,7 @@
     morning(st);
     const i = p.bonds.findIndex(b => b.id === +id); G.need(i >= 0, "No such bond.");
     const b = p.bonds[i], v = b.count * G.bondValue(st, b);
-    p.cash += v; p.bonds.splice(i, 1);
+    p.cash += v; p.bonds.splice(i, 1); G.book(st, p, "Bonds sold", v);
     return `sold ${b.count} bond${b.count > 1 ? "s" : ""} for ${G.money(v)}`;
   };
   G.actions.openFuture = (st, p, { cid, side, qty, rounds }) => {
@@ -85,7 +96,7 @@
     const price = G.futuresPrice(st, cid, rounds);
     const deposit = price * qty * FU.deposit * (fx(st).futMargin || 1);
     G.need(p.cash >= deposit, `The deposit is ${G.money(deposit)}.`);
-    p.cash -= deposit;
+    p.cash -= deposit; G.book(st, p, "Futures", -deposit);
     p.futures.push({ id: st.nextFinId++, cid, side, qty, price, settle: st.round + rounds, deposit });
     return `${side === "long" ? "agreed to buy" : "agreed to sell"} ${qty} ${G.COM[cid].name} at ${G.money(price)} in ${rounds} round${rounds > 1 ? "s" : ""}`;
   };
@@ -93,26 +104,26 @@
     morning(st);
     const i = p.futures.findIndex(f => f.id === +id); G.need(i >= 0, "No such contract.");
     const v = G.futureValue(st, p.futures[i]);
-    settleCash(st, p, v); p.futures.splice(i, 1);
+    settleCash(st, p, v, "Futures"); p.futures.splice(i, 1);
     return `closed a futures contract early: ${v >= 0 ? "got back" : "paid"} ${G.money(Math.abs(v))}`;
   };
   G.actions.buyEtf = (st, p, { sector, units }) => {
     morning(st); units = Math.floor(units); G.need(SECTORS[sector] && units > 0, "Pick a fund and a number of units.");
     const cost = G.etfPrice(st, sector) * units * (1 + EF.fee);
     G.need(p.cash >= cost, `That costs ${G.money(cost)}.`);
-    p.cash -= cost; p.etf[sector] = (p.etf[sector] || 0) + units;
+    p.cash -= cost; p.etf[sector] = (p.etf[sector] || 0) + units; G.book(st, p, "ETFs bought", -cost);
     return `bought ${units} ${EF.tickers[sector]} for ${G.money(cost)}`;
   };
   G.actions.sellEtf = (st, p, { sector, units }) => {
     morning(st); units = Math.floor(units); G.need((p.etf[sector] || 0) >= units && units > 0, "You don't hold that many.");
     const v = G.etfPrice(st, sector) * units;
-    p.cash += v; p.etf[sector] -= units; if (!p.etf[sector]) delete p.etf[sector];
+    p.cash += v; p.etf[sector] -= units; if (!p.etf[sector]) delete p.etf[sector]; G.book(st, p, "ETFs sold", v);
     return `sold ${units} ${EF.tickers[sector]} for ${G.money(v)}`;
   };
 
   // Money in; money out, and anything you can't pay is added to your loan
-  function settleCash(st, p, v) {
-    p.cash += v;
+  function settleCash(st, p, v, cat = "Other") {
+    p.cash += v; G.book(st, p, cat, v);
     if (p.cash < 0) { p.loan += -p.cash; G.log(st, `couldn't cover ${G.money(-p.cash)}; it was added to their loan`, p.id); p.cash = 0; }
   }
   G.settleCash = settleCash;
@@ -154,22 +165,22 @@
     if (p.loan <= 0.005) { p.loan = 0; return; }
     const rate = G.loanRate(st, p), interest = p.loan * rate, principal = Math.min(p.loan, p.loan * LN.repayShare);
     const due = interest + principal;
-    if (p.cash >= due) { p.cash -= due; p.loan -= principal; G.log(st, `paid ${G.money(due)} on their loan (${G.money(interest)} interest)`, p.id); }
-    else { const short = due - p.cash; p.loan += short - principal; p.cash = 0; G.log(st, `couldn't make a loan payment; ${G.money(short)} was added to the loan`, p.id); }
+    if (p.cash >= due) { p.cash -= due; p.loan -= principal; G.book(st, p, "Loan interest", -interest); G.book(st, p, "Loan repaid", -principal); G.log(st, `paid ${G.money(due)} on their loan (${G.money(interest)} interest)`, p.id); }
+    else { const short = due - p.cash; G.book(st, p, "Loan interest", -p.cash); p.loan += short - principal; p.cash = 0; G.log(st, `couldn't make a loan payment; ${G.money(short)} was added to the loan`, p.id); }
   });
 
   G.payBonds = st => st.players.forEach(p => {
-    p.bonds.forEach(b => { p.cash += b.count * BROKER.bonds.face * b.rate; b.left--; });
-    p.bonds.filter(b => b.left <= 0).forEach(b => { p.cash += b.count * BROKER.bonds.face; G.log(st, `${b.count} bond${b.count > 1 ? "s" : ""} ended: ${b.count * BROKER.bonds.face} back`, p.id); });
+    p.bonds.forEach(b => { p.cash += b.count * BROKER.bonds.face * b.rate; G.book(st, p, "Bond interest", b.count * BROKER.bonds.face * b.rate); b.left--; });
+    p.bonds.filter(b => b.left <= 0).forEach(b => { p.cash += b.count * BROKER.bonds.face; G.book(st, p, "Bonds repaid", b.count * BROKER.bonds.face); G.log(st, `${b.count} bond${b.count > 1 ? "s" : ""} ended: ${b.count * BROKER.bonds.face} back`, p.id); });
     p.bonds = p.bonds.filter(b => b.left > 0);
   });
 
   G.settleFutures = st => st.players.forEach(p => {
     const cancelled = fx(st).futuresCancel || [];
     p.futures.filter(f => f.settle <= st.round + 1 || cancelled.includes(f.cid)).forEach(f => {
-      if (cancelled.includes(f.cid)) { p.cash += f.deposit; G.log(st, `${G.COM[f.cid].name} futures contract torn up; ${G.money(f.deposit)} deposit returned`, p.id); return; }
+      if (cancelled.includes(f.cid)) { p.cash += f.deposit; G.book(st, p, "Futures", f.deposit); G.log(st, `${G.COM[f.cid].name} futures contract torn up; ${G.money(f.deposit)} deposit returned`, p.id); return; }
       const pay = (f.side === "long" ? 1 : -1) * (st.prices[f.cid] - f.price) * f.qty;
-      settleCash(st, p, f.deposit + pay);
+      settleCash(st, p, f.deposit + pay, "Futures");
       G.log(st, `${G.COM[f.cid].name} futures settled: ${pay >= 0 ? "made" : "lost"} ${G.money(Math.abs(pay))}`, p.id);
     });
     p.futures = p.futures.filter(f => !(f.settle <= st.round + 1 || cancelled.includes(f.cid)));

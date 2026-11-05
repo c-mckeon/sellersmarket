@@ -44,7 +44,7 @@
     G.need(G.canBuildAt(b, p.pos), `A ${b.name.toLowerCase()} can't be built in ${G.TERR[p.pos].name}.`);
     const cost = G.buildCost(st, b, p.pos, p.id);
     G.need(p.cash >= cost, `It costs ${cost}; you have ${G.money(p.cash)}.`);
-    p.cash -= cost; p.acted = true;
+    p.cash -= cost; p.acted = true; G.book(st, p, "Building", -cost);
     st.businesses.push({ id: st.nextBizId++, owner: p.id, type: b.id, territory: p.pos, built: st.round, cost });
     return `built a ${b.name.toLowerCase()} in ${G.TERR[p.pos].name} for ${cost}`;
   };

@@ -31,7 +31,7 @@
       <div class="gsetup">
         <h1>New game</h1>
         <p class="muted">Pick who's playing. Each player starts with ${S.startCash} cash, ${S.startSpace} crates of stockpile space, ${S.cardsPerRound} cards and one free business where they start. Highest net worth after the last round wins.</p>
-        ${saved && saved.version === 4 && !saved.over ? `<div class="gresume">A game in round ${saved.round} is saved in this browser. <button class="gbtn" id="gResume">Continue it</button></div>` : ""}
+        ${saved && saved.version === 5 && !saved.over ? `<div class="gresume">A game in round ${saved.round} is saved in this browser. <button class="gbtn" id="gResume">Continue it</button></div>` : ""}
         <table class="gplayers"><thead><tr><th></th><th>Name</th><th>Who</th><th>Starts in</th><th>Free business</th><th></th></tr></thead><tbody>
         ${setup.players.map((p, i) => {
           const opts = G.BIZ.filter(b => G.canBuildAt(b, p.start));
@@ -148,7 +148,8 @@
             <div class="gorders"><b>Your orders</b> <span class="muted small">Nothing happens until everyone has submitted; then all orders go through at once.</span>
               <div>${ui.orders.map((o, i) => `<span class="gorder">${orderText(o)}<button data-undo="${i}" title="Remove">✕</button></span>`).join("") || `<span class="muted">None yet.</span>`}</div>
             </div>
-            ${st.phase === "morning" ? `<div class="gseg gtabs"><button data-tab="market" class="${ui.tab !== "broker" ? "on" : ""}">Market</button><button data-tab="broker" class="${ui.tab === "broker" ? "on" : ""}">Broker</button></div>` + (ui.tab === "broker" ? brokerPanel(p) : marketPanel(p)) : afternoonPanel(p)}
+            <div class="gtabs2"><button data-tab="main" class="${ui.tab !== "broker" ? "on" : ""}">${st.phase === "morning" ? "Market" : "Move, build &amp; cards"}</button><button data-tab="broker" class="${ui.tab === "broker" ? "on" : ""}">Broker <span>loans · bonds · futures · ETFs</span></button></div>
+            ${ui.tab === "broker" ? brokerPanel(p) : st.phase === "morning" ? marketPanel(p) : afternoonPanel(p)}
           </div>
         </div>
         <aside class="gdash">${dashboard(p)}</aside>
@@ -180,6 +181,33 @@
     return { delta, lost, used: G.used(G.player(c, p.id)) };
   }
 
+  // Balance sheet now vs last night, and where the cash went last round
+  function moneySection(p) {
+    const now = G.balanceSheet(vw, p), prev = (p.sheets || []).at(-1);
+    const rows = [["Cash", "cash"], ["Stockpile", "stock"], ["Businesses", "businesses"], ["Bonds", "bonds"], ["ETFs", "etfs"], ["Futures", "futures"], ["Loan", "loan", -1]];
+    const line = ([label, k, sign = 1]) => {
+      const v = now[k] * sign, d = prev ? (now[k] - prev[k]) * sign : 0;
+      if (!now[k] && !(prev && prev[k])) return "";
+      return `<tr><td>${label}</td><td class="n">${v < 0 ? "−" : ""}${m(Math.abs(v))}</td><td class="n ${d > 0.5 ? "up" : d < -0.5 ? "dn" : ""}">${prev && Math.abs(d) > 0.5 ? (d > 0 ? "+" : "−") + m(Math.abs(d)) : ""}</td></tr>`;
+    };
+    const lastR = st.round - 1, book = (p.book || {})[lastR] || {}, today = (p.book || {})[st.round] || {};
+    const flow = b => Object.entries(b).filter(([, v]) => Math.abs(v) > 0.005).sort((x, y) => y[1] - x[1]);
+    const net = b => Object.values(b).reduce((x, y) => x + y, 0);
+    return `<div class="dsec dmoney">
+      <h4>Money <em>${prev ? `since last night ${now.worth >= prev.worth ? "+" : "−"}${m(Math.abs(now.worth - prev.worth))}` : ""}</em></h4>
+      <table class="dbal"><tbody>${rows.map(line).join("")}<tr class="tot"><td>Net worth</td><td class="n">${m(now.worth)}</td><td class="n ${prev ? (now.worth >= prev.worth ? "up" : "dn") : ""}">${prev ? (now.worth >= prev.worth ? "+" : "−") + m(Math.abs(now.worth - prev.worth)) : ""}</td></tr></tbody></table>
+      ${lastR >= 1 && flow(book).length ? `<details class="dflow"><summary>Round ${lastR} cash: ${net(book) >= 0 ? "+" : "−"}${m(Math.abs(net(book)))}</summary>
+        <table class="dbal"><tbody>${flow(book).map(([k, v]) => `<tr><td>${k}</td><td class="n ${v >= 0 ? "up" : "dn"}">${v >= 0 ? "+" : "−"}${m(Math.abs(v))}</td></tr>`).join("")}</tbody></table></details>` : ""}
+      ${flow(today).length ? `<details class="dflow"><summary>This round so far: ${net(today) >= 0 ? "+" : "−"}${m(Math.abs(net(today)))}</summary>
+        <table class="dbal"><tbody>${flow(today).map(([k, v]) => `<tr><td>${k}</td><td class="n ${v >= 0 ? "up" : "dn"}">${v >= 0 ? "+" : "−"}${m(Math.abs(v))}</td></tr>`).join("")}</tbody></table></details>` : ""}
+      ${p.loan || p.bonds.length || p.futures.length ? `<p class="dhint">Tonight: ${[
+        p.loan ? `loan payment ${m(p.loan * G.loanRate(vw, p) + p.loan * BROKER.loans.repayShare)}` : "",
+        p.bonds.length ? `bond interest +${m(p.bonds.reduce((x, b) => x + b.count * BROKER.bonds.face * b.rate, 0))}` : "",
+        p.futures.filter(f => f.settle <= st.round + 1).length ? `${p.futures.filter(f => f.settle <= st.round + 1).length} futures contract(s) settle` : "",
+      ].filter(Boolean).join(" · ")}</p>` : ""}
+    </div>`;
+  }
+
   function dashboard(p) {
     const used = G.used(p), worth = G.netWorth(vw, p);
     const biz = G.myBusinesses(vw, p.id);
@@ -197,12 +225,7 @@
         <div><span>Cash</span><b>${m(p.cash)}</b></div>
         <div><span>Net worth</span><b>${m(worth)}</b></div>
       </div>
-      ${p.loan || p.bonds.length || p.futures.length || Object.keys(p.etf).length ? `<div class="dfin">
-        ${p.loan ? `<span>Loan <b class="neg">−${m(p.loan)}</b></span>` : ""}
-        ${p.bonds.length ? `<span>Bonds <b>${m(bondV)}</b></span>` : ""}
-        ${p.futures.length ? `<span>Futures <b>${m(futV)}</b></span>` : ""}
-        ${Object.keys(p.etf).length ? `<span>ETFs <b>${m(etfV)}</b></span>` : ""}
-      </div>` : ""}
+      ${moneySection(p)}
       <div class="dsec">
         <h4>Stockpile <em>${used}/${p.space}</em></h4>
         <div class="dspace"><span style="width:${Math.min(100, used / p.space * 100)}%"></span></div>
@@ -442,6 +465,6 @@
 
   // Start: continue a saved game in progress, or show setup
   const saved = load();
-  st = saved && saved.version === 4 && !saved.over ? saved : null;
+  st = saved && saved.version === 5 && !saved.over ? saved : null;
   render();
 })();

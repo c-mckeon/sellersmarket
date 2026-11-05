@@ -10,8 +10,12 @@
 //         = (held + background × s₀) ÷ (everything held + background)
 //     background = all players' stockpile space added together × settings.pricing.background
 //     With empty stockpiles s = s₀, so every price starts at base.
-//   Demand = 1 + weight × unmet need ÷ (need + held + background × s₀)
-//     unmet need = what all businesses need for one run, minus what players hold.
+//   Demand = ((need + normal) ÷ (can make + normal)) ^ weight, held between ÷4 and ×4
+//     need     = what all businesses use in a round
+//     can make = what all businesses can produce in a round
+//     normal   = outside demand from the rest of the world: about one ordinary business's output per
+//                player per round (settings.pricing.normalDemand), so one mine doesn't crash a price
+//     So flooding the market with one good drives its price down, and shortages push it up.
 //   Card effects = card demand ÷ card supply, held between ×0.25 and ×4.
 //
 // Prices are set at midday and overnight, and stay fixed while players trade,
@@ -40,6 +44,15 @@
     return need;
   };
 
+  // How much one ordinary business makes of a good in a round (its main producer). Outside demand
+  // is measured in these units: normalDemand × players × this.
+  const stdMemo = {};
+  G.standardOutput = id => {
+    if (id in stdMemo) return stdMemo[id];
+    const b = G.BIZ.find(x => Object.keys(x.outputs)[0] === id);
+    return (stdMemo[id] = b ? b.outputs[id] * (b.kind === "extract" ? S.extractOutput : 1) : 1);
+  };
+
   // What all businesses could make in one run (ignoring whether they have their inputs)
   G.capacity = st => {
     const cap = {};
@@ -61,15 +74,17 @@
     COMMODITIES.forEach(c => {
       const id = c.id, s0 = PR[id].s0 / 100, base = G.basePrice(id), m = mods[id] || {};
       const h = held[id] || 0;
-      const e = (PR[id].e + (m.eAdd || 0)) * (m.eMul || 1);
+      const e = Math.min(3, (PR[id].e + (m.eAdd || 0)) * (m.eMul || 1)); // stacked panic cards can't exceed 3
       let s = (h + bg * s0) / (total + bg);
       s = Math.min(Math.max(s, s0 / PS.shareRange), s0 * PS.shareRange);
       let price;
       if (base < 0) {
-        price = base * Math.pow(s / s0, e) * st.priceLevel * (m.wasteFee || 1); // a disposal fee grows as waste piles up
+        // A disposal fee grows as waste piles up (card effects on price swings don't apply; at most 5× base, ×4 for crackdowns)
+        price = base * Math.pow(s / s0, PR[id].e) * st.priceLevel * Math.min(4, m.wasteFee || 1);
       } else {
-        const n = need[id] || 0, unmet = Math.max(0, n - h);
-        const demand = 1 + PS.demandWeight * unmet / (n + h + bg * s0);
+        // Supply and demand: what businesses need each round vs what they can make, plus outside demand
+        const n = need[id] || 0, makes = cap[id] || 0, normal = PS.normalDemand * st.players.length * G.standardOutput(id);
+        const demand = Math.min(PS.demandRange, Math.max(1 / PS.demandRange, Math.pow((n + normal) / (makes + normal), PS.demandWeight)));
         // Card effects: demand ×, and supply cuts push the price up (×0.5 supply = ×2 price). Held to ×0.25–×4.
         const cards = Math.min(4, Math.max(0.25, (m.demand || 1) / (m.supply || 1)));
         price = base * Math.pow(s0 / s, e) * demand * cards * st.priceLevel;
@@ -92,7 +107,7 @@
     G.need(G.free(p) >= qty, `Not enough stockpile space (${G.free(p)} free).`);
     const cost = price * (1 + PS.spread) * qty * (1 + tax(st));
     G.need(p.cash >= cost, `Not enough cash: ${qty} ${G.COM[id].name} costs ${G.money(cost)}.`);
-    p.cash -= cost; G.add(p, id, qty);
+    p.cash -= cost; G.add(p, id, qty); G.book(st, p, "Market purchases", -cost);
     return `bought ${qty} ${G.COM[id].name} for ${G.money(cost)}`;
   };
 
@@ -102,7 +117,7 @@
     G.need((p.stock[id] || 0) >= qty, `You only have ${p.stock[id] || 0} ${G.COM[id].name}.`);
     const price = st.prices[id] * (st.prices[id] > 0 ? (1 - PS.spread) * (1 - tax(st)) : 1);
     if (price < 0) G.need(p.cash >= -price * qty, `Getting rid of it costs ${G.money(-price * qty)} and you don't have enough cash.`);
-    p.cash += price * qty; G.add(p, id, -qty);
+    p.cash += price * qty; G.add(p, id, -qty); G.book(st, p, price >= 0 ? "Market sales" : "Waste disposal", price * qty);
     return price >= 0 ? `sold ${qty} ${G.COM[id].name} for ${G.money(price * qty)}` : `paid ${G.money(-price * qty)} to dispose of ${qty} ${G.COM[id].name}`;
   };
 
@@ -111,7 +126,7 @@
     morningOnly(st);
     const cost = G.spaceUpgradeCost(p);
     G.need(p.cash >= cost, `More space costs ${cost}.`);
-    p.cash -= cost; p.space += S.spaceUpgrade.crates; p.upgrades++;
+    p.cash -= cost; p.space += S.spaceUpgrade.crates; p.upgrades++; G.book(st, p, "Stockpile space", -cost);
     return `bought ${S.spaceUpgrade.crates} more crates of space for ${cost}`;
   };
 

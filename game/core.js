@@ -60,12 +60,19 @@ const SMG = (() => {
   G.log = (st, msg, pid = null) => { st.log.push({ round: st.round, phase: st.phase, pid, msg }); if (st.log.length > 400) st.log.shift(); };
   G.money = n => (Math.round(n * 100) / 100).toLocaleString(undefined, { maximumFractionDigits: 2 });
   G.myBusinesses = (st, pid) => st.businesses.filter(b => b.owner === pid);
+  // Money ledger: every cash movement, by round and category (positive = money in)
+  G.book = (st, p, cat, amount) => {
+    if (!amount) return;
+    const r = (p.book ||= {})[st.round] ||= {};
+    r[cat] = (r[cat] || 0) + amount;
+    Object.keys(p.book).forEach(k => { if (+k < st.round - 5) delete p.book[k]; });
+  };
 
   // ---------- A new game ----------
   // config.players: [{ name, colour, bot, start: territoryId, business: businessTypeId }]
   G.newGame = config => {
     const st = {
-      version: 4, seed: config.seed ?? Math.floor(Math.random() * 1e9),
+      version: 5, seed: config.seed ?? Math.floor(Math.random() * 1e9),
       round: 1, rounds: config.rounds ?? S.rounds, phase: "morning", over: false,
       orders: {},
       players: [], businesses: [], nextBizId: 1,

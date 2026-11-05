@@ -26,9 +26,13 @@ const GAME_SETTINGS = {
                              // Keeps prices at base when stockpiles are empty, and stops one crate
                              // swinging prices wildly.
     shareRange: 5,           // shares count as no more than 5× above or below balance
-    demandWeight: 0.3,       // how hard unmet needs push prices up (0 = ignore needs)
-    capacityWeight: 2,       // what players' businesses can make in a round counts as this many rounds of stock.
-                             // So building lots of one thing pushes its price down. 0 = only count what's held.
+    demandWeight: 1,         // how hard supply and demand move prices (0 = ignore them):
+                             //   Demand = ((need + normal) ÷ (can make + normal)) ^ demandWeight
+    normalDemand: 1.5,       // outside demand for each good: this many ordinary businesses' output, per player,
+                             // per round. Bigger = gentler on producers.
+    demandRange: 4,          // the supply-and-demand factor stays between ÷4 and ×4
+    capacityWeight: 0,       // (older approach) count production capacity as stock too. 0 = off; supply and
+                             // demand now handles it.
     floors: { gold: 0.8 },   // these never sell below this many times base (gold is a store of value)
     spread: 0.05,            // the market buys from you this much under the price, and sells this much over it
                              // (0.05 = 5%). Makes it pay to supply your own inputs.     // these never sell below this many times base (gold is a store of value)

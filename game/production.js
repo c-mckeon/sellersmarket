@@ -25,7 +25,7 @@
       const missing = Object.entries(b.inputs).filter(([c, q]) => (p.stock[c] || 0) < q);
       if (missing.length) { st.stats.idle++; say(`${b.name} idle: needs ${missing.map(([c, q]) => `${q - (p.stock[c] || 0)} more ${G.COM[c].name}`).join(", ")}`); return; }
       Object.entries(b.inputs).forEach(([c, q]) => { G.add(p, c, -q); biz.spent = (biz.spent || 0) + q * st.prices[c]; });
-      if (coalTax && b.inputs.coal) { const t = b.inputs.coal * coalTax * st.priceLevel; G.settleCash(st, p, -t); say(`paid ${G.money(t)} carbon tax`); }
+      if (coalTax && b.inputs.coal) { const t = b.inputs.coal * coalTax * st.priceLevel; G.settleCash(st, p, -t, "Taxes"); say(`paid ${G.money(t)} carbon tax`); }
       const made = [];
       Object.entries(b.outputs).forEach(([c, q]) => {
         const n = Math.floor(q * mult * (b.kind === "extract" ? G.richness(b, biz.territory) * S.extractOutput : 1) + 1e-9);
@@ -57,7 +57,7 @@
       const n = Math.min(over, p.stock[c]);
       G.add(p, c, -n); over -= n; st.stats.overflow += n; lost.push([c, n]);
       const price = st.prices[c] * (st.prices[c] > 0 ? S.overflowSale : 1);
-      if (price) G.settleCash(st, p, price * n);
+      if (price) G.settleCash(st, p, price * n, price > 0 ? "Overflow sold" : "Waste disposal");
     }
     return lost;
   };
@@ -80,7 +80,7 @@
       let paid = 0, unpaid = 0;
       G.myBusinesses(st, p.id).forEach(biz => {
         const w = G.wage(st, biz);
-        if (p.cash >= w) { p.cash -= w; paid += w; biz.wages = (biz.wages || 0) + w; } else { biz.unpaid = true; unpaid++; }
+        if (p.cash >= w) { p.cash -= w; paid += w; biz.wages = (biz.wages || 0) + w; G.book(st, p, "Wages", -w); } else { biz.unpaid = true; unpaid++; }
       });
       if (paid) G.log(st, `paid ${G.money(paid)} in wages${unpaid ? `; couldn't pay ${unpaid} business${unpaid > 1 ? "es" : ""}` : ""}`, p.id);
     });

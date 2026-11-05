@@ -107,21 +107,21 @@
             break;
           case "loan": { // repay a share of the loan now; anything you can't pay is raised by selling stock
             const p = tgtPlayer; if (!p || p.loan <= 0) break;
-            let due = p.loan * v; const pay = Math.min(due, p.cash); p.cash -= pay; p.loan -= pay; due -= pay;
+            let due = p.loan * v; const pay = Math.min(due, p.cash); p.cash -= pay; p.loan -= pay; due -= pay; G.book(st, p, "Loan repaid", -pay);
             if (due > 0) G.raiseCash(st, p, due);
             break;
           }
           case "futures": // contracts on the chosen commodity are torn up, deposits returned
-            st.players.forEach(p => { p.futures.filter(f => f.cid === pl.commodity).forEach(f => p.cash += f.deposit); p.futures = p.futures.filter(f => f.cid !== pl.commodity); });
+            st.players.forEach(p => { p.futures.filter(f => f.cid === pl.commodity).forEach(f => { p.cash += f.deposit; G.book(st, p, "Futures", f.deposit); }); p.futures = p.futures.filter(f => f.cid !== pl.commodity); });
             break;
           case "futMargin":
-            if (target === "shorts on it") st.players.forEach(p => p.futures.filter(f => f.cid === pl.commodity && f.side === "short").forEach(f => { G.settleCash(st, p, -f.deposit); f.deposit *= 2; }));
+            if (target === "shorts on it") st.players.forEach(p => p.futures.filter(f => f.cid === pl.commodity && f.side === "short").forEach(f => { G.settleCash(st, p, -f.deposit, "Futures"); f.deposit *= 2; }));
             else effect([]);
             break;
           case "tax":
             if (target === "big winners") st.players.forEach(p => {
               const before = st.lastWorth?.[p.id], now = G.netWorth(st, p);
-              if (before > 0 && now > before * 1.2) { const tax = (now - before * 1.2) * v; G.settleCash(st, p, -tax); G.log(st, `paid ${G.money(tax)} in windfall tax`, p.id); }
+              if (before > 0 && now > before * 1.2) { const tax = (now - before * 1.2) * v; G.settleCash(st, p, -tax, "Taxes"); G.log(st, `paid ${G.money(tax)} in windfall tax`, p.id); }
             });
             else effect([]);
             break;
@@ -186,10 +186,18 @@
     const p = G.player(st, biz.owner), cid = G.BIZ_BY[biz.type].makes, n = Math.min(e.v, p.stock[cid] || 0);
     if (!n) return;
     const price = G.basePrice(cid) * 1.2 * st.priceLevel;
-    G.add(p, cid, -n); p.cash += n * price;
+    G.add(p, cid, -n); p.cash += n * price; G.book(st, p, "Government contract", n * price);
     G.log(st, `sold ${n} ${G.COM[cid].name} to the government for ${G.money(n * price)}`, p.id);
   }));
 
   // Remember everyone's net worth each night (for the windfall tax)
-  G.rememberWorth = st => { st.lastWorth = Object.fromEntries(st.players.map(p => [p.id, G.netWorth(st, p)])); };
+  // Each night: remember everyone's net worth (windfall tax) and a balance sheet (the dashboard)
+  G.rememberWorth = st => {
+    st.lastWorth = Object.fromEntries(st.players.map(p => [p.id, G.netWorth(st, p)]));
+    st.players.forEach(p => {
+      const sheet = G.balanceSheet(st, p);
+      (p.sheets ||= []).push({ round: st.round, ...sheet });
+      if (p.sheets.length > 6) p.sheets.shift();
+    });
+  };
 })();

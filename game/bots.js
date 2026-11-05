@@ -5,6 +5,7 @@
 //   diversify   prefers sectors it doesn't own yet
 //   specialist  sticks to the sectors it already owns
 //   integrate   builds supply chains: businesses that use what it makes, or make what it needs
+//   mono        everything in one basket: only builds more of what it already has
 
 (() => {
   const G = SMG, S = GAME_SETTINGS;
@@ -34,6 +35,11 @@
     const sec = G.sectorOfBiz(o.b);
     if (p.strategy === "diversify") return roi * (mine.has(sec) ? 0.6 : 1.5);
     if (p.strategy === "specialist") return mine.size && !mine.has(sec) ? roi * 0.3 : roi * 1.3;
+    if (p.strategy === "mono") {
+      // Everything in one basket: only more of what it already makes
+      const types = new Set(G.myBusinesses(st, p.id).map(x => x.type));
+      return !types.size || types.has(o.b.id) ? roi * 3 : roi * 0.1;
+    }
     if (p.strategy === "integrate") {
       // Likes businesses that use what it makes, or make what it needs
       const makes = new Set(), needs = new Set();
