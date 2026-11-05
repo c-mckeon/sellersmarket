@@ -1,5 +1,5 @@
 // ---------- Broker dynamics: calculators ----------
-const CB = BROKER.centralBank, LN = BROKER.loans, LV = BROKER.leverage, FU = BROKER.futures, BD = BROKER.bonds;
+const CB = BROKER.centralBank, LN = BROKER.loans, LV = BROKER.leverage, FU = BROKER.futures, BD = BROKER.bonds, EF = BROKER.etfs;
 
 const P = (x, d = 2) => { let t = (x * 100).toFixed(d); if (t.includes(".")) t = t.replace(/\.?0+$/, ""); return t + "%"; };
 const M = n => {
@@ -8,36 +8,37 @@ const M = n => {
 };
 const clamp = (x, a, b) => Math.min(Math.max(x, a), b);
 
-// The maths, one function each, so the page and the game can share them later.
-function baseRate(inflation) {
-  return clamp(CB.neutral + CB.response * (inflation - CB.target), CB.min, CB.max);
-}
+// ---------- The maths ----------
+const baseRate = inflation => clamp(inflation + CB.above, CB.min, CB.max);
+
 function loanTerms({ holdings, businesses, bonds, loan, base }) {
-  const H = LN.haircut;
-  const value = holdings + businesses + bonds;
-  const limit = holdings * (1 - H.holdings) + businesses * (1 - H.businesses) + bonds * (1 - H.bonds);
-  const ltv = value ? loan / value : 0;
-  const premium = LN.minPremium + LN.ltvPremium * ltv;
-  const rate = base + premium;
-  const interest = loan * rate;
-  const principal = loan * LN.repayShare;
-  return { value, limit, ltv, premium, rate, interest, principal, payment: interest + principal, over: loan - limit };
+  const owned = holdings + businesses + bonds;
+  const limit = owned * LN.borrowShare;
+  const rate = base + LN.extra;
+  const interest = loan * rate, repay = loan * LN.repayShare;
+  return { owned, limit, rate, interest, repay, total: interest + repay, over: loan - limit };
 }
+
 function leveraged({ own, lev, entry, exit, rounds, base }) {
-  const position = own * lev, borrowed = position - own, qty = position / entry;
-  const rate = base + LV.spread;
-  const interest = borrowed * rate * rounds;
-  const valueNow = qty * exit;
-  const equity = valueNow - borrowed - interest;
-  const liq = lev > 1 ? entry * (lev - 1) / (lev * (1 - LV.maintenance)) : 0;
-  return { position, borrowed, qty, rate, interest, valueNow, equity, profit: equity - own, ret: (equity - own) / own, liq, wiped: lev > 1 && exit <= liq };
+  const position = own * lev, borrowed = position - own;
+  const change = exit / entry - 1;
+  const rate = base + LV.extra;
+  const gain = position * change, interest = borrowed * rate * rounds;
+  const liq = entry * (1 - LV.wipeout / lev);
+  const wiped = lev > 1 && exit <= liq;
+  const profit = wiped ? -own * LV.wipeout - interest : gain - interest;
+  return { position, borrowed, change, rate, gain, interest, profit, ret: profit / own, liq, wiped };
 }
-function futuresPrice(spot, rounds, base) { return spot * Math.pow(1 + base + FU.storage, rounds); }
-function bondPrice(coupon, roundsLeft, y) {
-  const F = BD.face;
-  if (roundsLeft <= 0) return F;
-  return y === 0 ? F + coupon * F * roundsLeft
-    : coupon * F * (1 - Math.pow(1 + y, -roundsLeft)) / y + F / Math.pow(1 + y, roundsLeft);
+
+const futuresPrice = (spot, rounds, base) => spot * (1 + base * rounds);
+const bondSellPrice = (rate, baseNow, left) => Math.max(0, BD.face + (rate - baseNow) * BD.face * left);
+
+// ETF value straight from the live prices on the Market dynamics tab.
+const etfMembers = sec => SECTORS[sec].items.filter(id => BY_ID[id].type !== "waste");
+function etfValue(sec) {
+  const ids = etfMembers(sec);
+  const avg = ids.reduce((s, id) => s + priceOf(id) / basePrice(id), 0) / ids.length;
+  return EF.start * avg;
 }
 
 // ---------- Tiny calculator framework ----------
@@ -66,14 +67,15 @@ function calc(rootId, inputs, compute) {
   const run = () => { out.innerHTML = compute(read()); };
   form.addEventListener("input", run);
   run();
+  return run;
 }
 const row = (label, value, cls = "") => `<div class="r ${cls}"><span>${label}</span><b>${value}</b></div>`;
 const work = s => `<div class="work">${s}</div>`;
 const flag = (ok, good, bad) => `<div class="flag ${ok ? "ok" : "bad"}">${ok ? good : bad}</div>`;
 
 // Line chart: series of [x, y] points.
-function lineChart({ series, xlabel, ylabel, xfmt = v => v, yfmt = M, marks = [], zero = false }) {
-  const W = 420, H = 220, L = 52, R = 12, T = 12, B = 38;
+function lineChart({ series, xlabel, xfmt = v => v, yfmt = M, marks = [], zero = false }) {
+  const W = 420, H = 210, L = 52, R = 12, T = 12, B = 38;
   const all = series.flatMap(s => s.pts);
   const x0 = Math.min(...all.map(p => p[0])), x1 = Math.max(...all.map(p => p[0]));
   let y0 = Math.min(...all.map(p => p[1])), y1 = Math.max(...all.map(p => p[1]));
@@ -96,15 +98,10 @@ function lineChart({ series, xlabel, ylabel, xfmt = v => v, yfmt = M, marks = []
 calc("calcBase", [
   { k: "infl", label: "Inflation this round", v: 2, unit: "%", step: 0.5, pct: true },
 ], v => {
-  const raw = CB.neutral + CB.response * (v.infl - CB.target);
   const b = baseRate(v.infl);
-  const pts = [];
-  for (let i = -2; i <= 8; i += 0.1) pts.push([i, baseRate(i / 100) * 100]);
-  return work(`${P(CB.neutral)} + ${CB.response} × (${P(v.infl)} − ${P(CB.target)}) = ${P(raw)}${raw !== b ? ` → held at ${P(b)}` : ""}`)
+  return work(`${P(v.infl)} + ${P(CB.above)} = ${P(v.infl + CB.above)}${Math.abs(b - v.infl - CB.above) > 1e-9 ? ` → held at ${P(b)}` : ""}`)
     + row("Base rate", P(b), "big")
-    + row("Real rate (base − inflation)", P(b - v.infl))
-    + `<p class="cnote">${b - v.infl > 0 ? "Positive real rate: saving beats holding goods, so borrowing to stockpile is discouraged." : "Negative real rate: money loses value faster than it earns interest, so borrowing to buy goods pays."}</p>`
-    + lineChart({ series: [{ pts, cls: "a" }], xlabel: "Inflation per round", xfmt: v => v + "%", yfmt: v => v.toFixed(1) + "%", marks: [{ x: v.infl * 100, y: b * 100, label: `${P(v.infl)} → ${P(b)}` }] });
+    + `<p class="cnote">Because the base rate is always a little above inflation, cash in the bank slowly beats goods sitting in a warehouse. Borrowing to stockpile only pays if you expect prices to rise faster than inflation.</p>`;
 });
 
 // ---------- 2. Government loans ----------
@@ -115,15 +112,14 @@ calc("calcLoan", [
   { k: "loan", label: "Loan you want", v: 3000, step: 100, min: 0 },
   { k: "base", label: "Base rate", v: 2.5, unit: "%", step: 0.25, pct: true },
 ], v => {
-  const t = loanTerms(v), H = LN.haircut;
-  return work(`Limit = ${M(v.holdings)} × ${1 - H.holdings} + ${M(v.businesses)} × ${1 - H.businesses} + ${M(v.bonds)} × ${1 - H.bonds} = <b>${M(t.limit)}</b>`)
-    + row("Credit limit", M(t.limit), "big")
-    + flag(t.over <= 0, `Approved. ${M(-t.over)} of borrowing room left.`, `Over the limit by ${M(t.over)}. That's a margin call: pay it down by next morning, or the bank sells your stockpile ${P(LN.forcedSaleDiscount, 0)} under market, then your businesses.`)
-    + row("Loan-to-value (LTV)", `${M(v.loan)} ÷ ${M(t.value)} = ${P(t.ltv, 1)}`)
-    + work(`Rate = ${P(v.base)} base + (${P(LN.minPremium)} + ${P(LN.ltvPremium, 0)} × ${P(t.ltv, 1)}) premium = <b>${P(t.rate)}</b> a round`)
-    + row("Interest each overnight", M(t.interest))
-    + row(`Repayment each overnight (${P(LN.repayShare, 0)} of loan)`, M(t.principal))
-    + row("Total charged each overnight", M(t.payment), "strong");
+  const t = loanTerms(v);
+  return work(`Limit = 50% × (${M(v.holdings)} + ${M(v.businesses)} + ${M(v.bonds)}) = <b>${M(t.limit)}</b>`)
+    + row("Borrowing limit", M(t.limit), "big")
+    + flag(t.over <= 0, `Approved. You could borrow ${M(-t.over)} more.`, `Over the limit by ${M(t.over)}. Margin call: pay it down by next morning, or the bank sells your things ${P(LN.forcedSaleDiscount, 0)} under market.`)
+    + work(`Loan rate = ${P(v.base)} + ${P(LN.extra)} = <b>${P(t.rate)}</b> a round`)
+    + row("Interest each overnight", `${M(v.loan)} × ${P(t.rate)} = ${M(t.interest)}`)
+    + row("Repayment each overnight", `${M(v.loan)} × ${P(LN.repayShare, 0)} = ${M(t.repay)}`)
+    + row("Total each overnight", M(t.total), "strong");
 });
 
 // ---------- 3. Leverage ----------
@@ -136,65 +132,91 @@ calc("calcLev", [
   { k: "base", label: "Base rate", v: 2.5, unit: "%", step: 0.25, pct: true },
 ], v => {
   const r = leveraged(v);
-  const pts = (lev) => { const a = []; for (let c = -50; c <= 50; c += 1) { const x = leveraged({ ...v, lev, exit: v.entry * (1 + c / 100) }); a.push([c, Math.max(-100, x.ret * 100)]); } return a; };
-  const chg = (v.exit / v.entry - 1);
-  return work(`Position = ${M(v.own)} × ${v.lev} = ${M(r.position)}, of which ${M(r.borrowed)} is borrowed at ${P(r.rate)} a round`)
-    + row("Units bought", r.qty.toFixed(1))
-    + row("Interest owed", `${M(r.borrowed)} × ${P(r.rate)} × ${v.rounds} = ${M(r.interest)}`)
-    + work(`Your stake = ${r.qty.toFixed(1)} × ${M(v.exit)} − ${M(r.borrowed)} − ${M(r.interest)} = <b>${M(r.equity)}</b>`)
+  const pts = lev => { const a = []; for (let c = -40; c <= 40; c += 1) a.push([c, leveraged({ ...v, lev, exit: v.entry * (1 + c / 100) }).ret * 100]); return a; };
+  return work(`You buy ${M(v.own)} × ${v.lev} = <b>${M(r.position)}</b> worth. The broker lends ${M(r.borrowed)}.`)
+    + row("Price change", P(r.change, 1))
+    + row("Gain on the goods", `${M(r.position)} × ${P(r.change, 1)} = ${M(r.gain)}`)
+    + row("Interest", `${M(r.borrowed)} × ${P(r.rate)} × ${v.rounds} = ${M(r.interest)}`)
     + row("Profit", M(r.profit), "big " + (r.profit >= 0 ? "pos" : "neg"))
-    + row("Return on your money", `${P(r.ret, 1)} (price moved ${P(chg, 1)})`)
-    + (v.lev > 1 ? row("Liquidation price", `${M(r.liq)} (${P(r.liq / v.entry - 1, 1)})`) : "")
-    + (v.lev > 1 ? flag(!r.wiped, "Position safe.", `Price fell to the liquidation price: the broker sold the position and you lost most of your ${M(v.own)}.`) : "")
-    + lineChart({ series: [{ pts: pts(1), cls: "b", name: "1× (no leverage)" }, { pts: pts(v.lev), cls: "a", name: v.lev + "×" }], xlabel: "Price change", xfmt: v => (v > 0 ? "+" : "") + v + "%", yfmt: v => v.toFixed(0) + "%", zero: true, marks: [{ x: clamp(chg * 100, -50, 50), y: Math.max(-100, r.ret * 100), label: "you" }] });
+    + row("Return on your money", P(r.ret, 1))
+    + (v.lev > 1 ? row("Sold out if price falls to", `${M(r.liq)} (−${P(LV.wipeout / v.lev, 1)})`) : "")
+    + (v.lev > 1 ? flag(!r.wiped, "Position safe.", `The price hit ${M(r.liq)}, so the broker sold you out. You lost ${P(LV.wipeout, 0)} of your money.`) : "")
+    + lineChart({ series: [{ pts: pts(1), cls: "b", name: "1× (no leverage)" }, { pts: pts(v.lev), cls: "a", name: v.lev + "×" }], xlabel: "Price change", xfmt: v => (v > 0 ? "+" : "") + v + "%", yfmt: v => v.toFixed(0) + "%", zero: true });
 });
 
 // ---------- 4. Futures ----------
 calc("calcFut", [
-  { k: "spot", label: "Price today (spot)", v: 30, step: 1, min: 0.01 },
+  { k: "spot", label: "Price today", v: 30, step: 1, min: 0.01 },
   { k: "rounds", label: "Rounds until it settles", v: 5, step: 1, min: 1, max: FU.maxRounds },
-  { k: "qty", label: "Units in the contract", v: 100, step: 10, min: 1 },
-  { k: "side", label: "Your side", v: "long", options: [["long", "Long (agree to buy)"], ["short", "Short (agree to sell)"]] },
-  { k: "settle", label: "Price on settlement day", v: 40, step: 1, min: 0 },
+  { k: "qty", label: "Units", v: 100, step: 10, min: 1 },
+  { k: "side", label: "Your side", v: "long", options: [["long", "Buy (long)"], ["short", "Sell (short)"]] },
+  { k: "settle", label: "Price on the day", v: 40, step: 1, min: 0 },
   { k: "base", label: "Base rate", v: 2.5, unit: "%", step: 0.25, pct: true },
 ], v => {
   const rounds = clamp(Math.round(v.rounds), 1, FU.maxRounds);
   const F = futuresPrice(v.spot, rounds, v.base);
-  const value = F * v.qty, margin = value * FU.initialMargin;
+  const deposit = F * v.qty * FU.deposit;
   const sign = v.side === "long" ? 1 : -1;
   const pay = sign * (v.settle - F) * v.qty;
-  const pts = [], lo = v.spot * 0.4, hi = v.spot * 1.8;
-  for (let i = 0; i <= 40; i++) { const s = lo + (hi - lo) * i / 40; pts.push([s, sign * (s - F) * v.qty]); }
-  return work(`Futures price = ${M(v.spot)} × (1 + ${P(v.base)} + ${P(FU.storage)})<sup>${rounds}</sup> = <b>${M(F)}</b>`)
-    + row("Contract value", `${M(F)} × ${v.qty} = ${M(value)}`)
-    + row(`Margin up front (${P(FU.initialMargin, 0)})`, M(margin))
-    + row(`Margin call if your margin falls below`, M(value * FU.maintenanceMargin))
-    + work(`Payoff = ${sign > 0 ? "" : "−"}(${M(v.settle)} − ${M(F)}) × ${v.qty} = <b>${M(pay)}</b>`)
-    + row("Profit at settlement", M(pay), "big " + (pay >= 0 ? "pos" : "neg"))
-    + row("Return on your margin", P(pay / margin, 0))
-    + lineChart({ series: [{ pts, cls: "a" }], xlabel: "Price on settlement day", xfmt: v => M(v), zero: true, marks: [{ x: v.settle, y: pay, label: M(pay) }, { x: F, y: 0, cls: "b", label: "break-even " + M(F), below: true }] });
+  return work(`Futures price = ${M(v.spot)} × (1 + ${P(v.base)} × ${rounds}) = <b>${M(F)}</b>`)
+    + row(`Deposit (${P(FU.deposit, 0)})`, `${M(F)} × ${v.qty} × ${P(FU.deposit, 0)} = ${M(deposit)}`)
+    + work(`Profit = ${sign > 0 ? `(${M(v.settle)} − ${M(F)})` : `(${M(F)} − ${M(v.settle)})`} × ${v.qty} = <b>${M(pay)}</b>`)
+    + row("Profit", M(pay), "big " + (pay >= 0 ? "pos" : "neg"))
+    + row("Return on your deposit", P(pay / deposit, 0));
 });
 
 // ---------- 5. Bonds ----------
 calc("calcBond", [
-  { k: "n", label: "Bond length", v: 10, options: BD.maturities.map(x => [x, x + " rounds"]) },
-  { k: "bIssue", label: "Base rate when bought", v: 2.5, unit: "%", step: 0.25, pct: true },
-  { k: "elapsed", label: "Rounds since bought", v: 3, step: 1, min: 0 },
-  { k: "bNow", label: "Base rate now", v: 3.5, unit: "%", step: 0.25, pct: true },
-  { k: "count", label: "Bonds held", v: 10, step: 1, min: 1 },
+  { k: "n", label: "Bond length", v: 10, options: BD.lengths.map(x => [x, x + " rounds"]) },
+  { k: "rate", label: "Base rate when bought", v: 2.5, unit: "%", step: 0.25, pct: true },
+  { k: "held", label: "Rounds held so far", v: 3, step: 1, min: 0 },
+  { k: "now", label: "Base rate now", v: 3.5, unit: "%", step: 0.25, pct: true },
 ], v => {
-  const n = v.n, el = clamp(Math.round(v.elapsed), 0, n), left = n - el;
-  const coupon = v.bIssue + BD.termPremium * n;
-  const y = v.bNow + BD.termPremium * left;
-  const price = bondPrice(coupon, left, y);
-  const per = coupon * BD.face;
-  const pts = []; for (let b = 0; b <= 8.001; b += 0.1) pts.push([b, bondPrice(coupon, left, b / 100 + BD.termPremium * left)]);
-  return work(`Coupon = ${P(v.bIssue)} + ${P(BD.termPremium)} × ${n} = <b>${P(coupon)}</b> a round, fixed for life`)
-    + row("Paid to you each overnight", `${M(per)} per bond, ${M(per * v.count)} in total`)
-    + work(`Yield now = ${P(v.bNow)} + ${P(BD.termPremium)} × ${left} rounds left = ${P(y)}`)
-    + row("Price if you sell now", `${M(price)} per bond`, "big")
-    + row("Gain or loss vs the 100 you paid", `${M((price - BD.face) * v.count)}`, (price >= BD.face ? "pos" : "neg"))
-    + row("Coupons collected so far", M(per * el * v.count))
-    + `<p class="cnote">${Math.abs(y - coupon) < 1e-9 ? "Rates haven't moved, so the bond is still worth 100." : y > coupon ? "Rates have risen since you bought. New bonds pay more than yours, so yours is worth less than 100 if you sell early. Hold to the end and you still get 100 back." : "Rates have fallen since you bought. Your bond pays more than new ones, so it's worth more than 100."}</p>`
-    + lineChart({ series: [{ pts, cls: "a" }], xlabel: "Base rate now", xfmt: v => v + "%", yfmt: v => v.toFixed(0), marks: [{ x: v.bNow * 100, y: price, label: M(price) }] });
+  const held = clamp(Math.round(v.held), 0, v.n), left = v.n - held;
+  const coupon = v.rate * BD.face;
+  const sell = bondSellPrice(v.rate, v.now, left);
+  return row("Paid to you each overnight", `100 × ${P(v.rate)} = ${M(coupon)}`)
+    + row("Collected so far", `${M(coupon)} × ${held} = ${M(coupon * held)}`)
+    + row("If you hold to the end", `${M(coupon * v.n)} in payments + 100 back`)
+    + work(`Sell now = 100 + (${P(v.rate)} − ${P(v.now)}) × 100 × ${left} = <b>${M(sell)}</b>`)
+    + row("Sell price today", M(sell), "big " + (sell >= BD.face ? "pos" : "neg"))
+    + `<p class="cnote">${Math.abs(v.rate - v.now) < 1e-9 ? "Rates haven't moved, so the bond still sells for 100." : v.now > v.rate ? "Rates have gone up, so new bonds pay more than yours. Yours sells for less than 100, but you still get the full 100 if you wait until the end." : "Rates have gone down, so your bond pays more than new ones and sells for more than 100."}</p>`;
 });
+
+// ---------- 6. ETFs ----------
+let etfSel = "food";
+const etfRun = calc("calcEtf", [
+  { k: "sec", label: "Sector ETF", v: "food", options: Object.keys(SECTORS).map(k => [k, `${EF.tickers[k]} · ${SECTORS[k].name}`]) },
+  { k: "units", label: "Units to buy", v: 10, step: 1, min: 0 },
+], v => {
+  etfSel = v.sec;
+  const ids = etfMembers(v.sec), val = etfValue(v.sec);
+  const cost = val * v.units, fee = cost * EF.fee;
+  const rows = ids.map(id => {
+    const ratio = priceOf(id) / basePrice(id);
+    return `<tr><td>${BY_ID[id].name}</td><td class="n">${M(priceOf(id))}</td><td class="n">${M(basePrice(id))}</td><td class="n ${ratio > 1.005 ? "up" : ratio < 0.995 ? "dn" : ""}">${ratio.toFixed(2)}</td></tr>`;
+  }).join("");
+  return `<table class="etft"><thead><tr><th>In the fund</th><th class="n">Price</th><th class="n">Base</th><th class="n">Price ÷ base</th></tr></thead><tbody>${rows}</tbody></table>`
+    + work(`${EF.tickers[v.sec]} = 100 × average of ${ids.length} ratios = <b>${val.toFixed(1)}</b>`)
+    + row(`${EF.tickers[v.sec]} price`, val.toFixed(1), "big")
+    + row(`Cost of ${v.units} units`, M(cost))
+    + row(`Fee (${P(EF.fee, 1)})`, M(fee))
+    + row("Total to pay", M(cost + fee), "strong");
+});
+
+function renderEtfBoard() {
+  const el = document.getElementById("etfBoard");
+  if (!el) return;
+  el.innerHTML = Object.keys(SECTORS).map(k => {
+    const v = etfValue(k), ch = v / EF.start - 1;
+    return `<div class="etf ${k === etfSel ? "on" : ""}"><b>${EF.tickers[k]}</b><span>${SECTORS[k].name}</span><em class="${ch > 0.005 ? "up" : ch < -0.005 ? "dn" : ""}">${v.toFixed(1)}</em></div>`;
+  }).join("");
+}
+renderEtfBoard();
+document.getElementById("calcEtf").addEventListener("input", renderEtfBoard);
+
+// Keep ETFs in step with the Market dynamics tab.
+const _renderMarketTable = renderMarketTable;
+renderMarketTable = function () { _renderMarketTable(); etfRun(); renderEtfBoard(); };
+const _updateRow = updateRow;
+updateRow = function (id) { _updateRow(id); etfRun(); renderEtfBoard(); };

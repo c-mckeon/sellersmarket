@@ -308,3 +308,15 @@ input[type=number] { font: inherit; font-size: 13px; padding: 3px 5px; border: 1
 .fx .on { color: var(--muted); }
 .fx b { color: var(--accent); }
 .fx .dur { margin-left: auto; font-size: 11.5px; color: var(--muted); white-space: nowrap; }
+.etfboard { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 8px; margin-top: 14px; }
+.etf { border: 1px solid var(--line); border-radius: 8px; padding: 7px 10px; display: grid; grid-template-columns: 1fr auto; font-size: 12.5px; background: var(--bg); }
+.etf.on { border-color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); }
+.etf b { font-size: 13.5px; letter-spacing: .04em; }
+.etf span { grid-column: 1; color: var(--muted); font-size: 11.5px; }
+.etf em { grid-column: 2; grid-row: 1 / 3; align-self: center; font-style: normal; font-weight: 800; font-size: 16px; font-variant-numeric: tabular-nums; }
+.etf em.up, .etft .up { color: var(--accent); }
+.etf em.dn, .etft .dn { color: var(--mid); }
+.etft { width: 100%; border-collapse: collapse; font-size: 13px; margin-bottom: 6px; }
+.etft th, .etft td { padding: 4px 6px; border-bottom: 1px solid var(--line); }
+.etft th { background: none; font-size: 11px; }
+.etft .n { text-align: right; font-variant-numeric: tabular-nums; }
