@@ -1,0 +1,48 @@
+// Sellers Market: map symbols. Simple 24×24 line icons, drawn in white on the owner's colour.
+const ICONS = {
+  wheat: '<path d="M12 22V8M12 8c-2-1-3-3-3-5 2 0 3 2 3 5zm0 0c2-1 3-3 3-5-2 0-3 2-3 5zM12 13c-2-1-3-3-3-5 2 0 3 2 3 5zm0 0c2-1 3-3 3-5-2 0-3 2-3 5zM12 18c-2-1-3-3-3-5 2 0 3 2 3 5zm0 0c2-1 3-3 3-5-2 0-3 2-3 5z"/>',
+  drop: '<path d="M12 3c3 4 6 7.5 6 11a6 6 0 0 1-12 0c0-3.5 3-7 6-11z"/>',
+  tree: '<path d="M12 2l-6 9h3l-4 6h14l-4-6h3zM12 17v5"/>',
+  pick: '<path d="M4 9c4-5 12-5 16 0M12 6v16M12 6"/><path d="M9 22h6"/>',
+  derrick: '<path d="M8 22L12 3l4 19M9.5 15h5M10.5 10h3M5 22h14"/>',
+  factory: '<path d="M3 21V11l5 3v-3l5 3v-3l5 3V4h3v17zM7 17h2M12 17h2M17 17h2"/>',
+  flame: '<path d="M12 22a7 7 0 0 0 7-7c0-4-3-6-4-9-1 3-3 4-3 4s0-3-2-6c-1 4-5 6-5 11a7 7 0 0 0 7 7z"/>',
+  bread: '<path d="M4 11a8 5 0 0 1 16 0v1a2 2 0 0 1-2 2v6H6v-6a2 2 0 0 1-2-2z"/>',
+  mill: '<path d="M12 12L5 5M12 12l7-7M12 12l-7 7M12 12l7 7M10 22l2-10 2 10"/>',
+  chip: '<rect x="6" y="6" width="12" height="12" rx="1"/><path d="M9 2v4M15 2v4M9 18v4M15 18v4M2 9h4M2 15h4M18 9h4M18 15h4"/>',
+  car: '<path d="M3 16v-4l2-5h14l2 5v4zM7 16v3M17 16v3M3 12h18"/><circle cx="7.5" cy="14" r=".5"/><circle cx="16.5" cy="14" r=".5"/>',
+  tyre: '<circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="4"/>',
+  bolt: '<path d="M13 2L4 14h7l-1 8 9-12h-7z"/>',
+  turbine: '<path d="M12 10V22M12 10L5 4M12 10l8-1M12 10l-1 8M9 22h6"/><circle cx="12" cy="10" r="1.5"/>',
+  flask: '<path d="M9 3h6M10 3v6l-6 10a2 2 0 0 0 2 3h12a2 2 0 0 0 2-3l-6-10V3M7 15h10"/>',
+  phone: '<rect x="7" y="2" width="10" height="20" rx="2"/><path d="M11 18h2"/>',
+  gear: '<circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M4.9 4.9l2.1 2.1M17 17l2.1 2.1M4.9 19.1L7 17M17 7l2.1-2.1"/>',
+  bricks: '<path d="M3 6h18v12H3zM3 12h18M8 6v6M16 6v6M12 12v6"/>',
+  sun: '<rect x="4" y="9" width="16" height="11"/><path d="M4 14.5h16M9.3 9v11M14.7 9v11M12 2v4"/>',
+  coin: '<circle cx="12" cy="12" r="9"/><path d="M12 7v10M9.5 9.5h4a1.5 1.5 0 0 1 0 3h-3a1.5 1.5 0 0 0 0 3h4"/>',
+  magnet: '<path d="M6 3v9a6 6 0 0 0 12 0V3h-4v9a2 2 0 0 1-4 0V3zM6 7h4M14 7h4"/>',
+  battery: '<rect x="3" y="7" width="16" height="10" rx="1"/><path d="M21 10v4M7 12h4M9 10v4"/>',
+  paper: '<path d="M6 2h9l4 4v16H6zM15 2v4h4M9 11h7M9 15h7M9 19h4"/>',
+  rig: '<path d="M4 14h16M6 14v8M18 14v8M9 14l3-11 3 11M2 22c2-1 4-1 6 0s4 1 6 0 4-1 6 0"/>',
+};
+
+// Which symbol each business gets
+const BIZ_ICON = {
+  farm: "wheat", water_works: "drop", logging_camp: "tree", sand_pit: "pick", clay_pit: "pick", limestone_quarry: "pick",
+  coal_mine: "pick", iron_mine: "pick", copper_mine: "pick", gold_mine: "coin", bauxite_mine: "pick", oil_well: "derrick",
+  offshore_oil_rig: "rig", lithium_works: "flask", rare_earth_mine: "pick", rubber_plantation: "tree",
+  flour_mill: "mill", sawmill: "tree", blast_furnace: "flame", copper_smelter: "flame", gold_refinery: "coin",
+  aluminium_smelter: "flame", glassworks: "flame", kiln: "flame", oil_refinery: "derrick", plastics_plant: "flask",
+  vulcaniser: "tyre", lithium_plant: "flask", rare_earth_separator: "flask", arc_furnace: "flame", cement_kiln: "bricks",
+  paper_mill: "paper", bakery: "bread", steelworks: "factory", wire_mill: "gear", magnet_works: "magnet", chip_fab: "chip",
+  battery_plant: "battery", solar_plant: "sun", concrete_plant: "bricks", tyre_factory: "tyre", motor_factory: "gear",
+  circuit_board_plant: "chip", phone_assembly: "phone", car_plant: "car", turbine_works: "turbine",
+};
+
+// An icon as SVG, centred on (x, y), `size` across
+const iconSVG = (name, x, y, size, colour = "#fff") =>
+  `<g transform="translate(${x - size / 2},${y - size / 2}) scale(${size / 24})" fill="none" stroke="${colour}" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">${ICONS[name] || ICONS.factory}</g>`;
+
+// A pawn shape, for where players stand
+const pawnSVG = (x, y, h, fill) =>
+  `<path transform="translate(${x - h * 0.35},${y - h * 0.55}) scale(${h / 24})" d="M8.4 0a3.6 3.6 0 0 1 2.1 6.5c1.6 1 2.6 2.5 2.6 4.4h-2c.4 3 1.8 5.6 3.4 7.6l2 1.9v3.6H0v-3.6l2-1.9c1.6-2 3-4.6 3.4-7.6h-2c0-1.9 1-3.4 2.6-4.4A3.6 3.6 0 0 1 8.4 0z" fill="${fill}" stroke="#fff" stroke-width="2"/>`;

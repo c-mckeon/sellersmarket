@@ -10,9 +10,10 @@ function basePrice(id) {
   let cost = 0;
   for (const [i, q] of Object.entries(r.in)) cost += q * basePrice(i);
   for (const w of r.extras) cost -= r.out[w] * basePrice(w); // waste fees add cost; recyclables earn a little back
-  return (baseMemo[id] = cost * MARKET.markup / r.out[id]);
+  return (baseMemo[id] = (cost + MARKET.valueAdded * BUILD.factoryCost[tierOf(id)]) / r.out[id]);
 }
 const isFee = id => basePrice(id) < 0;
+const tierOf = id => tier(id);
 
 function scarcity(id, s) {
   const { s0, e } = PR[id];
@@ -116,7 +117,7 @@ function renderCurve() {
   const r = producer[id];
   const baseHow = PR[id].base != null
     ? `Base price set by hand.`
-    : `Base price from its recipe at the ${r.at}: (${Object.entries(r.in).map(([k, q]) => `${q} × ${money(basePrice(k))}`).join(" + ")}${r.extras.length ? r.extras.map(w => ` ${basePrice(w) < 0 ? "+" : "−"} ${r.out[w]} × ${money(Math.abs(basePrice(w)))} ${BY_ID[w].name.toLowerCase()}`).join("") : ""}) × ${MARKET.markup} ÷ ${r.out[id]} = <b>${money(basePrice(id))}</b>`;
+    : `Base price from its recipe at the ${r.at}: (${Object.entries(r.in).map(([k, q]) => `${q} × ${money(basePrice(k))}`).join(" + ")}${r.extras.length ? r.extras.map(w => ` ${basePrice(w) < 0 ? "+" : "−"} ${r.out[w]} × ${money(Math.abs(basePrice(w)))} ${BY_ID[w].name.toLowerCase()}`).join("") : ""} + ${money(MARKET.valueAdded * BUILD.factoryCost[tier(id)])} value added) ÷ ${r.out[id]} = <b>${money(basePrice(id))}</b>`;
 
   document.getElementById("mcurve").innerHTML = `
     <h3>${c.name}</h3>

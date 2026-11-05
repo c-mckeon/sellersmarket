@@ -15,25 +15,26 @@ const BUILD = {
 };
 
 // Extraction businesses: [name, makes, base output per round, base cost, where]
+// Outputs are set so each makes about 20% of its base cost in value per round, at base prices.
 //   where "res"   = only in territories with that resource
 //         "land"  = any land territory
 //         "sea"   = sea territories with that resource
 const EXTRACTORS = [
-  ["Farm",              "wheat",          6, 100, "res"],
-  ["Water works",       "water",          6,  80, "land"],
-  ["Logging camp",      "wood",           4, 100, "res"],
-  ["Sand pit",          "sand",           6,  80, "res"],
-  ["Clay pit",          "clay",           6,  80, "res"],
-  ["Limestone quarry",  "limestone",      5,  90, "res"],
-  ["Coal mine",         "coal",           4, 140, "res"],
-  ["Iron mine",         "iron_ore",       4, 150, "res"],
-  ["Copper mine",       "copper_ore",     3, 170, "res"],
-  ["Gold mine",         "gold_ore",       5, 260, "res"],
-  ["Bauxite mine",      "bauxite",        4, 160, "res"],
-  ["Oil well",          "crude_oil",      3, 220, "res"],
-  ["Offshore oil rig",  "crude_oil",      5, 450, "sea"],
-  ["Lithium works",     "lithium_brine",  4, 240, "res"],
-  ["Rare earth mine",   "rare_earth_ore", 2, 300, "res"],
+  ["Farm",              "wheat",          3, 100, "res"],
+  ["Water works",       "water",          8,  80, "land"],
+  ["Logging camp",      "wood",           5, 100, "res"],
+  ["Sand pit",          "sand",           8,  80, "res"],
+  ["Clay pit",          "clay",           8,  80, "res"],
+  ["Limestone quarry",  "limestone",      6,  90, "res"],
+  ["Coal mine",         "coal",           6, 140, "res"],
+  ["Iron mine",         "iron_ore",       5, 150, "res"],
+  ["Copper mine",       "copper_ore",     4, 170, "res"],
+  ["Gold mine",         "gold_ore",       3, 260, "res"],
+  ["Bauxite mine",      "bauxite",        5, 160, "res"],
+  ["Oil well",          "crude_oil",      4, 220, "res"],
+  ["Offshore oil rig",  "crude_oil",      9, 450, "sea"],
+  ["Lithium works",     "lithium_brine",  6, 240, "res"],
+  ["Rare earth mine",   "rare_earth_ore", 4, 300, "res"],
   ["Rubber plantation", "latex",          4, 120, "res"], // no rubber grows in Europe, so latex can only be imported
 ];
 

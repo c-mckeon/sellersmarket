@@ -5,10 +5,11 @@
 const fs = require("fs"), path = require("path"), vm = require("vm");
 const root = path.join(__dirname, "..");
 const FILES = ["js/commodities.js", "js/market.js", "js/broker.js", "js/cards.js", "js/map.js", "maps/europe.js", "js/territories.js", "js/businesses.js",
-  "game/settings.js", "game/core.js", "game/market.js", "game/production.js", "game/map.js", "game/cards.js", "game/bots.js", "game/pipeline.js"];
+  "game/settings.js", "game/core.js", "game/market.js", "game/production.js", "game/map.js", "game/cards.js", "game/finance.js", "game/bots.js", "game/pipeline.js"];
 
 const arg = (k, d) => { const i = process.argv.indexOf("--" + k); return i > 0 ? process.argv[i + 1] : d; };
 const games = +arg("games", 20), players = +arg("players", 4), seed = +arg("seed", 1);
+const strategies = arg("strategies", "best").split(",");   // e.g. best,diversify,specialist,best (cycled over players)
 const overrides = JSON.parse(arg("set", "{}"));
 
 function runAll() {
@@ -27,7 +28,7 @@ function runAll() {
         // Bots start with the most valuable mine/farm/well available where they start
         const value = b => Object.entries(b.outputs).reduce((s, [c, q]) => s + q * G.basePrice(c), 0) * G.richness(b, start);
         const opts = G.BIZ.filter(b => G.canBuildAt(b, start) && b.kind === "extract").sort((a, b) => value(b) - value(a));
-        ps.push({ name: "Bot " + (i + 1), bot: true, start, business: opts[0].id });
+        ps.push({ name: "Bot " + (i + 1), bot: true, start, business: opts[0].id, strategy: ${JSON.stringify(strategies)}[(i + g) % ${strategies.length}] });
       }
       const st = G.newGame({ players: ps, seed: ${seed} * 1000 + g });
       const start = Object.values(st.startWorth).reduce((a, b) => a + b, 0) / st.players.length;
@@ -37,6 +38,13 @@ function runAll() {
         biz: st.players.map(p => G.myBusinesses(st, p.id).length), space: st.players.map(p => p.space),
         start, level: st.priceLevel, stats: st.stats, real,
         cards: st.log.filter(l => / played /.test(l.msg)).length,
+        strat: st.players.map(p => p.strategy),
+        sectors: st.players.map(p => new Set(G.myBusinesses(st, p.id).map(b => G.sectorOfBiz(G.BIZ_BY[b.type]))).size),
+        loans: st.players.map(p => p.loan), bonds: st.players.map(p => p.bonds.reduce((s, b) => s + b.count, 0)),
+        margin: st.log.filter(l => /Margin call/.test(l.msg)).length, seized: st.log.filter(l => /seized/.test(l.msg)).length,
+        rate: st.baseRate, share: st.borrowShare,
+        // What each business really earned per round, as a share of its build cost
+        bizRoi: st.businesses.filter(b => b.built < st.rounds - 3).map(b => ({ type: G.BIZ_BY[b.type].name, roi: ((b.earned || 0) - (b.spent || 0) - (b.wages || 0)) / Math.max(1, st.rounds - b.built) / b.cost })),
       });
     }
     return JSON.stringify(out);
@@ -70,5 +78,23 @@ const summary = {
   "cheapest goods": goods.slice(-5).map(([id, r]) => `${id} ×${f(r, 2)}`).join(", "),
   "cards played per game": f(avg(res.map(r => r.cards))),
 };
+// Strategies
+const strat = {};
+res.forEach(r => { const max = Math.max(...r.worth); r.strat.forEach((k, i) => { const x = strat[k] ||= { worth: [], wins: 0, n: 0 }; x.worth.push(r.worth[i]); x.n++; if (r.worth[i] === max) x.wins++; }); });
+summary["strategies (median worth, worst 10%, win rate)"] = Object.entries(strat).map(([k, x]) => `${k}: ${f(q(x.worth, .5))}, ${f(q(x.worth, .1))}, ${f(100 * x.wins / x.n)}%`).join(" · ");
+// Diversification: median worth by number of sectors owned
+const bySec = {};
+res.forEach(r => r.sectors.forEach((n, i) => (bySec[Math.min(n, 5)] ||= []).push(r.worth[i])));
+summary["worth by sectors owned (median, players)"] = Object.keys(bySec).sort().map(k => `${k}${k === "5" ? "+" : ""}: ${f(q(bySec[k], .5))} (${bySec[k].length})`).join(" · ");
+// Business types
+const roi = {};
+res.forEach(r => r.bizRoi.forEach(b => (roi[b.type] ||= []).push(b.roi)));
+const roiList = Object.entries(roi).filter(([, a]) => a.length >= 3).map(([k, a]) => [k, q(a, .5), a.length]).sort((a, b) => b[1] - a[1]);
+summary["best businesses (median profit/round ÷ cost, built)"] = roiList.slice(0, 6).map(([k, v, n]) => `${k} ${f(100 * v, 1)}% (${n})`).join(", ");
+summary["worst businesses"] = roiList.slice(-5).map(([k, v, n]) => `${k} ${f(100 * v, 1)}% (${n})`).join(", ");
+summary["finance: loans at end / bonds held / margin calls / seizures"] = `${f(avg(flat("loans")))} / ${f(avg(flat("bonds")), 1)} / ${f(avg(res.map(r => r.margin)), 1)} / ${f(avg(res.map(r => r.seized)), 1)} per game`;
+summary["base rate / borrow share at end"] = `${f(100 * avg(res.map(r => r.rate)), 2)}% / ${f(100 * avg(res.map(r => r.share)))}%`;
+if (process.argv.includes("--roi")) roiList.forEach(([k, v, n]) => console.log("  ", k.padEnd(22), f(100 * v, 1) + "%", n));
+
 if (process.argv.includes("--json")) console.log(JSON.stringify(summary));
 else Object.entries(summary).forEach(([k, v]) => console.log(k.padEnd(52), typeof v === "object" ? JSON.stringify(v) : v));

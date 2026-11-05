@@ -562,3 +562,47 @@ code { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; fo
 .gpass { text-align: center; padding: 70px 16px; }
 .gpass h2 { font-size: 28px; margin: 14px 0 6px; }
 .gpass h2 i { display: inline-block; width: 18px; height: 18px; border-radius: 50%; margin-right: 10px; }
+
+/* game: dashboard extras, broker, news */
+.ndot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 4px; }
+.gnews span.mine { color: var(--ink); }
+.gnews span.pub { color: var(--accent); font-weight: 600; }
+.dfin { display: flex; flex-wrap: wrap; gap: 4px 12px; margin-top: 6px; font-size: 12.5px; color: var(--muted); }
+.dfin b { color: var(--ink); margin-left: 3px; } .dfin b.neg { color: var(--waste); }
+.dprev { margin-top: 6px; font-size: 12.5px; }
+.dprev .up { color: var(--raw); font-weight: 600; } .dprev .dn { color: var(--waste); font-weight: 600; }
+.dlost { color: var(--waste); font-weight: 600; margin-top: 3px; }
+.ddisc { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; margin-top: 6px; font-size: 12px; color: var(--muted); }
+.ddisc select { font: inherit; font-size: 12px; padding: 2px 4px; border: 1px solid var(--line); border-radius: 5px; background: var(--bg); color: var(--ink); max-width: 150px; }
+.dtag { background: var(--bg); border: 1px solid var(--line); border-radius: 5px; padding: 0 2px 0 6px; color: var(--ink); }
+.dtag button { border: none; background: none; color: var(--muted); cursor: pointer; font-size: 11px; }
+.dbiz { grid-template-columns: auto 1fr; column-gap: 8px; align-items: center; }
+.dbiz > :not(.bicon) { grid-column: 2; }
+.bicon { grid-row: 1 / 4; width: 26px; height: 26px; border-radius: 6px; display: grid; place-items: center; }
+.bicon svg { width: 18px; height: 18px; }
+.deff { display: grid; font-size: 12.5px; margin: 4px 0; padding-left: 8px; border-left: 3px solid var(--accent); }
+.deff span:last-child { color: var(--ink); }
+.dplayer { display: grid; grid-template-columns: 1fr auto; font-size: 13px; padding: 2px 0; }
+.dplayer > span:first-child { font-weight: 600; } .dplayer i { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 6px; }
+.dplayer .muted { grid-column: 1; font-size: 12px; } .dplayer b { grid-column: 2; grid-row: 1 / 3; align-self: center; }
+.dplayer.me > span:first-child { color: var(--accent); }
+.gtabs { margin-bottom: 10px; }
+.gcb { background: var(--bg); border-radius: 8px; padding: 8px 10px; font-size: 13.5px; margin-bottom: 10px; }
+.gbk { display: grid; grid-template-columns: 1fr 1fr; gap: 12px 18px; }
+@media (max-width: 760px) { .gbk { grid-template-columns: 1fr; } }
+.gbk section { border-top: 1px solid var(--line); padding-top: 6px; }
+.gbk h4 { margin: 2px 0 6px; font-size: 13px; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); }
+.gbk h4 .muted { text-transform: none; letter-spacing: 0; font-weight: 400; }
+.gkv { display: grid; grid-template-columns: auto auto auto auto; gap: 2px 10px; font-size: 13px; margin-bottom: 6px; }
+.gkv span { color: var(--muted); } .gkv b { font-variant-numeric: tabular-nums; }
+.grow2 { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin: 4px 0; font-size: 13px; }
+.grow2 input, .grow2 select { font: inherit; font-size: 13px; padding: 4px 6px; border: 1px solid var(--line); border-radius: 6px; background: var(--bg); color: var(--ink); width: 90px; }
+.grow2 select { width: auto; }
+.grow2 button, .gpos button { font: inherit; font-size: 12.5px; font-weight: 700; padding: 4px 10px; border-radius: 6px; border: 1px solid var(--ink); background: var(--ink); color: var(--bg); cursor: pointer; }
+.grow2 button:disabled { opacity: .4; }
+.gpos { display: flex; justify-content: space-between; align-items: center; gap: 8px; font-size: 13px; background: var(--bg); border-radius: 6px; padding: 4px 4px 4px 8px; margin: 4px 0; }
+.gpos button { background: transparent; color: var(--ink); border-color: var(--line); }
+.gcard ul { list-style: none; margin: 4px 0 0; padding: 0; display: grid; gap: 1px; }
+.gcard li { font-size: 12px; color: var(--muted); }
+.gcard li b { font-size: 12px; color: var(--ink); } .gcard li em { font-style: normal; color: var(--accent); font-weight: 700; }
+.gmkt td.bad { color: var(--waste); font-weight: 700; }

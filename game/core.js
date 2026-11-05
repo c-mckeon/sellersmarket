@@ -65,7 +65,7 @@ const SMG = (() => {
   // config.players: [{ name, colour, bot, start: territoryId, business: businessTypeId }]
   G.newGame = config => {
     const st = {
-      version: 3, seed: config.seed ?? Math.floor(Math.random() * 1e9),
+      version: 4, seed: config.seed ?? Math.floor(Math.random() * 1e9),
       round: 1, rounds: config.rounds ?? S.rounds, phase: "morning", over: false,
       orders: {},
       players: [], businesses: [], nextBizId: 1,
@@ -74,7 +74,7 @@ const SMG = (() => {
       stats: { runs: 0, idle: 0, overflow: 0 },
     };
     config.players.forEach((c, i) => {
-      st.players.push({ id: i + 1, name: c.name, colour: c.colour, bot: !!c.bot,
+      st.players.push({ id: i + 1, name: c.name, colour: c.colour, bot: !!c.bot, strategy: c.strategy || "best",
         cash: S.startCash, space: S.startSpace, upgrades: 0, pos: c.start, stock: {}, hand: [],
         acted: false, cardsPlayed: 0 });
     });
@@ -188,7 +188,11 @@ const SMG = (() => {
   // ---------- Net worth ----------
   G.netWorth = (st, p) => p.cash
     + Object.entries(p.stock).reduce((s, [c, q]) => s + q * st.prices[c], 0)
-    + G.myBusinesses(st, p.id).reduce((s, b) => s + b.cost * S.businessValue, 0);
+    + G.myBusinesses(st, p.id).reduce((s, b) => s + (G.bizValue ? G.bizValue(st, b) : b.cost * S.businessValue), 0)
+    + (p.bonds || []).reduce((s, b) => s + b.count * G.bondValue(st, b), 0)
+    + Object.entries(p.etf || {}).reduce((s, [k, u]) => s + u * G.etfPrice(st, k), 0)
+    + (p.futures || []).reduce((s, f) => s + G.futureValue(st, f), 0)
+    - (p.loan || 0);
 
   return G;
 })();

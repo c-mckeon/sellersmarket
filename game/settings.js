@@ -27,10 +27,15 @@ const GAME_SETTINGS = {
                              // swinging prices wildly.
     shareRange: 5,           // shares count as no more than 5× above or below balance
     demandWeight: 0.3,       // how hard unmet needs push prices up (0 = ignore needs)
+    capacityWeight: 2,       // what players' businesses can make in a round counts as this many rounds of stock.
+                             // So building lots of one thing pushes its price down. 0 = only count what's held.
+    floors: { gold: 0.8 },   // these never sell below this many times base (gold is a store of value)
+    spread: 0.05,            // the market buys from you this much under the price, and sells this much over it
+                             // (0.05 = 5%). Makes it pay to supply your own inputs.     // these never sell below this many times base (gold is a store of value)
   },
 
   // Production
-  extractOutput: 1,        // multiplies what every mine, farm and well makes (1 = as listed on the Territories tab)
+  extractOutput: 1.2,      // multiplies what every mine, farm and well makes (1 = as listed on the Territories tab)
   overflowSale: 0,         // anything that doesn't fit in your stockpile is sold off at this share of the price (0 = it's lost)
 
   // Building
@@ -39,7 +44,14 @@ const GAME_SETTINGS = {
 
   // Running costs: paid overnight for each business, as a share of its base build cost, × the territory's
   // cost level × inflation. A business whose wages can't be paid sits idle the next midday.
-  wageRate: 0.04,
+  wageRate: 0.03,
+
+  // Finance: the government tightens or loosens lending at each central bank review
+  finance: {
+    tightenAbove: 0.03,      // prices rising faster than 3% a round: you can borrow 5 points less of what you own
+    loosenBelow: 0.005,      // slower than 0.5%: 5 points more
+    borrowShareStep: 0.05, borrowShareMin: 0.3, borrowShareMax: 0.6,
+  },
 
   // Business value counted in net worth, as a share of what it cost to build
   businessValue: 0.6,
