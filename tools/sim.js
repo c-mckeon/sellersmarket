@@ -8,6 +8,9 @@
 //   cornered  one player holds at least 80% of a good (stock + on offer) while someone else bids for it,
 //             and holds more than it needs itself, but doesn't offer that surplus at up to twice the best bid
 //             (bots never do this on purpose, so this mainly checks the measure; people might)
+//   outlet    for each business, whether some other player could use what it makes: one of their
+//             businesses takes it (as an input or a stand-in), one of their contracts asks for it, or it's
+//             a building material. Doesn't depend on how well the bots play.
 //   short     someone bids for a good but no other player has any to spare beyond their own needs
 const engine = require("./engine");
 
@@ -19,8 +22,15 @@ const land = E.run("TERRITORIES").filter(t => !t.sea).map(t => t.id);
 
 // The nightly check, run after the afternoon auction
 const watch = st => {
-  const m = st.mon ||= { short: 0, shortGoods: {}, dead: 0, rounds: 0, firstDelivery: null, cornered: 0, contested: 0, corneredGoods: {}, lastDelivered: 0, lastBiz: st.businesses.length };
+  const m = st.mon ||= { outRaw: 0, nRaw: 0, outAll: 0, nAll: 0, short: 0, shortGoods: {}, dead: 0, rounds: 0, firstDelivery: null, cornered: 0, contested: 0, corneredGoods: {}, lastDelivered: 0, lastBiz: st.businesses.length };
   m.rounds++;
+  const usesOf = b => new Set([...Object.keys(b.inputs), ...Object.keys(b.inputs).flatMap(c => G.substitutesFor(b, c).map(([x]) => x))]);
+  st.businesses.forEach(biz => {
+    const g = G.BIZ_BY[biz.type].makes, raw = G.BIZ_BY[biz.type].kind === "extract";
+    const ok = G.isMaterial(g) || st.businesses.some(x => x.owner !== biz.owner && usesOf(G.BIZ_BY[x.type]).has(g))
+      || st.players.some(p => p.id !== biz.owner && p.contracts.some(k => k.goods[g]));
+    m.nAll++; m.outAll += ok; if (raw && g !== "water") { m.nRaw++; m.outRaw += ok; } // water: anyone can make it anywhere
+  });
   const traded = st.history.slice(-2).some(h => Object.keys(h.trades).length);
   const delivered = (st.stats.delivered || 0) > m.lastDelivered, built = st.businesses.length > m.lastBiz;
   if (!traded && !delivered && !built) m.dead++;
@@ -90,6 +100,7 @@ const summary = {
   "contracts delivered per player (median / max)": `${q(flat("delivered"), .5)} / ${Math.max(...flat("delivered"))}`,
   "players who never delivered": f(100 * flat("delivered").filter(x => !x).length / flat("delivered").length) + "%",
   "round of the first delivery (median; – = none)": (() => { const a = mons.map(m => m.firstDelivery ?? Infinity); const x = q(a, .5); return x === Infinity ? "–" : x; })(),
+  "has a possible buyer: mines etc. (not water) / all": `${f(100 * mons.reduce((s, m) => s + m.outRaw, 0) / mons.reduce((s, m) => s + m.nRaw, 0))}% / ${f(100 * mons.reduce((s, m) => s + m.outAll, 0) / mons.reduce((s, m) => s + m.nAll, 0))}%`,
   "stuck rounds: no trade, build or delivery": f(100 * avg(mons.map(m => m.dead / m.rounds))) + "%",
   "cornered (share of goods someone else wants)": f(100 * mons.reduce((s, m) => s + m.cornered, 0) / Math.max(1, mons.reduce((s, m) => s + m.contested, 0))) + "%",
   "most often cornered": Object.entries(corneredGoods).sort((a, b) => b[1] - a[1]).slice(0, 6).map(([id, n]) => `${id} ${n}`).join(", ") || "–",

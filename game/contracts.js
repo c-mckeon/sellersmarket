@@ -5,12 +5,15 @@
 //   discardContract  { contract }   once a round
 // Delivered and discarded contracts are replaced overnight.
 //
-// Contracts lean towards goods made far from home, so everyone has to trade:
+// Contracts lean towards goods made far from home, so everyone has to trade. Some goods can be raw
+// materials (settings.contracts.rawShare), so mines and farms have buyers from the first round.
+//
 //   distance of a good = steps from your home territory to the nearest source of the raw material
 //                        it needs that's furthest away (water and anything that can be made anywhere = 0)
 //   chance of a good   ∝ (1 + distance)²
 //   size               = settings.contracts.size raw-material units, split between its goods
 //   points             = raw units × pointsPerUnit × (1 + distanceBonus × average distance)
+//                        × (1 + tierBonus × average processing steps), so made goods pay more than raw ones
 
 (() => {
   const G = SMG, S = GAME_SETTINGS, C = S.contracts;
@@ -54,24 +57,30 @@
   // Goods that can't be made at all on this map (a raw material with no source) never appear
   G.contractGoods = () => C.goods.filter(id => G.rawsOf(id).every(raw => { const s = sourcesOf(raw); return !s || s.length; }));
 
+  // Raw goods a contract can ask for: any with a source on the map, except ones that can be had anywhere (water)
+  G.contractRaws = () => COMMODITIES.filter(c => c.type === "raw" && !anywhere.has(c.id) && sourcesOf(c.id)?.length).map(c => c.id);
+
   G.newContract = (st, p) => {
     const home = p.home || p.pos;
     let pool = G.contractGoods().map(id => ({ id, d: G.distanceOf(id, home) }));
+    let raws = (C.rawShare ? G.contractRaws() : []).map(id => ({ id, d: G.distanceOf(id, home) }));
     const [lo, hi] = C.goodsPerContract;
     const k = lo + Math.floor(G.rand(st) * (hi - lo + 1));
     const chosen = [];
     for (let i = 0; i < k && pool.length; i++) {
-      const total = pool.reduce((s, x) => s + (1 + x.d) ** 2, 0);
-      let r = G.rand(st) * total, pick = pool[0];
-      for (const x of pool) { r -= (1 + x.d) ** 2; if (r <= 0) { pick = x; break; } }
-      chosen.push(pick); pool = pool.filter(x => x !== pick);
+      // Each good on the contract is a raw one with chance settings.contracts.rawShare
+      const from = raws.length && C.rawShare && G.rand(st) < C.rawShare ? raws : pool;
+      const total = from.reduce((s, x) => s + (1 + x.d) ** 2, 0);
+      let r = G.rand(st) * total, pick = from[0];
+      for (const x of from) { r -= (1 + x.d) ** 2; if (r <= 0) { pick = x; break; } }
+      chosen.push(pick); pool = pool.filter(x => x !== pick); raws = raws.filter(x => x !== pick);
     }
     const goods = {};
     let raw = 0;
     chosen.forEach(x => { const q = Math.max(1, Math.round(C.size / chosen.length / G.rawUnits(x.id))); goods[x.id] = q; raw += q * G.rawUnits(x.id); });
-    const avgD = chosen.reduce((s, x) => s + x.d, 0) / chosen.length;
+    const avgD = chosen.reduce((s, x) => s + x.d, 0) / chosen.length, avgT = chosen.reduce((s, x) => s + G.tier(x.id), 0) / chosen.length;
     st.nextContractId = (st.nextContractId || 0) + 1;
-    return { id: st.nextContractId, goods, points: Math.max(1, Math.round(raw * C.pointsPerUnit * (1 + C.distanceBonus * avgD))), drawn: st.round };
+    return { id: st.nextContractId, goods, points: Math.max(1, Math.round(raw * C.pointsPerUnit * (1 + C.distanceBonus * avgD) * (1 + (C.tierBonus || 0) * avgT))), drawn: st.round };
   };
 
   const refill = st => st.players.forEach(p => { while (p.contracts.length < C.hand) p.contracts.push(G.newContract(st, p)); });

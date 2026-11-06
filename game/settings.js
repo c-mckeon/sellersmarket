@@ -30,6 +30,8 @@ const GAME_SETTINGS = {
     pointsPerUnit: 0.5,    // points per raw-material unit delivered
     distanceBonus: 0.15,   // +15% points for every step the goods' nearest source is away from you
     // The goods that contracts ask for. The other goods only matter as steps in making these.
+    rawShare: 0.3,         // chance that each good on a contract is a raw one (wood, clay, coal…) instead
+    tierBonus: 0.25,        // +this share of points per processing step (raw 0, lumber 1, steel 2…)
     goods: ["bread", "flour", "lumber", "iron", "glass", "ceramic", "paper", "fuel", "plastic", "copper",
             "aluminium", "cement", "steel", "wire"],
   },
@@ -49,6 +51,24 @@ const GAME_SETTINGS = {
 
   // Production
   factoryRuns: 1,          // a factory runs up to this many times a round, while it has the inputs
+  // Stand-ins: a factory short of an input can use another good instead, at `ratio` units of it per unit
+  // missing (`at`: only these factories). The real input is always used first. This gives most raw
+  // goods more than one use, so there's usually someone who could buy what you make.
+  substitutes: [
+    { for: "coal",      use: "wood",       ratio: 2 },                          // charcoal, in any furnace or kiln
+    { for: "coal",      use: "crude_oil",  ratio: 1 },                          // oil-fired
+    { for: "sawdust",   use: "wood",       ratio: 1, at: ["paper_mill"] },      // pulp from logs
+    { for: "flour",     use: "wheat",      ratio: 2, at: ["bakery"] },          // wholegrain, milled on site
+    { for: "crude_oil", use: "wheat",      ratio: 3, at: ["oil_refinery"] },    // biofuel
+    { for: "crude_oil", use: "wheat",      ratio: 3, at: ["plastics_plant"] },  // bioplastic
+    { for: "sawdust",   use: "wheat",      ratio: 2, at: ["paper_mill"] },      // straw pulp
+    { for: "limestone", use: "clay",       ratio: 1, at: ["cement_kiln"] },     // clay cement
+    { for: "clay",      use: "bauxite",    ratio: 1, at: ["kiln"] },            // bauxite refractories
+    { for: "iron",      use: "iron_ore",   ratio: 3, at: ["steelworks"] },      // direct reduction
+    { for: "gold_ore",  use: "copper_ore", ratio: 2, at: ["gold_refinery"] },   // gold from copper slimes
+    { for: "slag",      use: "fly_ash",    ratio: 1, at: ["cement_kiln"] },
+    { for: "fly_ash",   use: "slag",       ratio: 1, at: ["concrete_plant"] },
+  ],
   extractOutput: 0.6,      // multiplies what every mine, farm and well makes (1 = as listed on the Territories tab)
 
   // ---------- Switched off for now ----------
