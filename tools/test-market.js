@@ -31,6 +31,7 @@ eq("last price outside the range: nearest edge (low)", G.clearingPrice([o(5, 10)
 eq("more buyers than sellers: top of the range", G.clearingPrice([o(6, 12)], [o(5, 10)], 5), 6);
 eq("more sellers than buyers: bottom of the range", G.clearingPrice([o(6, 10)], [o(5, 12)], 6), 5);
 
+eq("best bid wins and pays just above the losing bid, not its own bid", G.clearingPrice([o(5, 1), o(2, 1)], [o(1, 1)], 2), 3);
 eq("middle of an odd gap rounds to a whole number", G.clearingPrice([o(6, 10)], [o(3, 10)]), 5);
 
 // ---------- Fills, through the real game ----------

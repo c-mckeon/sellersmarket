@@ -152,7 +152,10 @@
   // price halfway to the limit.
   G.clearingPrice = (bids, asks, ref) => {
     if (!bids.length || !asks.length) return null;
-    const prices = [...new Set([...bids, ...asks].map(o => o.price))].sort((a, b) => a - b);
+    // Every whole-number price that could matter: each order price and the prices either side of it.
+    // (Demand and supply only change at order prices, so these cover every possible outcome; looking
+    // just beside the order prices finds e.g. "3: just above the losing bid of 2", not only "5: my bid".)
+    const prices = [...new Set([...bids, ...asks].flatMap(o => [o.price - 1, o.price, o.price + 1]).filter(x => x >= 1))].sort((a, b) => a - b);
     const at = P => {
       const d = bids.filter(o => o.price >= P).reduce((s, o) => s + o.qty, 0);
       const s = asks.filter(o => o.price <= P).reduce((s, o) => s + o.qty, 0);
