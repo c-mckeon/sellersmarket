@@ -812,3 +812,5 @@ tr.flash td { animation: tradeflashrow 1.6s ease-out; }
 .drctl .dnow { color: var(--ink); font-weight: 600; }
 .mtag.want { background: color-mix(in srgb, var(--accent) 16%, transparent); color: var(--ink); }
 .qc-want { font-size: 10.5px; font-weight: 700; color: var(--accent); }
+.depthbox .grid { stroke: var(--line); stroke-width: 1; }
+.depthbox .gl { font-size: 9px; fill: var(--muted); font-variant-numeric: tabular-nums; }

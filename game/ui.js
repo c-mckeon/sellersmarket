@@ -610,13 +610,24 @@
     const has = f => Object.keys(f.segs).length || f.trade != null;
     const kept = frames.filter((f, i) => has(f) || f.label === "Now" || (i > 0 && has(frames[i - 1])));
     frames.length = 0; frames.push(...kept);
-    // Each moment's own price range (at least 12 wide), carried forward if it's empty
-    let prev = null, maxQ = 1;
-    frames.forEach(f => {
-      const v = Object.values(f.segs).map(s => s.p).concat(f.trade ?? []);
-      Object.values(f.segs).forEach(s => maxQ = Math.max(maxQ, s.x0 + s.w));
+    // The price scale. Each moment covers the 6 prices nearest the spread on each side (and the trade),
+    // so a few far-off orders can't squash the chart; those are pinned to the edge. Each moment's scale
+    // also covers the moments either side of it, so a bar that's arriving or leaving is always on screen
+    // while it grows or shrinks.
+    let maxQ = 1;
+    const near = f => {
+      const segs = Object.values(f.segs);
+      segs.forEach(x => maxQ = Math.max(maxQ, x.x0 + x.w));
+      const bids = [...new Set(segs.filter(x => x.side === "b").map(x => x.p))].sort((a, b) => b - a).slice(0, 6);
+      const asks = [...new Set(segs.filter(x => x.side === "a").map(x => x.p))].sort((a, b) => a - b).slice(0, 6);
+      return [...bids, ...asks].concat(f.trade ?? []);
+    };
+    const own = frames.map(near);
+    let prev = null;
+    frames.forEach((f, i) => {
+      const v = [...(own[i - 1] || []), ...own[i], ...(own[i + 1] || [])];
       if (!v.length) { [f.lo, f.hi] = prev || [0, 12]; return; }
-      const a = Math.min(...v), z = Math.max(...v), w = Math.max(12, (z - a) * 1.3), mid = (a + z) / 2;
+      const a = Math.min(...v), z = Math.max(...v), w = Math.max(12, (z - a) * 1.25), mid = (a + z) / 2;
       f.lo = mid - w / 2; f.hi = mid + w / 2; prev = [f.lo, f.hi];
     });
     return { frames, maxQ, empty: frames.length < 2 || frames.every(f => !Object.keys(f.segs).length) };
@@ -639,23 +650,31 @@
   const still = (f, C) => blend(f, f, 1, C);
   function drawDepthAnim(D, s) {
     const W = 320, H = 250, top = 22, bot = 14, cx = W / 2, half = cx - 34, bh = 9;
-    const Y = p => top + (s.hi - p) / (s.hi - s.lo || 1) * (H - top - bot), k = half / D.maxQ;
+    const Yraw = p => top + (s.hi - p) / (s.hi - s.lo || 1) * (H - top - bot), k = half / D.maxQ;
+    const Y = p => Math.min(H - bot, Math.max(top, Yraw(p)));               // far-off prices are pinned to the edge
+    const pinned = p => Yraw(p) < top - 0.5 || Yraw(p) > H - bot + 0.5;
     const segs = Object.values(s.segs).filter(x => x.w > 0.02 && x.op > 0.02);
     // Best bid and ask still standing (unfilled parts only): the spread band between them
     const live = side => segs.filter(x => x.side === side && x.rgb && x.op > 0.5);
     const bid = Math.max(-Infinity, ...live("b").map(x => x.p)), ask = Math.min(Infinity, ...live("a").map(x => x.p));
     let g = "";
+    // Light gridlines at round prices, labelled at the left edge; they glide with the scale
+    const span = s.hi - s.lo, step = [1, 2, 5, 10, 20, 25, 50, 100, 200, 250, 500, 1000, 2000, 5000].find(x => span / x <= 5) || 10000;
+    for (let v = Math.ceil(s.lo / step) * step; v <= s.hi; v += step) {
+      const y = Yraw(v); if (y < top - 1 || y > H - bot + 1) continue;
+      g += `<line class="grid" x1="30" x2="${W - 4}" y1="${y.toFixed(1)}" y2="${y.toFixed(1)}"/><text class="gl" x="26" y="${(y + 3).toFixed(1)}" text-anchor="end">${m(v)}</text>`;
+    }
     if (isFinite(bid) && isFinite(ask) && ask > bid) g += `<rect class="band" x="4" y="${Y(ask).toFixed(1)}" width="${W - 8}" height="${(Y(bid) - Y(ask)).toFixed(1)}"/>`;
     if (s.trade != null && s.tradeOp > 0.02) g += `<line class="tline" opacity="${s.tradeOp.toFixed(2)}" x1="4" x2="${W - 4}" y1="${Y(s.trade).toFixed(1)}" y2="${Y(s.trade).toFixed(1)}"/>
       <text class="tlbl" opacity="${s.tradeOp.toFixed(2)}" x="${W - 6}" y="${(Y(s.trade) - 6).toFixed(1)}" text-anchor="end">${m(s.trade)}</text>`;
     segs.forEach(x => {
       const y = Y(x.p) - bh / 2, w = x.w * k, off = x.x0 * k, fill = `rgb(${x.rgb.map(Math.round).join(",")})`;
       const bx = x.side === "a" ? cx + off : cx - off - w;
-      g += `<rect x="${bx.toFixed(1)}" y="${y.toFixed(1)}" width="${w.toFixed(1)}" height="${bh}" rx="2" fill="${fill}" opacity="${x.op.toFixed(2)}"/>`;
+      g += `<rect x="${bx.toFixed(1)}" y="${y.toFixed(1)}" width="${w.toFixed(1)}" height="${bh}" rx="2" fill="${fill}" opacity="${(x.op * (pinned(x.p) ? 0.35 : 1)).toFixed(2)}"/>`;
     });
     // Price labels for standing levels, faded in with their bars
     const seen = new Set();
-    segs.filter(x => x.op > 0.5).forEach(x => {
+    segs.filter(x => x.op > 0.5 && !pinned(x.p)).forEach(x => {
       const key = x.side + Math.round(x.p); if (seen.has(key)) return; seen.add(key);
       g += `<text class="px" x="${x.side === "a" ? cx - 5 : cx + 5}" y="${(Y(x.p) + 3.5).toFixed(1)}" text-anchor="${x.side === "a" ? "end" : "start"}" opacity="${Math.min(1, x.w).toFixed(2)}">${m(Math.round(x.p))}</text>`;
     });
@@ -668,11 +687,14 @@
     if (D.empty) { label.textContent = `Nothing to replay: nobody bid for or offered ${G.COM[id].name.toLowerCase()} in the last 4 rounds.`; label.classList.add("dnow"); done(); return () => {}; }
     label.classList.add("dnow");
     const MOVE = 650, HOLD = 750, F = D.frames;
-    let k = 0, t0 = performance.now(), raf = 0;
+    // The clock starts on the first frame: a browser stamps each frame with when the frame began, which can
+    // be a moment before the click was handled, so time measured from the click could come out negative
+    let k = 0, t0 = null, raf = 0;
     const ease = t => t < .5 ? 2 * t * t : 1 - (-2 * t + 2) ** 2 / 2;
     const tick = now => {
-      const el = now - t0, move = k === 0 ? 0 : MOVE, hold = F[k].hold ?? HOLD;
-      box.innerHTML = drawDepthAnim(D, el < move ? blend(F[k - 1], F[k], ease(el / move), C) : still(F[k], C));
+      if (t0 == null) t0 = now;
+      const el = Math.max(0, now - t0), move = k === 0 ? 0 : MOVE, hold = F[k].hold ?? HOLD;
+      box.innerHTML = drawDepthAnim(D, k > 0 && el < move ? blend(F[k - 1], F[k], ease(el / move), C) : still(F[k], C));
       label.textContent = `${F[k].label} (${k + 1}/${F.length})`;
       if (el >= move + hold) { if (++k >= F.length) return done(); t0 = now; }
       raf = requestAnimationFrame(tick);
