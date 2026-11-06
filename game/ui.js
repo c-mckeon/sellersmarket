@@ -128,7 +128,7 @@
     if (o.name === "sellEtf") return `Sell ${a.units} ${BROKER.etfs.tickers[a.sector]}`;
     return o.name;
   };
-  let flashMsg = "", qTimer = null; // qTimer: the quote board replay
+  let flashMsg = "", qTimer = null, dStop = () => {}; // qTimer: the quote board replay; dStop: stops the order book replay
   const flash = msg => { flashMsg = msg; };
 
   function render() {
@@ -524,6 +524,88 @@
     <p class="muted small dnote">Bars add up from the best price outwards; the number is the amount at that price. ● = includes yours.</p></div>`;
   }
 
+  // ----- Order book replay: the last 4 rounds of one good's book, animated -----
+  // Each auction gives two pictures: the book with everyone's orders in (bids may cross asks), then
+  // what was left after it cleared (with the trade). Then the book as it stands now.
+  // The price scale follows each picture's prices and, like everything else, is blended from one picture
+  // to the next, so the chart zooms and slides smoothly instead of jumping.
+  function depthFrames(id) {
+    const cum = (lv, n = 0) => lv.map(([p, q]) => [p, n += q]); // running totals from the best price outwards
+    const frames = [];
+    st.history.filter(h => h.depth).forEach(h => {
+      const d = h.depth[id] || { pre: { b: [], a: [] }, post: { b: [], a: [] } }, tr = h.trades[id];
+      frames.push({ label: `Round ${h.round} ${h.phase}: orders in`, b: cum(d.pre.b), a: cum(d.pre.a) });
+      frames.push({ label: `Round ${h.round} ${h.phase}: ${tr ? `traded ${tr.qty} at ${m(tr.price)}` : "nothing traded"}`, b: cum(d.post.b), a: cum(d.post.a), trade: tr ? tr.price : null });
+    });
+    frames.push({ label: "Now", b: cum(G.depth(st, id, "buy").slice(0, 10).map(x => [x.price, x.qty])), a: cum(G.depth(st, id, "sell").slice(0, 10).map(x => [x.price, x.qty])) });
+    const ps = frames.flatMap(f => [...f.b, ...f.a].map(([p]) => p).concat(f.trade ?? []));
+    const lo = Math.min(...ps), hi = Math.max(...ps), pad = Math.max(1, (hi - lo) * 0.08);
+    const maxCum = Math.max(1, ...frames.flatMap(f => [f.b.at(-1)?.[1] || 0, f.a.at(-1)?.[1] || 0]));
+    const prices = [...new Set(ps)].sort((a, b) => a - b), gap = Math.min(...prices.slice(1).map((p, i) => p - prices[i]), hi - lo || 1);
+    // Each picture's own price range (at least 12 wide), carried forward from the last one if it's empty
+    let prev = null;
+    frames.forEach(f => {
+      const v = [...f.b, ...f.a].map(([p]) => p).concat(f.trade ?? []);
+      if (!v.length) { if (prev) [f.lo, f.hi] = prev; return; }
+      let a = Math.min(...v), z = Math.max(...v); const w = Math.max(12, (z - a) * 1.25), m0 = (a + z) / 2;
+      f.lo = m0 - w / 2; f.hi = m0 + w / 2; prev = [f.lo, f.hi];
+    });
+    return { frames, lo: lo - pad, hi: hi + pad, maxCum, gap, empty: !ps.length };
+  }
+  // A picture's numbers, keyed so two pictures can be blended: bar widths by side+price, band edges, trade
+  const depthState = (f, D) => ({ lo: f.lo ?? D.lo, hi: f.hi ?? D.hi,
+    bars: Object.fromEntries([...f.b.map(([p, c]) => ["b" + p, c]), ...f.a.map(([p, c]) => ["a" + p, c])]),
+    bid: f.b[0]?.[0] ?? null, ask: f.a[0]?.[0] ?? null, trade: f.trade ?? null, tradeOp: f.trade != null ? 1 : 0,
+  });
+  const mix = (a, b, t) => a + (b - a) * t;
+  const blend = (s0, s1, t) => {
+    const bars = {};
+    new Set([...Object.keys(s0.bars), ...Object.keys(s1.bars)]).forEach(k => bars[k] = mix(s0.bars[k] || 0, s1.bars[k] || 0, t));
+    const edge = (x, y) => x == null ? y : y == null ? x : mix(x, y, t);
+    return { bars, bid: edge(s0.bid, s1.bid), ask: edge(s0.ask, s1.ask), trade: s1.trade ?? s0.trade, tradeOp: mix(s0.tradeOp, s1.tradeOp, t), lo: mix(s0.lo, s1.lo, t), hi: mix(s0.hi, s1.hi, t) };
+  };
+  function drawDepthAnim(D, s) {
+    const W = 320, H = 250, top = 22, bot = 18, cx = W / 2, half = cx - 40;
+    const Y = p => top + (s.hi - p) / (s.hi - s.lo || 1) * (H - top - bot);
+    const bh = Math.max(6, Math.min(12, (H - top - bot) / (s.hi - s.lo || 1) * 0.8));
+    let g = "";
+    if (s.bid != null && s.ask != null) {
+      const y1 = Y(Math.max(s.bid, s.ask)), y2 = Y(Math.min(s.bid, s.ask)), crossed = s.bid >= s.ask;
+      g += `<rect class="band${crossed ? " cross" : ""}" x="4" y="${y1.toFixed(1)}" width="${W - 8}" height="${Math.max(1, y2 - y1).toFixed(1)}"/>
+        <line class="edge sell" x1="4" x2="${W - 4}" y1="${Y(s.ask).toFixed(1)}" y2="${Y(s.ask).toFixed(1)}"/><line class="edge buy" x1="4" x2="${W - 4}" y1="${Y(s.bid).toFixed(1)}" y2="${Y(s.bid).toFixed(1)}"/>
+        ${y2 - y1 > 14 ? `<text class="sp" x="8" y="${((y1 + y2) / 2 + 4).toFixed(1)}">${crossed ? "crossed" : `spread ${m(Math.round(s.ask - s.bid))}`}</text>` : ""}`;
+    }
+    Object.entries(s.bars).forEach(([k, c]) => {
+      if (c < 0.05) return;
+      const sell = k[0] === "a", p = +k.slice(1), w = c / D.maxCum * half, y = Y(p) - bh / 2;
+      g += `<rect class="bar ${sell ? "sell" : "buy"}" x="${(sell ? cx : cx - w).toFixed(1)}" y="${y.toFixed(1)}" width="${w.toFixed(1)}" height="${bh.toFixed(1)}" rx="2"/>
+        <text class="px" x="${sell ? cx - 5 : cx + 5}" y="${(Y(p) + 3.5).toFixed(1)}" text-anchor="${sell ? "end" : "start"}" opacity="${Math.min(1, c).toFixed(2)}">${m(p)}</text>`;
+    });
+    if (s.trade != null && s.tradeOp > 0.02) g += `<g opacity="${s.tradeOp.toFixed(2)}"><line class="tline" x1="4" x2="${W - 4}" y1="${Y(s.trade).toFixed(1)}" y2="${Y(s.trade).toFixed(1)}"/>
+      <text class="tlbl" x="${W - 6}" y="${(Y(s.trade) - 4).toFixed(1)}" text-anchor="end">traded at ${m(s.trade)}</text></g>`;
+    return `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Order book replay"><g class="sell"><text class="lbl" x="${cx + 6}" y="12">Asks</text></g>
+      <text class="lbl" x="${cx - 6}" y="12" text-anchor="end">Bids</text><line class="axis" x1="${cx}" x2="${cx}" y1="${top - 6}" y2="${H - bot + 6}"/>${g}</svg>`;
+  }
+  // Play it: blend each picture into the next over 0.7s, hold 0.9s. Returns a stop function.
+  function playDepth(box, label, id, done) {
+    const D = depthFrames(id);
+    if (D.empty) { label.textContent = "No orders in the last 4 rounds."; done(); return () => {}; }
+    const states = D.frames.map(f => depthState(f, D)), MOVE = 700, HOLD = 900;
+    let k = 0, t0 = performance.now(), raf = 0;
+    const ease = t => t < .5 ? 2 * t * t : 1 - (-2 * t + 2) ** 2 / 2;
+    const tick = now => {
+      const el = now - t0;
+      if (el < MOVE && k > 0) box.innerHTML = drawDepthAnim(D, blend(states[k - 1], states[k], ease(el / MOVE)));
+      else box.innerHTML = drawDepthAnim(D, states[k]);
+      const f = D.frames[k], spr = f.b[0] && f.a[0] ? (f.b[0][0] >= f.a[0][0] ? " · bids cross asks" : ` · spread ${m(f.a[0][0] - f.b[0][0])}`) : "";
+      label.textContent = `${f.label}${spr} (${k + 1}/${D.frames.length})`;
+      if (el >= MOVE + HOLD || (k === 0 && el >= HOLD)) { if (++k >= states.length) return done(); t0 = now; }
+      raf = requestAnimationFrame(tick);
+    };
+    raf = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(raf);
+  }
+
   // One good: who makes and uses it, its book, price history, your orders and the order form
   function ticket(p, id, want) {
     const q = G.quote(vw, id), c = G.COM[id];
@@ -545,7 +627,8 @@
       </div>
       <p class="small muted tused">Used by: ${usedBy.join(" · ") || "no factory"}${S.depreciation?.on ? ` · ${G.lifeOf(id) ? `lasts ${G.lifeOf(id)} rounds` : "never goes off"}` : ""}</p>
       <div class="tcharts">
-        <div><h4>Order book</h4>${depthChart(q, yours)}</div>
+        <div><h4>Order book</h4><div class="depthbox">${depthChart(q, yours)}</div>
+          ${st.history.some(h => h.depth) ? `<div class="drctl"><button class="gbtn ghost" id="dPlay">▶ Replay last 4 rounds</button><span id="dLabel" class="muted small"></span></div>` : ""}</div>
         <div><h4>Price history</h4>${priceChart(id)}</div>
       </div>
       <div class="gtwo">
@@ -706,6 +789,14 @@
     }));
     root.querySelector("#gTicketClose")?.addEventListener("click", () => { ui.good = null; render(); });
     root.querySelector(".mall")?.addEventListener("toggle", e => ui.allOpen = e.target.open);
+    // Order book replay (last 4 rounds): ▶ starts it, ■ stops it; a redraw of the page stops it too
+    dStop(); dStop = () => {};
+    const dPlay = root.querySelector("#dPlay");
+    dPlay?.addEventListener("click", () => {
+      if (dPlay.dataset.on) { dStop(); dStop = () => {}; delete dPlay.dataset.on; dPlay.textContent = "▶ Replay last 4 rounds"; return; }
+      dPlay.dataset.on = 1; dPlay.textContent = "■ Stop";
+      dStop = playDepth(root.querySelector(".depthbox"), root.querySelector("#dLabel"), ui.good, () => { delete dPlay.dataset.on; dPlay.textContent = "▶ Replay again"; dStop = () => {}; });
+    });
     // Quote board replay: ▶ steps through the auctions, one every 0.7s; the slider jumps to any of them
     clearInterval(qTimer); qTimer = null;
     const qPlay = root.querySelector("#qPlay"), qSlide = root.querySelector("#qSlide");

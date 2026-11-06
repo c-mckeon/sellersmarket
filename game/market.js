@@ -202,6 +202,10 @@
     const quotesNow = () => { const q = {}; new Set(st.book.map(o => o.good)).forEach(id => { const b = G.bestBid(st, id), a = G.bestAsk(st, id);
       q[id] = { bid: b?.price ?? null, ask: a?.price ?? null, bq: b?.qty || 0, aq: a?.qty || 0 }; }); return q; };
     record.pre = quotesNow();
+    // The whole book (top 10 prices each side) before and after, for the order book replay
+    const depthNow = () => { const d = {}; new Set(st.book.map(o => o.good)).forEach(id => d[id] = {
+      b: G.depth(st, id, "buy").slice(0, 10).map(x => [x.price, x.qty]), a: G.depth(st, id, "sell").slice(0, 10).map(x => [x.price, x.qty]) }); return d; };
+    const before = depthNow();
     const mine = {}; // pid → messages
     const say = (pid, msg) => (mine[pid] ||= []).push(msg);
     COMMODITIES.forEach(c => {
@@ -242,7 +246,11 @@
     });
     // What was left on the book afterwards: best bid and ask (and how many at each) for every good with orders
     record.quotes = quotesNow();
+    const after = depthNow();
+    record.depth = {};
+    new Set([...Object.keys(before), ...Object.keys(after)]).forEach(id => record.depth[id] = { pre: before[id] || { b: [], a: [] }, post: after[id] || { b: [], a: [] } });
     st.history.push(record);
+    st.history.slice(0, -8).forEach(h => delete h.depth); // full books only for the last 4 rounds (8 auctions)
     if (st.history.length > 120) st.history.shift();
     const n = Object.keys(record.trades).length;
     G.log(st, n ? `Market: ${Object.entries(record.trades).map(([id, t]) => `${t.qty} ${G.COM[id].name} at ${G.money(t.price)}`).join(", ")}.` : "Market: nothing traded.");
