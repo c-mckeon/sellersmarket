@@ -1,155 +1,158 @@
 // Sellers Market game engine: simple computer players.
 // Deliberately basic: enough to test the rules and run simulations.
-// Each bot has a strategy for what to build:
-//   best        whatever earns most for its cost
-//   diversify   prefers sectors it doesn't own yet
-//   specialist  sticks to the sectors it already owns
-//   integrate   builds supply chains: businesses that use what it makes, or make what it needs
-//   mono        everything in one basket: only builds more of what it already has
+//
+// Every phase a bot:
+//   1. cancels its old orders and delivers any contract it can
+//   2. works out what it wants (contract goods, its factories' inputs, materials for its next build)
+//      and what it can spare (everything else)
+//   3. bids for wants and asks for spares, around its own guess of what each good is worth:
+//        guess = last traded price, or (never traded) raw-material units × settings.bots.perRawUnit
+//      Bids creep up each phase a want goes unfilled; asks creep down each phase a spare goes unsold.
+// In the afternoon it also builds (or heads somewhere it can build) something that feeds its contracts.
 
 (() => {
   const G = SMG, S = GAME_SETTINGS;
-  const sectorOf = {};
-  Object.entries(SECTORS).forEach(([k, s]) => s.items.forEach(i => sectorOf[i] = k));
-  G.sectorOfBiz = b => sectorOf[b.makes];
+  const B = S.bots || (S.bots = {
+    perRawUnit: 3,         // what a bot guesses a raw-material unit is worth, before anything has traded
+    bidStart: 0.8,         // first bid: 80% of its guess…
+    bidStep: 0.15,         // …+15% of the guess for every phase it goes unfilled…
+    bidMax: 3,             // …up to 3× the guess
+    askStart: 1.3,         // first ask: 130% of its guess…
+    askStep: 0.1,          // …−10% for every phase it goes unsold…
+    askMin: 0.4,           // …down to 40%
+    cashPerPhase: 0.6,     // spend at most this share of cash in one auction
+    reserve: { lumber: 4, iron: 2 }, // building materials a bot always keeps
+  });
 
-  // Profit per round of a business at today's prices (outputs minus inputs and wages)
-  G.bizProfit = (st, b, tid) => {
-    const rich = b.kind === "extract" ? G.richness(b, tid) * S.extractOutput : 1;
-    const out = Object.entries(b.outputs).reduce((s, [c, q]) => s + Math.floor(q * rich) * st.prices[c], 0);
-    const cost = Object.entries(b.inputs).reduce((s, [c, q]) => s + q * st.prices[c], 0);
-    const wage = b.base * S.buildCostScale * S.wageRate * (TERRITORY_INFO[tid].cost ?? 1) * st.priceLevel;
-    return out - cost - wage;
+  // A bot's private guess of what a good is worth
+  G.guess = (st, id) => st.lastTrade[id]?.price ?? Math.max(0.5, G.rawUnits(id) * B.perRawUnit * (1 + 0.15 * G.tier(id)));
+
+  // Every good in the making of `id` (including itself)
+  const treeMemo = {};
+  const treeOf = id => {
+    if (treeMemo[id]) return treeMemo[id];
+    const r = RECIPES.find(x => Object.keys(x.out)[0] === id);
+    return (treeMemo[id] = new Set([id, ...(r ? Object.keys(r.in).flatMap(i => [...treeOf(i)]) : [])]));
   };
 
-  const myNeeds = (st, p) => {
-    const need = {};
-    G.myBusinesses(st, p.id).forEach(b => Object.entries(G.BIZ_BY[b.type].inputs).forEach(([c, q]) => need[c] = (need[c] || 0) + q));
-    return need;
+  const addTo = (m, c, q) => { if (q > 0) m[c] = (m[c] || 0) + q; };
+
+  // What a bot wants to have in its stockpile right now
+  const wantsOf = (st, p) => {
+    const want = {};
+    // Contracts, the closest to done first: the two best
+    const progress = k => Object.entries(k.goods).reduce((s, [c, q]) => s + Math.min(q, p.stock[c] || 0) * G.rawUnits(c), 0)
+      / Object.entries(k.goods).reduce((s, [c, q]) => s + q * G.rawUnits(c), 0);
+    [...p.contracts].sort((a, b) => progress(b) + b.points / 50 - progress(a) - a.points / 50).slice(0, 2)
+      .forEach(k => Object.entries(k.goods).forEach(([c, q]) => addTo(want, c, q)));
+    // One run of every factory
+    G.myBusinesses(st, p.id).forEach(b => Object.entries(G.BIZ_BY[b.type].inputs).forEach(([c, q]) => addTo(want, c, q)));
+    // The next build, or at least a small reserve of building materials
+    if (p.plan) Object.entries(p.plan.cost).forEach(([c, q]) => addTo(want, c, q));
+    Object.entries(B.reserve).forEach(([c, q]) => { if ((want[c] || 0) < q) want[c] = q; });
+    return want;
   };
 
-  // How much a bot likes an option, by strategy
-  const appeal = (st, p, o, tid) => {
-    const roi = G.bizProfit(st, o.b, tid) / o.cost;
-    const mine = new Set(G.myBusinesses(st, p.id).map(x => G.sectorOfBiz(G.BIZ_BY[x.type])));
-    const sec = G.sectorOfBiz(o.b);
-    if (p.strategy === "diversify") return roi * (mine.has(sec) ? 0.6 : 1.5);
-    if (p.strategy === "specialist") return mine.size && !mine.has(sec) ? roi * 0.3 : roi * 1.3;
-    if (p.strategy === "mono") {
-      // Everything in one basket: only more of what it already makes
-      const types = new Set(G.myBusinesses(st, p.id).map(x => x.type));
-      return !types.size || types.has(o.b.id) ? roi * 3 : roi * 0.1;
-    }
-    if (p.strategy === "integrate") {
-      // Likes businesses that use what it makes, or make what it needs
-      const makes = new Set(), needs = new Set();
-      G.myBusinesses(st, p.id).forEach(x => { const t = G.BIZ_BY[x.type]; Object.keys(t.outputs).forEach(c => makes.add(c)); Object.keys(t.inputs).forEach(c => needs.add(c)); });
-      const fits = Object.keys(o.b.inputs).some(c => makes.has(c)) || Object.keys(o.b.outputs).some(c => needs.has(c));
-      return roi * (fits ? 1.6 : 0.8);
-    }
-    return roi;
-  };
+  const trade = (st, p) => {
+    p.mem ||= { bid: {}, ask: {} };
+    G.act(st, p.id, "cancelAll", {});
+    // Deliver whatever we can, best first
+    [...p.contracts].sort((a, b) => b.points - a.points).forEach(k => { if (G.canDeliver(p, k)) G.act(st, p.id, "deliver", { contract: k.id }); });
+    // Throw away a contract that's gone nowhere for a long time
+    const stale = p.contracts.find(k => st.round - k.drawn >= 8 && !Object.keys(k.goods).some(c => p.stock[c]));
+    if (stale && p.discardRound !== st.round) G.act(st, p.id, "discardContract", { contract: stale.id });
 
-  // ---------- Card sense ----------
-  // How much a player stands to gain or lose per round from each commodity: what their businesses
-  // can make, plus what they hold.
-  const exposure = (st, pid) => {
-    const x = {};
-    G.myBusinesses(st, pid).forEach(biz => { const b = G.BIZ_BY[biz.type];
-      Object.entries(b.outputs).forEach(([c, q], i) => { if (i === 0) x[c] = (x[c] || 0) + q * st.prices[c] * (b.kind === "extract" ? G.richness(b, biz.territory) : 1); }); });
-    const p = G.player(st, pid);
-    Object.entries(p.stock).forEach(([c, q]) => x[c] = (x[c] || 0) + q * st.prices[c] * 0.3);
-    return x;
-  };
-  const commoditiesOf = (target, chosen) => G.COM[target] ? [target] : target.startsWith("sector:") ? SECTORS[target.slice(7)].items
-    : target === "all" ? COMMODITIES.map(c => c.id) : (target === "chosen commodity" || target === "shorts on it") ? [chosen] : [];
-
-  // Score a card for player p: (our gain) − (leader's gain). Returns the best way to play it.
-  G.bestCard = (st, p) => {
-    const rivals = st.players.filter(x => x.id !== p.id);
-    if (!p.hand.length || !rivals.length) return null;
-    const leader = rivals.reduce((a, b) => G.netWorth(st, a) >= G.netWorth(st, b) ? a : b);
-    const me = exposure(st, p.id), them = exposure(st, leader.id);
-    const myBiz = G.myBusinesses(st, p.id), theirBiz = G.myBusinesses(st, leader.id);
-    const bizValue = biz => { const b = G.BIZ_BY[biz.type]; return G.bizProfit(st, b, biz.territory) + 1; };
-    let best = null;
-    p.hand.forEach(id => {
-      const card = G.CARD[id], needs = G.cardNeeds(card);
-      const chosenOpts = needs.commodity ? COMMODITIES.filter(c => c.type !== "waste").map(c => c.id) : [null];
-      chosenOpts.forEach(chosen => {
-        let score = 0;
-        const args = { card: id };
-        if (chosen) args.commodity = chosen;
-        card.fx.forEach(([hook, target, op, v]) => {
-          const mult = hook === "demand" ? v : hook === "supply" ? 1 / v : hook === "stock" ? v : null;
-          if (mult != null) commoditiesOf(target, chosen).forEach(c => score += ((me[c] || 0) - (them[c] || 0)) * (mult - 1) * (hook === "stock" ? 0.3 : 1));
-          if (hook === "yield") {
-            if (target === "your business" && myBiz.length) { const b = myBiz.reduce((a, c) => bizValue(a) > bizValue(c) ? a : c); args.ownBusiness = b.id; score += bizValue(b) * (v - 1); }
-            if (target === "target business" && theirBiz.length) { const b = theirBiz.reduce((a, c) => bizValue(a) > bizValue(c) ? a : c); args.targetBusiness = b.id; score -= bizValue(b) * (v - 1); }
-          }
-          if (hook === "value" && theirBiz.length) { const b = theirBiz.at(-1); args.targetBusiness = b.id; score += b.cost * (1 - v) * 0.2; }
-          if ((hook === "premium" || hook === "loan") && leader.loan > 0) { args.targetPlayer = leader.id; score += leader.loan * 0.05; }
-          if (hook === "wages" && myBiz.length) { args.ownBusiness = myBiz[0].id; score += 5; }
-          if (hook === "contract" && myBiz.length) { args.ownBusiness = myBiz[0].id; score += 10; }
-          if (hook === "counter") score += 3;
-        });
-        const n = G.cardNeeds(card);
-        if ((n.ownBusiness && !args.ownBusiness) || (n.targetBusiness && !args.targetBusiness) || (n.targetPlayer && !args.targetPlayer)) return;
-        const full = p.hand.length >= GAME_SETTINGS.handMax;
-        if ((score > 0.5 || (full && score >= 0)) && (!best || score > best.score)) best = { score, args };
-      });
+    const want = wantsOf(st, p);
+    const end = st.round >= st.rounds - 2;
+    // Make room for what we want: throw away the cheapest spares
+    let short = Object.entries(want).reduce((s, [c, q]) => s + Math.max(0, q - (p.stock[c] || 0)), 0);
+    let over = G.used(p) + short - p.space;
+    Object.keys(p.stock).filter(c => p.stock[c] > (want[c] || 0)).sort((a, b) => G.guess(st, a) - G.guess(st, b)).forEach(c => {
+      if (over <= 0) return;
+      const n = Math.min(over, p.stock[c] - (want[c] || 0));
+      G.act(st, p.id, "dump", { id: c, qty: n }); over -= n;
     });
-    return best ? best.args : null;
-  };
-
-  G.bots.morning = (st, p) => {
-    const need = myNeeds(st, p);
-    // Sell everything not needed as an input; pay to get rid of waste
+    // Sell spares
     Object.entries({ ...p.stock }).forEach(([c, q]) => {
-      const extra = q - (need[c] || 0);
-      if (extra <= 0) return;
-      if (st.prices[c] > 0 || p.cash > -st.prices[c] * extra + 50) G.act(st, p.id, "sell", { id: c, qty: extra });
+      const spare = q - (want[c] || 0);
+      if (spare <= 0) { delete p.mem.ask[c]; return; }
+      if (G.COM[c].type === "waste" && !RECIPES.some(r => r.in[c])) { G.act(st, p.id, "dump", { id: c, qty: spare }); return; }
+      const age = p.mem.ask[c] = (p.mem.ask[c] ?? -1) + 1;
+      const price = G.guess(st, c) * Math.max(end ? 0.1 : B.askMin, B.askStart - B.askStep * age);
+      G.act(st, p.id, "placeOrder", { id: c, side: "sell", price: Math.max(0.01, price), qty: spare });
     });
-    // Collect matured thinking: repay the loan when comfortably off
-    if (p.loan > 0 && p.cash > 400) G.act(st, p.id, "repay", { amount: Math.min(p.loan, p.cash - 300) });
-    // More space if inputs plus today's production won't fit
-    const totalNeed = Object.values(need).reduce((a, b) => a + b, 0);
-    const making = G.myBusinesses(st, p.id).reduce((s, biz) => { const b = G.BIZ_BY[biz.type];
-      return s + Object.values(b.outputs).reduce((x, q) => x + Math.floor(q * (b.kind === "extract" ? G.richness(b, biz.territory) * S.extractOutput : 1)), 0); }, 0);
-    const missingInputs = Object.entries(need).reduce((s, [c, q]) => s + Math.max(0, q - (p.stock[c] || 0)), 0);
-    for (let k = 0; k < 3 && G.free(p) < missingInputs + Math.max(0, making - totalNeed) && p.cash > G.spaceUpgradeCost(p) + 100; k++) G.act(st, p.id, "upgradeSpace");
-    // Buy what's missing for one run of each business
-    Object.entries(need).forEach(([c, q]) => {
-      const missing = q - (p.stock[c] || 0);
-      if (missing > 0) G.act(st, p.id, "buy", { id: c, qty: Math.min(missing, G.free(p)) });
-    });
-    // Borrow if something here would pay for itself quickly and we're short
-    const best = G.buildable(st, p.pos, p.id).map(o => ({ ...o, profit: G.bizProfit(st, o.b, p.pos) }))
-      .filter(o => o.profit > 0 && o.cost / o.profit <= 8).sort((a, b) => a.cost / a.profit - b.cost / b.profit)[0];
-    if (best && p.cash < best.cost + 50) {
-      const want = best.cost + 50 - p.cash, room = G.borrowLimit(st, p) - p.loan;
-      if (room > want) G.act(st, p.id, "borrow", { amount: Math.ceil(want) });
-    }
-    // Park spare cash in bonds
-    if (!best && p.cash > 600) G.act(st, p.id, "buyBond", { length: 5, count: Math.floor((p.cash - 400) / 100) });
+    // Short of space? Dump waste
+    if (G.spaceLeft(st, p) < 3) Object.keys(p.stock).filter(c => G.COM[c].type === "waste").forEach(c => G.act(st, p.id, "dump", { id: c, qty: p.stock[c] }));
+    // Buy wants, most valuable first
+    let budget = p.cash * B.cashPerPhase;
+    Object.entries(want).map(([c, q]) => [c, q - (p.stock[c] || 0)]).filter(([, n]) => n > 0)
+      .sort((a, b) => G.rawUnits(b[0]) - G.rawUnits(a[0]))
+      .forEach(([c, n]) => {
+        const age = p.mem.bid[c] = (p.mem.bid[c] ?? -1) + 1;
+        const price = Math.round(G.guess(st, c) * Math.min(B.bidMax, B.bidStart + B.bidStep * age) * 100) / 100;
+        n = Math.min(n, Math.max(0, G.spaceLeft(st, p)), Math.floor(budget / price));
+        if (n > 0 && G.act(st, p.id, "placeOrder", { id: c, side: "buy", price, qty: n }).ok) budget -= price * n;
+      });
+    Object.keys(p.mem.bid).forEach(c => { if (!want[c] || (p.stock[c] || 0) >= want[c]) delete p.mem.bid[c]; });
   };
 
-  G.bots.afternoon = (st, p) => {
-    // Build here if something pays for itself within 12 rounds
-    const opts = G.buildable(st, p.pos, p.id)
-      .map(o => ({ ...o, profit: G.bizProfit(st, o.b, p.pos) }))
-      .filter(o => o.profit > 0 && o.cost <= p.cash - 50 && o.cost / o.profit <= 12
-        && Object.values(o.b.inputs).reduce((x, y) => x + y, 0) <= p.space)
-      .sort((a, b) => appeal(st, p, b, p.pos) - appeal(st, p, a, p.pos));
-    if (opts.length) G.act(st, p.id, "build", { type: opts[0].b.id });
-    else {
-      // Otherwise wander towards somewhere promising
-      const score = tid => Math.max(0, ...G.buildable(st, tid, p.id).map(o => appeal(st, p, o, tid)));
-      const next = G.neighbours(p.pos).map(t => ({ t, s: score(t) + G.rand(st) * 0.02 })).sort((a, b) => b.s - a.s)[0];
-      if (next) G.act(st, p.id, "move", { to: next.t });
-    }
-    // Cards: play the one that helps us most relative to the leader (or hurts the leader most)
-    const choice = G.bestCard(st, p);
-    if (choice) G.act(st, p.id, "playCard", choice);
+  // ---------- Building ----------
+  // How useful a business would be to this bot
+  // Reads the market: goods others are bidding for are worth making, and a factory needs inputs it
+  // makes itself or can see on offer.
+  // The missing links behind a bot's two best contracts: goods nobody (including the bot) supplies,
+  // with how deep in the chain they are. Building the deepest missing link first gets a chain going.
+  const missingLinks = (st, p) => {
+    const mine = new Set(G.myBusinesses(st, p.id).flatMap(x => Object.keys(G.BIZ_BY[x.type].outputs)));
+    const links = {};
+    const walk = (c, depth) => {
+      if (mine.has(c) || G.bestAsk(st, c) || (depth > 0 && st.lastTrade[c]?.round >= st.round - 2) || G.COM[c].type === "waste") return;
+      if (!(c in links) || links[c] < depth) links[c] = depth;
+      const r = RECIPES.find(x => Object.keys(x.out)[0] === c);
+      if (r) Object.keys(r.in).forEach(i => walk(i, depth + 1));
+    };
+    [...p.contracts].sort((a, b) => b.points - a.points).slice(0, 2).forEach(k => Object.keys(k.goods).forEach(c => walk(c, 0)));
+    // Building materials we're short of are missing links too
+    Object.entries(p.plan?.cost || B.reserve).forEach(([c, q]) => { if ((p.stock[c] || 0) < q) walk(c, 1); });
+    return links;
   };
+
+  // How useful a business would be: fills a missing link, or makes something others are bidding for
+  const usefulness = (st, p, b, tid, links) => {
+    const out = b.makes;
+    let s = out in links ? 2 + links[out] : 0.3;
+    if (G.bestBid(st, out)) s += 1.5;                                                     // someone wants it now
+    if (b.kind === "extract") s *= G.richness(b, tid);
+    else {
+      const mine = new Set(G.myBusinesses(st, p.id).flatMap(x => Object.keys(G.BIZ_BY[x.type].outputs)));
+      Object.keys(b.inputs).forEach(c => { if (!mine.has(c) && !p.stock[c] && !G.bestAsk(st, c) && !(c in links) && !st.lastTrade[c]) s *= 0.4; });
+    }
+    const same = G.myBusinesses(st, p.id).filter(x => x.type === b.id).length;
+    return s * Math.pow(0.5, same);
+  };
+  const bestHere = (st, p, tid, links = missingLinks(st, p)) => G.buildable(st, tid, p.id)
+    .map(o => ({ ...o, s: usefulness(st, p, o.b, tid, links) / (1 + Object.values(o.cost).reduce((a, b) => a + b, 0) / 10) }))
+    .sort((a, b) => b.s - a.s)[0];
+
+  const afternoon = (st, p) => {
+    const links = missingLinks(st, p);
+    const here = bestHere(st, p, p.pos, links);
+    if (here && here.s > 0.5 && G.canAfford(p, here.cost)) { G.act(st, p.id, "build", { type: here.b.id }); p.plan = null; return; }
+    // Somewhere within reach with something better? Head there; meanwhile save up materials for it.
+    const d = G.distances(p.pos);
+    let target = { tid: p.pos, o: here, s: here ? here.s : 0 };
+    Object.entries(d).filter(([t, n]) => n > 0 && n <= 4 && !G.isSea(t)).forEach(([t, n]) => {
+      const o = bestHere(st, p, t, links); if (o && o.s / (1 + 0.25 * n) > target.s) target = { tid: t, o, s: o.s / (1 + 0.25 * n) };
+    });
+    p.plan = target.o ? { type: target.o.b.id, tid: target.tid, cost: target.o.cost } : null;
+    if (target.tid !== p.pos) {
+      // One step along a shortest path
+      const dt = G.distances(target.tid);
+      const next = G.neighbours(p.pos).sort((a, b) => (dt[a] ?? 99) - (dt[b] ?? 99) || G.rand(st) - 0.5)[0];
+      if (next) G.act(st, p.id, "move", { to: next });
+    }
+  };
+
+  G.bots.morning = (st, p) => trade(st, p);
+  G.bots.afternoon = (st, p) => { afternoon(st, p); trade(st, p); };
 })();

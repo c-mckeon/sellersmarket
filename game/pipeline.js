@@ -1,23 +1,16 @@
 // Sellers Market game engine: the automatic steps, in order.
 // Add, remove or reorder steps here to change how a round plays out.
+//
+// Switched off while the market is player-only (the code is still there):
+//   SMG.resolveCards, SMG.governmentContracts, SMG.centralBank, SMG.payLoans, SMG.payBonds,
+//   SMG.settleFutures, SMG.marginCalls, SMG.expireEffects, SMG.drawCards
 
 SMG.steps.midday = [
+  SMG.auction,             // the morning's orders are matched
   SMG.produce,             // businesses turn inputs into products; full stockpiles throw things away
-  SMG.repriceStep,         // prices update now stockpiles have changed
 ];
 
 SMG.steps.overnight = [
-  SMG.resolveCards,        // cards played this afternoon are revealed and take effect
-  SMG.governmentContracts, // the state buys output under any government contracts
-  SMG.payWages,            // businesses' running costs
-  SMG.inflate,             // prices creep up
-  SMG.repriceStep,         // prices for tomorrow morning
-  SMG.centralBank,         // every 5 rounds: base rate review; the government adjusts lending
-  SMG.payLoans,            // interest and repayments
-  SMG.payBonds,            // coupons, and bonds that end pay back 100
-  SMG.settleFutures,       // contracts due now settle
-  SMG.marginCalls,         // loans over the borrowing limit: the bank sells your things
-  SMG.expireEffects,       // card effects that have run their course end
-  SMG.rememberWorth,       // for the windfall tax
-  SMG.drawCards,           // everyone draws 2 cards (up to 5)
+  SMG.auction,             // the afternoon's orders are matched
+  SMG.refillContracts,     // delivered and discarded contracts are replaced
 ];

@@ -1,15 +1,14 @@
-// Run Sellers Market games with computer players only, and summarise how the economy behaves.
-//   node tools/sim.js [--games 20] [--players 4] [--seed 1] [--set '{"wageRate":0.05}'] [--json]
+// Run Sellers Market games with computer players only, and summarise how the market behaves.
+//   node tools/sim.js [--games 20] [--players 4] [--seed 1] [--set '{"contracts.size":20}'] [--json] [--prices]
 // Uses exactly the same engine files as the website. --set overrides game/settings.js values
-// (nested ones with dots, e.g. {"pricing.demandWeight":0.5}).
+// (nested ones with dots).
 const fs = require("fs"), path = require("path"), vm = require("vm");
 const root = path.join(__dirname, "..");
 const FILES = ["js/commodities.js", "js/market.js", "js/broker.js", "js/cards.js", "js/map.js", "maps/europe.js", "js/territories.js", "js/businesses.js",
-  "game/settings.js", "game/core.js", "game/market.js", "game/production.js", "game/map.js", "game/cards.js", "game/finance.js", "game/bots.js", "game/pipeline.js"];
+  "game/settings.js", "game/core.js", "game/market.js", "game/production.js", "game/map.js", "game/contracts.js", "game/cards.js", "game/finance.js", "game/bots.js", "game/pipeline.js"];
 
 const arg = (k, d) => { const i = process.argv.indexOf("--" + k); return i > 0 ? process.argv[i + 1] : d; };
 const games = +arg("games", 20), players = +arg("players", 4), seed = +arg("seed", 1);
-const strategies = arg("strategies", "best").split(",");   // e.g. best,diversify,specialist,best (cycled over players)
 const overrides = JSON.parse(arg("set", "{}"));
 
 function runAll() {
@@ -25,26 +24,21 @@ function runAll() {
       const ps = [];
       for (let i = 0; i < ${players}; i++) {
         const start = G.pick(rng, land);
-        // Bots start with the most valuable mine/farm/well available where they start
-        const value = b => Object.entries(b.outputs).reduce((s, [c, q]) => s + q * G.basePrice(c), 0) * G.richness(b, start);
-        const opts = G.BIZ.filter(b => G.canBuildAt(b, start) && b.kind === "extract").sort((a, b) => value(b) - value(a));
-        ps.push({ name: "Bot " + (i + 1), bot: true, start, business: opts[0].id, strategy: ${JSON.stringify(strategies)}[(i + g) % ${strategies.length}] });
+        const opts = G.BIZ.filter(b => G.canBuildAt(b, start) && b.kind === "extract").sort((a, b) => G.richness(b, start) * G.rawUnits(b.makes) * b.outputs[b.makes] - G.richness(a, start) * G.rawUnits(a.makes) * a.outputs[a.makes]);
+        ps.push({ name: "Bot " + (i + 1), bot: true, start, business: opts[0].id });
       }
       const st = G.newGame({ players: ps, seed: ${seed} * 1000 + g });
-      const start = Object.values(st.startWorth).reduce((a, b) => a + b, 0) / st.players.length;
-      const real = COMMODITIES.filter(c => c.type !== "waste").map(c => ({ id: c.id, tier: G.tier(c.id), r: st.prices[c.id] / G.basePrice(c.id) / st.priceLevel }));
+      const traded = {}, vol = {};
+      st.history.forEach(h => Object.entries(h.trades).forEach(([id, t]) => { traded[id] = (traded[id] || 0) + 1; vol[id] = (vol[id] || 0) + t.qty; }));
       out.push({
-        worth: st.players.map(p => G.netWorth(st, p)), cash: st.players.map(p => p.cash),
-        biz: st.players.map(p => G.myBusinesses(st, p.id).length), space: st.players.map(p => p.space),
-        start, level: st.priceLevel, stats: st.stats, real,
-        cards: st.log.filter(l => / played /.test(l.msg)).length,
-        strat: st.players.map(p => p.strategy),
-        sectors: st.players.map(p => new Set(G.myBusinesses(st, p.id).map(b => G.sectorOfBiz(G.BIZ_BY[b.type]))).size),
-        loans: st.players.map(p => p.loan), bonds: st.players.map(p => p.bonds.reduce((s, b) => s + b.count, 0)),
-        margin: st.log.filter(l => /Margin call/.test(l.msg)).length, seized: st.log.filter(l => /seized/.test(l.msg)).length,
-        rate: st.baseRate, share: st.borrowShare,
-        // What each business really earned per round, as a share of its build cost
-        bizRoi: st.businesses.filter(b => b.built < st.rounds - 3).map(b => ({ type: G.BIZ_BY[b.type].name, roi: ((b.earned || 0) - (b.spent || 0) - (b.wages || 0)) / Math.max(1, st.rounds - b.built) / b.cost })),
+        points: st.players.map(p => p.points), delivered: st.players.map(p => p.delivered || 0),
+        cash: st.players.map(p => G.totalCash(st, p)),
+        biz: st.players.map(p => G.myBusinesses(st, p.id).length),
+        stats: st.stats, auctions: st.history.length, traded, vol,
+        twoSided: COMMODITIES.filter(c => G.bestBid(st, c.id) && G.bestAsk(st, c.id)).length,
+        spreads: COMMODITIES.filter(c => G.bestBid(st, c.id) && G.bestAsk(st, c.id)).map(c => G.bestAsk(st, c.id).price / G.bestBid(st, c.id).price - 1),
+        last: Object.fromEntries(Object.entries(st.lastTrade).map(([id, t]) => [id, t.price])),
+        path: ${process.argv.includes("--prices") ? "g === 0 ? st.history.map(h => h.trades) : null" : "null"},
       });
     }
     return JSON.stringify(out);
@@ -53,48 +47,38 @@ function runAll() {
 
 const res = runAll();
 const flat = k => res.flatMap(r => r[k]);
-const avg = a => a.reduce((s, x) => s + x, 0) / a.length;
-const q = (a, p) => { const s = [...a].sort((x, y) => x - y); return s[Math.min(s.length - 1, Math.floor(p * s.length))]; };
+const avg = a => a.length ? a.reduce((s, x) => s + x, 0) / a.length : 0;
+const q = (a, p) => { const s = [...a].sort((x, y) => x - y); return s.length ? s[Math.min(s.length - 1, Math.floor(p * s.length))] : 0; };
 const f = (x, d = 0) => x.toLocaleString(undefined, { maximumFractionDigits: d, minimumFractionDigits: d });
-const reals = res.flatMap(r => r.real);
-const byId = {};
-reals.forEach(x => (byId[x.id] ||= []).push(x.r));
-const goods = Object.entries(byId).map(([id, a]) => [id, avg(a)]).sort((a, b) => b[1] - a[1]);
-const spread = res.map(r => Math.max(...r.worth) / Math.max(1, Math.min(...r.worth)));
+const goodsTraded = {}, goodsVol = {}, lastPx = {};
+res.forEach(r => { Object.entries(r.traded).forEach(([id, n]) => goodsTraded[id] = (goodsTraded[id] || 0) + n / r.auctions);
+  Object.entries(r.vol).forEach(([id, n]) => goodsVol[id] = (goodsVol[id] || 0) + n);
+  Object.entries(r.last).forEach(([id, p]) => (lastPx[id] ||= []).push(p)); });
+const liquid = Object.entries(goodsTraded).map(([id, x]) => [id, x / res.length]).sort((a, b) => b[1] - a[1]);
 const summary = {
-  settings: overrides,
-  games, players,
-  "start net worth (average)": f(avg(res.map(r => r.start))),
-  "end net worth (median / 10th / 90th pct)": `${f(q(flat("worth"), .5))} / ${f(q(flat("worth"), .1))} / ${f(q(flat("worth"), .9))}`,
-  "growth (median end ÷ start)": "×" + f(q(flat("worth"), .5) / avg(res.map(r => r.start)), 1),
-  "winner ÷ last place (median)": "×" + f(q(spread, .5), 1),
+  settings: overrides, games, players,
+  "points per player (median / 10th / 90th pct)": `${q(flat("points"), .5)} / ${q(flat("points"), .1)} / ${q(flat("points"), .9)}`,
+  "winner's points (median)": q(res.map(r => Math.max(...r.points)), .5),
+  "contracts delivered per player (median / max)": `${q(flat("delivered"), .5)} / ${Math.max(...flat("delivered"))}`,
+  "players who never delivered": f(100 * flat("delivered").filter(x => !x).length / flat("delivered").length) + "%",
+  "cash at end (10th / median / 90th pct)": `${f(q(flat("cash"), .1))} / ${f(q(flat("cash"), .5))} / ${f(q(flat("cash"), .9))}`,
   "businesses per player (median / max)": `${q(flat("biz"), .5)} / ${Math.max(...flat("biz"))}`,
-  "stockpile space at end (median)": q(flat("space"), .5),
-  "businesses idle (share of runs)": f(100 * avg(res.map(r => r.stats.idle / Math.max(1, r.stats.runs))), 0) + "%",
-  "overflow sold per game": f(avg(res.map(r => r.stats.overflow))),
-  "price level (inflation) at end": "×" + f(avg(res.map(r => r.level)), 2),
-  "real price ÷ base at end (median / 90th pct / max)": `${f(q(reals.map(x => x.r), .5), 2)} / ${f(q(reals.map(x => x.r), .9), 2)} / ${f(Math.max(...reals.map(x => x.r)), 2)}`,
-  "dearest goods (avg real price ÷ base)": goods.slice(0, 5).map(([id, r]) => `${id} ×${f(r, 1)}`).join(", "),
-  "cheapest goods": goods.slice(-5).map(([id, r]) => `${id} ×${f(r, 2)}`).join(", "),
-  "cards played per game": f(avg(res.map(r => r.cards))),
+  "businesses idle (share of runs)": f(100 * avg(res.map(r => r.stats.idle / Math.max(1, r.stats.runs)))) + "%",
+  "goods thrown away (overflow) per game": f(avg(res.map(r => r.stats.overflow))),
+  "goods trading per auction (average)": f(avg(res.map(r => (r.stats.trades || 0) / r.auctions)), 1),
+  "auctions where nothing traded": f(100 * avg(res.map(r => 1 - Object.values(r.traded).length / 50 >= 0 ? 0 : 0))) + "%",
+  "goods that ever traded in a game (median of 50)": q(res.map(r => Object.keys(r.traded).length), .5),
+  "goods with both a bid and an ask at the end (median)": q(res.map(r => r.twoSided), .5),
+  "bid/ask spread at the end (median)": f(100 * q(res.flatMap(r => r.spreads), .5)) + "%",
+  "most liquid (share of auctions it traded in)": liquid.slice(0, 8).map(([id, x]) => `${id} ${f(100 * x)}%`).join(", "),
+  "least liquid (of those that traded)": liquid.slice(-6).map(([id, x]) => `${id} ${f(100 * x)}%`).join(", "),
+  "last prices (median across games)": Object.entries(lastPx).sort((a, b) => q(b[1], .5) - q(a[1], .5)).slice(0, 14).map(([id, a]) => `${id} ${f(q(a, .5), 1)}`).join(", "),
 };
-// Strategies
-const strat = {};
-res.forEach(r => { const max = Math.max(...r.worth); r.strat.forEach((k, i) => { const x = strat[k] ||= { worth: [], wins: 0, n: 0 }; x.worth.push(r.worth[i]); x.n++; if (r.worth[i] === max) x.wins++; }); });
-summary["strategies (median worth, worst 10%, win rate)"] = Object.entries(strat).map(([k, x]) => `${k}: ${f(q(x.worth, .5))}, ${f(q(x.worth, .1))}, ${f(100 * x.wins / x.n)}%`).join(" · ");
-// Diversification: median worth by number of sectors owned
-const bySec = {};
-res.forEach(r => r.sectors.forEach((n, i) => (bySec[Math.min(n, 5)] ||= []).push(r.worth[i])));
-summary["worth by sectors owned (median, players)"] = Object.keys(bySec).sort().map(k => `${k}${k === "5" ? "+" : ""}: ${f(q(bySec[k], .5))} (${bySec[k].length})`).join(" · ");
-// Business types
-const roi = {};
-res.forEach(r => r.bizRoi.forEach(b => (roi[b.type] ||= []).push(b.roi)));
-const roiList = Object.entries(roi).filter(([, a]) => a.length >= 3).map(([k, a]) => [k, q(a, .5), a.length]).sort((a, b) => b[1] - a[1]);
-summary["best businesses (median profit/round ÷ cost, built)"] = roiList.slice(0, 6).map(([k, v, n]) => `${k} ${f(100 * v, 1)}% (${n})`).join(", ");
-summary["worst businesses"] = roiList.slice(-5).map(([k, v, n]) => `${k} ${f(100 * v, 1)}% (${n})`).join(", ");
-summary["finance: loans at end / bonds held / margin calls / seizures"] = `${f(avg(flat("loans")))} / ${f(avg(flat("bonds")), 1)} / ${f(avg(res.map(r => r.margin)), 1)} / ${f(avg(res.map(r => r.seized)), 1)} per game`;
-summary["base rate / borrow share at end"] = `${f(100 * avg(res.map(r => r.rate)), 2)}% / ${f(100 * avg(res.map(r => r.share)))}%`;
-if (process.argv.includes("--roi")) roiList.forEach(([k, v, n]) => console.log("  ", k.padEnd(22), f(100 * v, 1) + "%", n));
-
+delete summary["auctions where nothing traded"];
 if (process.argv.includes("--json")) console.log(JSON.stringify(summary));
-else Object.entries(summary).forEach(([k, v]) => console.log(k.padEnd(52), typeof v === "object" ? JSON.stringify(v) : v));
+else Object.entries(summary).forEach(([k, v]) => console.log(k.padEnd(56), typeof v === "object" ? JSON.stringify(v) : v));
+if (process.argv.includes("--prices")) {
+  const p = res[0].path, ids = [...new Set(p.flatMap(t => Object.keys(t)))];
+  console.log("\nGame 1 prices by auction (blank = no trade):");
+  ids.forEach(id => console.log(id.padEnd(14), p.map(t => t[id] ? f(t[id].price, 1).padStart(6) : "      ").join("")));
+}

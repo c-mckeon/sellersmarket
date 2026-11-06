@@ -72,29 +72,29 @@ const SMG = (() => {
   // config.players: [{ name, colour, bot, start: territoryId, business: businessTypeId }]
   G.newGame = config => {
     const st = {
-      version: 5, seed: config.seed ?? Math.floor(Math.random() * 1e9),
+      version: 6, seed: config.seed ?? Math.floor(Math.random() * 1e9),
       round: 1, rounds: config.rounds ?? S.rounds, phase: "morning", over: false,
       orders: {},
       players: [], businesses: [], nextBizId: 1,
-      priceLevel: 1, prices: {}, lastPrices: {}, history: [],
       effects: [], pending: [], log: [],
       stats: { runs: 0, idle: 0, overflow: 0 },
     };
     config.players.forEach((c, i) => {
       st.players.push({ id: i + 1, name: c.name, colour: c.colour, bot: !!c.bot, strategy: c.strategy || "best",
-        cash: S.startCash, space: S.startSpace, upgrades: 0, pos: c.start, stock: {}, hand: [],
-        acted: false, cardsPlayed: 0 });
+        cash: S.startCash, space: S.startSpace, upgrades: 0, pos: c.start, stock: { ...S.startGoods }, hand: [],
+        points: 0, contracts: [], delivered: 0, acted: false, cardsPlayed: 0 });
     });
     // Free starting business, where each player starts
     config.players.forEach((c, i) => {
       const b = G.BIZ_BY[c.business];
-      if (b && G.canBuildAt(b, c.start)) st.businesses.push({ id: st.nextBizId++, owner: i + 1, type: b.id, territory: c.start, built: 0, cost: G.buildCost(st, b, c.start, i + 1) });
+      if (!b || !G.canBuildAt(b, c.start)) return;
+      st.businesses.push({ id: st.nextBizId++, owner: i + 1, type: b.id, territory: c.start, built: 0, cost: G.buildCost(st, b, c.start, i + 1) });
+      // A head start: one round's output of it (factories: one run's worth of inputs instead)
+      const p = st.players[i];
+      if (b.kind === "extract") Object.entries(b.outputs).forEach(([cid, q]) => G.add(p, cid, Math.floor(q * G.richness(b, c.start) * S.extractOutput)));
+      else Object.entries(b.inputs).forEach(([cid, q]) => G.add(p, cid, q));
     });
     G.onSetup.forEach(f => f(st));
-    G.reprice(st);
-    st.lastPrices = { ...st.prices };
-    st.history.push({ round: 0, prices: { ...st.prices } });
-    st.startWorth = Object.fromEntries(st.players.map(p => [p.id, G.netWorth(st, p)]));
     G.log(st, `Game started with ${st.players.length} players. Round 1, morning.`);
     G.botOrders(st);
     if (!G.waitingFor(st).length) G.resolve(st); // all computer players: play the whole game
@@ -104,7 +104,7 @@ const SMG = (() => {
   // ---------- Phases: everyone orders, then it all happens at once ----------
   // Morning and afternoon: every player submits a list of orders, privately.
   // Once all have submitted, the orders are carried out together, then the automatic step runs.
-  //   - Morning trades only touch the trader's own cash and stockpile, at fixed prices.
+  //   - Market orders go on the book; the auction at the end of the phase matches them (game/market.js).
   //   - Afternoon moves: if two or more players move into the same territory, none of them gets in.
   //   - Afternoon builds: costs are worked out from the businesses there at the start of the afternoon.
   const clone = x => JSON.parse(JSON.stringify(x));
@@ -189,17 +189,18 @@ const SMG = (() => {
       const bot = G.bots[st.phase];
       if (bot) bot(c, G.player(c, p.id));
       st.orders[p.id] = c.recording;
+      const cp = G.player(c, p.id); p.mem = cp.mem; p.plan = cp.plan; // the bot's private memory carries over
     });
   };
 
-  // ---------- Net worth ----------
-  G.netWorth = (st, p) => p.cash
-    + Object.entries(p.stock).reduce((s, [c, q]) => s + q * st.prices[c], 0)
-    + G.myBusinesses(st, p.id).reduce((s, b) => s + (G.bizValue ? G.bizValue(st, b) : b.cost * S.businessValue), 0)
-    + (p.bonds || []).reduce((s, b) => s + b.count * G.bondValue(st, b), 0)
-    + Object.entries(p.etf || {}).reduce((s, [k, u]) => s + u * G.etfPrice(st, k), 0)
-    + (p.futures || []).reduce((s, f) => s + G.futureValue(st, f), 0)
-    - (p.loan || 0);
+  // ---------- Score ----------
+  // Points win. Cash (including cash locked in buy orders) breaks ties.
+  G.totalCash = (st, p) => p.cash + G.lockedCash(st, p);
+  G.ranking = st => [...st.players].sort((a, b) => b.points - a.points || G.totalCash(st, b) - G.totalCash(st, a));
+  // What a player's cash and goods would be worth at the last traded prices (goods never traded count 0)
+  G.netWorth = (st, p) => G.totalCash(st, p)
+    + Object.entries(p.stock).reduce((s, [c, q]) => s + q * (st.prices[c] || 0), 0)
+    + st.book.filter(o => o.pid === p.id && o.side === "sell").reduce((s, o) => s + o.qty * (st.prices[o.good] || 0), 0);
 
   return G;
 })();
