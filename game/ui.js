@@ -357,7 +357,7 @@
     const W = 320, H = 132, padL = 34, padR = 8, top = 8, lineH = 78, gap = 10, volH = 30;
     const lo = Math.min(...s.map(x => x.price)), hi = Math.max(...s.map(x => x.price)), vmax = Math.max(...s.map(x => x.qty));
     const span = hi - lo || hi * 0.2 || 1, y0 = lo - span * 0.1, y1 = hi + span * 0.1;
-    const n = s.length, X = i => n === 1 ? padL + (W - padL - padR) / 2 : padL + i * (W - padL - padR) / (n - 1);
+    const n = s.length, inset = 10, X = i => n === 1 ? padL + (W - padL - padR) / 2 : padL + inset + i * (W - padL - padR - 2 * inset) / (n - 1);
     const Y = v => top + lineH - (v - y0) / (y1 - y0) * lineH, bw = Math.max(2, Math.min(14, (W - padL - padR) / n - 3));
     const vTop = top + lineH + gap;
     return `<div class="pchart" data-pts='${JSON.stringify(s.map((x, i) => ({ x: X(i), y: Y(x.price), t: `Round ${x.round} ${x.phase}: ${x.qty} at ${m(x.price)}` })))}'>
@@ -372,15 +372,51 @@
       </svg><div class="ptip" hidden></div></div>`;
   }
 
+  // The order book as a depth chart: sell orders as bars to the right above the centre line, buy orders
+  // to the left below it, best prices nearest the middle, and the bid/ask spread as a band between them.
+  // Each bar is the running total from the best price outwards (how much you could trade going that
+  // far), so the book's shape shows how deep it is. Rows are price levels in order, evenly spaced.
+  function depthChart(q, yours) {
+    const N = 8, asks = q.asks.slice(0, N), bids = q.bids.slice(0, N);
+    if (!asks.length && !bids.length) return `<p class="muted small">No orders on the book yet. Place the first one.</p>`;
+    const cum = list => { let s = 0; return list.map(x => ({ ...x, cum: s += x.qty })); };
+    const A = cum(asks).reverse(), B = cum(bids); // asks: highest price at the top
+    const W = 320, cx = W / 2, rowH = 15, gap = 4, head = 18, bandH = 26, half = cx - 46;
+    const maxCum = Math.max(A[0]?.cum || 0, B.at(-1)?.cum || 0, 1);
+    const aRows = Math.max(A.length, 1), bRows = Math.max(B.length, 1);
+    const yA = i => head + i * (rowH + gap), bandTop = head + aRows * (rowH + gap), bandBot = bandTop + bandH;
+    const yB = i => bandBot + gap + i * (rowH + gap), H = yB(bRows) + head - gap;
+    const w = x => Math.max(2, x.cum / maxCum * half);
+    const tip = (x, side) => `${x.qty} ${side === "sell" ? "for sale" : "wanted"} at ${m(x.price)}${yours(side, x.price) ? ` (${yours(side, x.price)} yours)` : ""} · ${x.cum} in all at ${m(x.price)} or ${side === "sell" ? "less" : "more"}`;
+    const row = (x, y, side) => {
+      const bw = w(x), mine = yours(side, x.price), sell = side === "sell";
+      const bx = sell ? cx : cx - bw;
+      return `<g class="drow ${side}" data-tip="${tip(x, side)}">
+        <rect class="hit" x="0" y="${y - gap / 2}" width="${W}" height="${rowH + gap}"/>
+        <rect class="bar" x="${bx.toFixed(1)}" y="${y}" width="${bw.toFixed(1)}" height="${rowH}" rx="3"/>
+        <text class="px" x="${sell ? cx - 6 : cx + 6}" y="${y + rowH - 4}" text-anchor="${sell ? "end" : "start"}">${m(x.price)}</text>
+        <text class="qt" x="${sell ? bx + bw + 4 : bx - 4}" y="${y + rowH - 4}" text-anchor="${sell ? "start" : "end"}">${x.qty}${mine ? " ●" : ""}</text></g>`;
+    };
+    const spread = q.spread != null ? `Spread ${m(q.ask - q.bid)} · ${Math.round(q.spread * 100)}%` : q.last ? `One side empty · last trade ${m(q.last.price)}` : "One side empty";
+    return `<div class="depth"><svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Order book. Asks: ${asks.map(x => `${x.qty} at ${m(x.price)}`).join(", ") || "none"}. Bids: ${bids.map(x => `${x.qty} at ${m(x.price)}`).join(", ") || "none"}.">
+      <text class="lbl" x="${cx + 6}" y="12">Sell orders (asks)</text>
+      ${A.map((x, i) => row(x, yA(i), "sell")).join("") || `<text class="none" x="${cx + 8}" y="${yA(0) + rowH - 4}">Nobody selling</text>`}
+      <rect class="band" x="4" y="${bandTop}" width="${W - 8}" height="${bandH}"/>
+      <line class="edge sell" x1="4" x2="${W - 4}" y1="${bandTop}" y2="${bandTop}"/><line class="edge buy" x1="4" x2="${W - 4}" y1="${bandBot}" y2="${bandBot}"/>
+      <text class="sp" x="10" y="${bandTop + bandH / 2 + 4}">↕ ${spread}</text>
+      ${B.map((x, i) => row(x, yB(i), "buy")).join("") || `<text class="none" x="${cx - 8}" y="${yB(0) + rowH - 4}" text-anchor="end">Nobody buying</text>`}
+      <text class="lbl" x="${cx - 6}" y="${H - 4}" text-anchor="end">Buy orders (bids)</text>
+      <line class="axis" x1="${cx}" x2="${cx}" y1="${head - 4}" y2="${H - head + 4}"/>
+    </svg><div class="ptip" hidden></div>
+    <p class="muted small dnote">Bars add up from the best price outwards; the number is the amount at that price. ● = includes yours.</p></div>`;
+  }
+
   // One good: who makes and uses it, its book, price history, your orders and the order form
   function ticket(p, id, want) {
     const q = G.quote(vw, id), c = G.COM[id];
     const hold = have(p, id);
     const t = ui.ticket[id] ||= { side: hold > (want[id] || 0) ? "sell" : "buy", price: "", qty: "" };
     const yours = (side, price) => vw.book.filter(o => o.pid === p.id && o.good === id && o.side === side && o.price === price).reduce((s, o) => s + o.qty, 0);
-    const asks = q.asks.slice(0, 6).reverse(), bids = q.bids.slice(0, 6);
-    const depthMax = Math.max(1, ...asks.map(x => x.qty), ...bids.map(x => x.qty));
-    const lv = (x, side) => { const y = yours(side, x.price); return `<div class="lv ${side}"><span class="lv-px">${m(x.price)}</span><span class="lv-bar"><i style="width:${x.qty / depthMax * 100}%"></i></span><span class="lv-q">${x.qty}${y ? ` <b class="gmine">${y} yours</b>` : ""}</span></div>`; };
     const myOrders = vw.book.filter(o => o.pid === p.id && o.good === id);
     const isNew = o => !st.book.some(x => x.id === o.id);
     const suggest = t.side === "buy" ? q.ask ?? q.last?.price ?? q.bid : q.bid ?? q.last?.price ?? q.ask;
@@ -395,17 +431,11 @@
         <div><span>Others who could use it</span><b>${users.length ? names(users) : "nobody yet"}</b><small>${[G.isMaterial(id) ? "building material" : "", contractGood(id) ? "contracts can ask for it" : ""].filter(Boolean).join(" · ")}</small></div>
       </div>
       <p class="small muted tused">Used by: ${usedBy.join(" · ") || "no factory"}</p>
+      <div class="tcharts">
+        <div><h4>Order book</h4>${depthChart(q, yours)}</div>
+        <div><h4>Price history</h4>${priceChart(id)}</div>
+      </div>
       <div class="gtwo">
-        <div>
-          <h4>Price history</h4>
-          ${priceChart(id)}
-          <h4>Book <span class="muted small">asks above, bids below</span></h4>
-          <div class="ladder">
-            ${asks.map(x => lv(x, "sell")).join("") || `<p class="muted small">Nobody selling</p>`}
-            <div class="lv-mid">${q.spread != null ? `spread ${m(q.ask - q.bid)}` : q.last ? `last ${m(q.last.price)}` : "no trades yet"}</div>
-            ${bids.map(x => lv(x, "buy")).join("") || `<p class="muted small">Nobody buying</p>`}
-          </div>
-        </div>
         <div>
           <h4>New order</h4>
           <div class="gseg"><button data-side="buy" class="${t.side === "buy" ? "on" : ""}">Buy</button><button data-side="sell" class="${t.side === "sell" ? "on" : ""}">Sell</button></div>
@@ -415,7 +445,9 @@
             <button class="gbtn" id="gPlace">${t.side === "buy" ? "Place buy order" : "Place sell order"}</button>
           </div>
           <p class="muted small">${t.side === "buy" ? `Locks price × quantity of your cash (${m(p.cash)} free) until it fills or you cancel. What you buy goes to your stockpile.` : `Takes the goods from your businesses first, then your stockpile: you have ${hold} not already on offer.`}</p>
-          <h4>Your orders</h4>
+        </div>
+        <div>
+          <h4>Your orders for this good</h4>
           ${myOrders.map(o => `<div class="gpos">${o.side === "buy" ? "Buy" : "Sell"} ${o.qty} at ${m(o.price)}${isNew(o) ? ` <em>new</em>` : ""}<button data-cancel="${o.id}" data-new="${isNew(o) ? 1 : ""}">Cancel</button></div>`).join("") || `<p class="muted small">None.</p>`}
         </div>
       </div>
@@ -510,6 +542,18 @@
         tip.style.left = `${Math.min(r.width - 150, Math.max(0, pt.x / vb.width * r.width - 70))}px`; tip.style.top = `${pt.y / vb.height * r.height - 34}px`;
       });
       svg.addEventListener("mouseleave", () => { tip.hidden = true; xh.setAttribute("visibility", "hidden"); });
+    });
+    // Order book chart: hovering a row says what's at that price and in total
+    root.querySelectorAll(".depth").forEach(box => {
+      const tip = box.querySelector(".ptip");
+      box.querySelectorAll("[data-tip]").forEach(g => {
+        g.addEventListener("mousemove", e => {
+          const r = box.getBoundingClientRect();
+          tip.hidden = false; tip.textContent = g.dataset.tip;
+          tip.style.left = `${Math.min(r.width - 230, Math.max(0, e.clientX - r.left - 110))}px`; tip.style.top = `${e.clientY - r.top - 34}px`;
+        });
+        g.addEventListener("mouseleave", () => tip.hidden = true);
+      });
     });
     const t = ui.good && ui.ticket[ui.good];
     const keep = () => { if (!t) return; t.price = root.querySelector("#gPrice")?.value || ""; t.qty = root.querySelector("#gQty")?.value || ""; };
