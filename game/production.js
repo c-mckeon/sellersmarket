@@ -17,12 +17,12 @@
   // [[good, units of it per unit of the input], …]
   G.substitutesFor = (b, input) => (S.substitutes || []).filter(r => r.for === input && (!r.at || r.at.includes(b.id))).map(r => [r.use, r.ratio]);
 
-  // What one run of factory `b` would take from player p's stockpile.
+  // What one run of factory `b` would take from everything player p owns (their stockpile and businesses).
   // Each input comes from the real thing first; any shortfall from its stand-ins, in the listed order.
   // Goods one of your contracts asks for are never used as stand-ins.
   // Returns { use: { good: qty }, missing: [[input, qty short]] }.
-  G.inputsFor = (p, b) => {
-    const left = { ...p.stock }, use = {}, missing = [];
+  G.inputsFor = (st, p, b) => {
+    const left = G.holdings(st, p), use = {}, missing = [];
     const keep = new Set(p.contracts.flatMap(k => Object.keys(k.goods)));
     Object.entries(b.inputs).forEach(([c, q]) => {
       const own = Math.min(q, left[c] || 0);
@@ -38,32 +38,45 @@
     return { use, missing };
   };
 
+  // Waste nothing can use (tailings, chemical waste) isn't kept anywhere
+  const uselessMemo = {};
+  G.useless = c => uselessMemo[c] ??= G.COM[c].type === "waste" && !RECIPES.some(r => r.in[c]) && !(S.substitutes || []).some(r => r.use === c);
+  // Room left in a business's own stock (settings.businessSpace)
+  G.bizRoom = biz => S.businessSpace - Object.values(biz.stock || {}).reduce((a, b) => a + b, 0);
+
   G.produce = st => {
     const yieldMod = G.businessYield ? G.businessYield(st) : {};
     const report = {};
+    const own = S.businessStock; // outputs stay at the business, which holds settings.businessSpace units
     st.businesses.forEach(biz => {
       const p = G.player(st, biz.owner), b = G.BIZ_BY[biz.type];
       const say = m => (report[p.id] ||= []).push(m);
       const mult = yieldMod[biz.id] ?? 1;
+      const yieldOf = q => Math.floor(q * mult * (b.kind === "extract" ? G.richness(b, biz.territory) * S.extractOutput : 1) + 1e-9);
       st.stats.runs++;
       if (mult === 0) { st.stats.idle++; say(`${b.name} in ${G.TERR[biz.territory].name} was shut`); return; }
-      let run = G.inputsFor(p, b);
+      const full = () => own && G.bizRoom(biz) < Math.min(yieldOf(b.outputs[b.makes]), S.businessSpace);
+      if (b.kind === "factory" && full()) { st.stats.idle++; say(`${b.name} idle: its stock is full (sell or use some of it)`); return; }
+      if (b.kind === "extract" && own && G.bizRoom(biz) <= 0) { st.stats.idle++; say(`${b.name} idle: its stock is full (sell or use some of it)`); return; }
+      let run = G.inputsFor(st, p, b);
       if (run.missing.length) { st.stats.idle++; say(`${b.name} idle: needs ${run.missing.map(([c, n]) => `${n} more ${G.COM[c].name}`).join(", ")}`); return; }
-      // A factory runs again while it has the inputs, up to settings.factoryRuns times a round
-      const made = {};
-      let runs = 0;
+      // A factory runs again while it has the inputs and room, up to settings.factoryRuns times a round
+      const made = {}, subs = {};
+      let runs = 0, lost = 0;
       do {
-        Object.entries(run.use).forEach(([c, q]) => { G.add(p, c, -q); biz.spent = (biz.spent || 0) + q * st.prices[c]; });
-        Object.entries(run.use).filter(([c]) => !(c in b.inputs)).forEach(([c, q]) => (made.subs ||= {})[c] = (made.subs?.[c] || 0) + q);
+        Object.entries(run.use).forEach(([c, q]) => { G.take(st, p, c, q); biz.spent = (biz.spent || 0) + q * st.prices[c]; if (!(c in b.inputs)) subs[c] = (subs[c] || 0) + q; });
         Object.entries(b.outputs).forEach(([c, q]) => {
-          const n = Math.floor(q * mult * (b.kind === "extract" ? G.richness(b, biz.territory) * S.extractOutput : 1) + 1e-9);
-          if (n > 0) { G.add(p, c, n); made[c] = (made[c] || 0) + n; biz.earned = (biz.earned || 0) + n * st.prices[c]; }
+          let n = yieldOf(q);
+          if (n <= 0 || (own && G.useless(c))) return;
+          if (own) { const fit = Math.max(0, Math.min(n, G.bizRoom(biz))); lost += n - fit; n = fit; if (n) G.addBiz(biz, c, n); }
+          else G.add(p, c, n);
+          if (n) { made[c] = (made[c] || 0) + n; biz.earned = (biz.earned || 0) + n * st.prices[c]; }
         });
         runs++;
-      } while (b.kind === "factory" && runs < (S.factoryRuns || 1) && !(run = G.inputsFor(p, b)).missing.length);
+      } while (b.kind === "factory" && runs < (S.factoryRuns || 1) && !full() && !(run = G.inputsFor(st, p, b)).missing.length);
       biz.runs = (biz.runs || 0) + runs;
-      const subs = made.subs; delete made.subs;
-      say(`${b.name} made ${Object.entries(made).map(([c, n]) => `${n} ${G.COM[c].name}`).join(" + ")}${runs > 1 ? ` (ran ${runs} times)` : ""}${subs ? `, using ${Object.entries(subs).map(([c, n]) => `${n} ${G.COM[c].name}`).join(" + ")} instead` : ""}`);
+      st.stats.overflow += lost;
+      say(`${b.name} made ${Object.entries(made).map(([c, n]) => `${n} ${G.COM[c].name}`).join(" + ") || "nothing"}${runs > 1 ? ` (ran ${runs} times)` : ""}${Object.keys(subs).length ? `, using ${Object.entries(subs).map(([c, n]) => `${n} ${G.COM[c].name}`).join(" + ")} instead` : ""}${lost ? `; ${lost} more didn't fit` : ""}`);
     });
     // Over the limit? Throw things away, in the order each player chose
     st.players.forEach(p => {

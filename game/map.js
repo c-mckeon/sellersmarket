@@ -56,7 +56,7 @@
   // Returns { pay: { good: qty }, short, heavyShort } (short: crates still uncovered).
   G.payFor = (st, p, need) => {
     const M = S.build.materials, inContract = new Set(p.contracts.flatMap(k => Object.keys(k.goods)));
-    const left = { ...p.stock }, pay = {};
+    const left = G.holdings(st, p), pay = {};
     const order = list => list.filter(c => left[c] > 0).sort((a, b) => inContract.has(a) - inContract.has(b)
       || (st.prices[a] || 0) / M[a] - (st.prices[b] || 0) / M[b] || left[b] - left[a]);
     const take = (list, crates) => {
@@ -94,7 +94,7 @@
     G.need(G.canBuildAt(b, p.pos), `A ${b.name.toLowerCase()} can't be built in ${G.TERR[p.pos].name}.`);
     const need = G.buildCost(st, b, p.pos, p.id), { pay, short, heavyShort } = G.payFor(st, p, need);
     G.need(!short, `It takes ${G.needText(need)}. You're ${short} crate${short === 1 ? "" : "s"} short${heavyShort ? `, ${heavyShort} of them heavy (${S.build.heavy.goods.map(c => G.COM[c].name.toLowerCase()).join(", ")})` : ""} (goods on offer don't count).`);
-    Object.entries(pay).forEach(([c, q]) => G.add(p, c, -q));
+    Object.entries(pay).forEach(([c, q]) => G.take(st, p, c, q));
     p.acted = true;
     st.businesses.push({ id: st.nextBizId++, owner: p.id, type: b.id, territory: p.pos, built: st.round, cost: pay });
     return `built a ${b.name.toLowerCase()} in ${G.TERR[p.pos].name} from ${G.costText(pay)}`;

@@ -73,7 +73,7 @@
     p.mem ||= { bid: {}, ask: {} };
     G.act(st, p.id, "cancelAll", {});
     // Deliver whatever we can, best first
-    [...p.contracts].sort((a, b) => b.points - a.points).forEach(k => { if (G.canDeliver(p, k)) G.act(st, p.id, "deliver", { contract: k.id }); });
+    [...p.contracts].sort((a, b) => b.points - a.points).forEach(k => { if (G.canDeliver(st, p, k)) G.act(st, p.id, "deliver", { contract: k.id }); });
     // Throw away a contract that's gone nowhere for a long time
     const stale = p.contracts.find(k => st.round - k.drawn >= 8 && !Object.keys(k.goods).some(c => p.stock[c]));
     if (stale && p.discardRound !== st.round) G.act(st, p.id, "discardContract", { contract: stale.id });

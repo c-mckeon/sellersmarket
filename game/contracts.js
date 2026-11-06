@@ -88,15 +88,15 @@
   G.refillContracts = refill;
 
   const open = st => G.need(st.phase === "morning" || st.phase === "afternoon", "Not right now.");
-  G.canDeliver = (p, k) => Object.entries(k.goods).every(([c, q]) => (p.stock[c] || 0) >= q);
+  G.canDeliver = (st, p, k) => Object.entries(k.goods).every(([c, q]) => G.have(st, p, c) >= q);
 
   G.actions.deliver = (st, p, { contract }) => {
     open(st);
     const k = p.contracts.find(x => x.id === contract);
     G.need(k, "You don't hold that contract.");
-    const short = Object.entries(k.goods).filter(([c, q]) => (p.stock[c] || 0) < q);
-    G.need(!short.length, `You're short of ${short.map(([c, q]) => `${q - (p.stock[c] || 0)} ${G.COM[c].name}`).join(", ")} (goods on offer don't count).`);
-    Object.entries(k.goods).forEach(([c, q]) => G.add(p, c, -q));
+    const short = Object.entries(k.goods).filter(([c, q]) => G.have(st, p, c) < q);
+    G.need(!short.length, `You're short of ${short.map(([c, q]) => `${q - G.have(st, p, c)} ${G.COM[c].name}`).join(", ")} (goods on offer don't count).`);
+    Object.entries(k.goods).forEach(([c, q]) => G.take(st, p, c, q));
     p.points += k.points; p.delivered = (p.delivered || 0) + 1;
     p.contracts = p.contracts.filter(x => x !== k);
     st.stats.delivered = (st.stats.delivered || 0) + 1;

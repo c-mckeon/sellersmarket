@@ -5,7 +5,10 @@ const GAME_SETTINGS = {
   rounds: 30,              // the game ends after this many rounds; most points wins, cash breaks ties
   startCash: 1000,         // the only money there will ever be. It's used for trading and nothing else.
   startBusinesses: 2,      // the business you pick, plus the one that goes with it (a farm and a flour mill…)
-  startSpace: 30,          // stockpile crates at the start; 1 unit of anything = 1 crate
+  startSpace: 30,          // stockpile crates at the start; 1 unit of anything = 1 crate (ignored while unlimitedSpace is on)
+  unlimitedSpace: true,    // your own stockpile has no limit, for now
+  businessStock: true,     // what a business makes stays in its own stock until you sell or use it…
+  businessSpace: 5,        // …which holds this many units
 
   // Starting goods, on top of one round's output of your free business
   startGoods: { lumber: 6, iron: 4 },

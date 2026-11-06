@@ -38,7 +38,7 @@
   G.offered = (st, p) => st.book.filter(o => o.pid === p.id && o.side === "sell").reduce((s, o) => s + o.qty, 0);
   G.reserved = (st, p) => st.book.filter(o => o.pid === p.id && o.side === "buy").reduce((s, o) => s + o.qty, 0);
   G.lockedCash = (st, p) => st.book.filter(o => o.pid === p.id && o.side === "buy").reduce((s, o) => s + o.price * o.qty, 0);
-  G.spaceLeft = (st, p) => p.space - G.used(p) - G.offered(st, p) - G.reserved(st, p);
+  G.spaceLeft = (st, p) => S.unlimitedSpace ? Infinity : p.space - G.used(p) - G.offered(st, p) - G.reserved(st, p);
 
   // Price levels for one good: [{ price, qty }], best first
   G.depth = (st, id, side) => {
@@ -91,17 +91,18 @@
     } else {
       const bid = mine.filter(o => o.side === "buy").sort((a, b) => b.price - a.price)[0];
       G.need(!bid || price > bid.price, `You're already bidding for ${name} at ${G.money(bid?.price)}. Ask above that, or cancel it.`);
-      G.need((p.stock[id] || 0) >= qty, `You only have ${p.stock[id] || 0} ${name} that isn't already on offer.`);
-      G.add(p, id, -qty);
+      G.need(G.have(st, p, id) >= qty, `You only have ${G.have(st, p, id)} ${name} that isn't already on offer.`);
     }
-    st.book.push({ id: st.nextOrderId++, pid: p.id, good: id, side, price, qty, round: st.round, phase: st.phase });
+    // A sell order takes the goods from your businesses first, then your own stockpile, and remembers where
+    const from = side === "sell" ? G.take(st, p, id, qty) : undefined;
+    st.book.push({ id: st.nextOrderId++, pid: p.id, good: id, side, price, qty, round: st.round, phase: st.phase, ...(from ? { from } : {}) });
     return null; // private until the auction
   };
 
   // Give back what an order locked
   const release = (st, o) => {
     const p = G.player(st, o.pid);
-    if (o.side === "buy") p.cash = cents(p.cash + o.price * o.qty); else G.add(p, o.good, o.qty);
+    if (o.side === "buy") p.cash = cents(p.cash + o.price * o.qty); else G.giveBack(st, p, o.good, o.qty, o.from);
   };
   G.actions.cancelOrder = (st, p, { order }) => {
     const o = st.book.find(x => x.id === order && x.pid === p.id);
@@ -217,7 +218,7 @@
     G.need(st.phase === "morning" || st.phase === "afternoon", "Not right now.");
     const need = G.spaceUpgradeCost(p), { pay, short } = G.payFor(st, p, need);
     G.need(!short, `More space costs ${G.needText(need)}; you're ${short} short.`);
-    Object.entries(pay).forEach(([c, q]) => G.add(p, c, -q));
+    Object.entries(pay).forEach(([c, q]) => G.take(st, p, c, q));
     p.space += S.spaceUpgrade.crates; p.upgrades++;
     return `built ${S.spaceUpgrade.crates} more crates of space from ${G.costText(pay)}`;
   };
@@ -225,8 +226,8 @@
   // Throw goods away (any phase): for waste and anything else you don't want
   G.actions.dump = (st, p, { id, qty }) => {
     qty = Math.floor(+qty);
-    G.need(qty > 0 && (p.stock[id] || 0) >= qty, `You only have ${p.stock[id] || 0} ${G.COM[id]?.name || id} that isn't on offer.`);
-    G.add(p, id, -qty);
+    G.need(qty > 0 && G.have(st, p, id) >= qty, `You only have ${G.have(st, p, id)} ${G.COM[id]?.name || id} that isn't on offer.`);
+    G.take(st, p, id, qty);
     return null;
   };
 })();

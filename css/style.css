@@ -653,3 +653,73 @@ code { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; fo
 .dcon .ok { color: var(--raw); font-weight: 600; }
 @media (max-width: 700px) { .gticket .gtwo { grid-template-columns: 1fr; } }
 .gused { margin: 0 0 6px; color: var(--ink); } .gused b { font-weight: 700; }
+
+/* Game tab: market dashboard */
+.mstats { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; margin-bottom: 8px; }
+.mstats div { background: var(--bg); border-radius: 8px; padding: 7px 10px; display: grid; }
+.mstats span { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: .05em; }
+.mstats b { font-size: 20px; font-variant-numeric: tabular-nums; }
+.mstats small { font-size: 12px; color: var(--muted); }
+.msec { margin-top: 14px; }
+.msec h3 { margin: 0 0 8px; font-size: 15px; display: inline-flex; gap: 8px; align-items: baseline; }
+.mgrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)); gap: 8px; }
+.mcard { all: unset; box-sizing: border-box; cursor: pointer; display: grid; gap: 4px; padding: 9px 11px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); }
+.mcard:hover { border-color: var(--ink); }
+.mcard.sel { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
+.mcard:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.mc-top { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
+.mc-top b { font-size: 14.5px; }
+.mc-qty { font-size: 17px; font-weight: 800; font-variant-numeric: tabular-nums; }
+.mc-qty small { font-size: 11.5px; font-weight: 600; color: var(--muted); }
+.mc-where { font-size: 12px; color: var(--muted); }
+.mc-mid { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.mc-px { font-variant-numeric: tabular-nums; font-size: 14px; white-space: nowrap; }
+.mc-px small, .mmovers td.up, .mmovers td.dn { font-size: 12px; font-weight: 700; }
+.mc-px .up, .mmovers .up { color: var(--raw); } .mc-px .dn, .mmovers .dn { color: var(--waste); }
+.mtag { justify-self: start; font-size: 12px; font-weight: 600; padding: 2px 8px; border-radius: 999px; background: var(--bg); color: var(--muted); }
+.mtag.good { background: color-mix(in srgb, var(--raw) 16%, transparent); color: var(--ink); }
+.mtag.warn { background: color-mix(in srgb, var(--waste) 14%, transparent); color: var(--ink); }
+svg.spark { display: block; overflow: visible; }
+svg.spark polyline { fill: none; stroke: var(--accent); stroke-width: 1.75; stroke-linejoin: round; stroke-linecap: round; }
+svg.spark circle { fill: var(--accent); }
+svg.spark .spark-none { stroke: var(--line); stroke-width: 1.5; stroke-dasharray: 3 3; }
+.mmovers tbody tr { cursor: pointer; } .mmovers tbody tr:hover td { background: color-mix(in srgb, var(--accent) 8%, transparent); }
+.mall summary { cursor: pointer; list-style: none; } .mall summary::-webkit-details-marker { display: none; }
+.mall summary h3::before { content: "▸ "; color: var(--muted); } .mall[open] summary h3::before { content: "▾ "; }
+.mall .gsearch { margin: 0 0 8px; }
+/* One good */
+.tfacts { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; margin: 2px 0 6px; }
+.tfacts div { display: grid; background: var(--surface); border-radius: 8px; padding: 6px 9px; }
+.tfacts span { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: .05em; }
+.tfacts b { font-size: 14px; } .tfacts small { font-size: 12px; color: var(--muted); }
+.tused { margin: 0 0 4px; }
+.pchart { position: relative; }
+.pchart svg { width: 100%; height: auto; display: block; }
+.pchart .grid { stroke: var(--line); stroke-width: 1; }
+.pchart .ax { font-size: 9.5px; fill: var(--muted); font-variant-numeric: tabular-nums; }
+.pchart .pline { fill: none; stroke: var(--accent); stroke-width: 2; stroke-linejoin: round; }
+.pchart .pdot { fill: var(--accent); stroke: var(--bg); stroke-width: 1.5; }
+.pchart .vbar { fill: var(--muted); opacity: .45; }
+.pchart .xhair { stroke: var(--muted); stroke-width: 1; stroke-dasharray: 3 3; }
+.ptip { position: absolute; pointer-events: none; background: var(--ink); color: var(--bg); font-size: 12px; font-weight: 600; padding: 3px 8px; border-radius: 6px; white-space: nowrap; }
+.ladder { display: grid; gap: 2px; font-size: 13px; font-variant-numeric: tabular-nums; }
+.lv { display: grid; grid-template-columns: 58px 1fr auto; gap: 8px; align-items: center; }
+.lv-px { text-align: right; font-weight: 700; }
+.lv.sell .lv-px::after { content: " ask"; font-size: 10px; font-weight: 600; color: var(--muted); }
+.lv.buy .lv-px::after { content: " bid"; font-size: 10px; font-weight: 600; color: var(--muted); }
+.lv-bar { height: 12px; background: var(--surface); border-radius: 3px; overflow: hidden; }
+.lv-bar i { display: block; height: 100%; border-radius: 3px; }
+.lv.sell .lv-bar i { background: color-mix(in srgb, var(--waste) 55%, transparent); }
+.lv.buy .lv-bar i { background: color-mix(in srgb, var(--raw) 60%, transparent); }
+.lv-mid { text-align: center; font-size: 12px; color: var(--muted); padding: 3px 0; border-top: 1px dashed var(--line); border-bottom: 1px dashed var(--line); margin: 2px 0; }
+/* Sidebar */
+.dgood { font: inherit; font-size: 12.5px; border: 1px solid var(--line); background: var(--bg); color: var(--ink); border-radius: 5px; padding: 1px 6px; cursor: pointer; }
+.dgood:hover { border-color: var(--ink); }
+.dgood.ok { border-color: var(--raw); }
+.dcon .dgood { font-size: 12px; }
+.dcap { display: block; height: 5px; background: var(--bg); border-radius: 3px; overflow: hidden; margin: 2px 0; }
+.dcap i { display: block; height: 100%; background: var(--mid); } .dcap i.full { background: var(--waste); }
+.dheld { display: flex; flex-wrap: wrap; gap: 3px; align-items: center; font-size: 12.5px; }
+.dprev { display: grid; gap: 1px; font-size: 12px; color: var(--muted); margin-top: 6px; }
+.dprev b { color: var(--ink); font-size: 11px; text-transform: uppercase; letter-spacing: .05em; }
+@media (max-width: 700px) { .mstats, .tfacts { grid-template-columns: 1fr; } }

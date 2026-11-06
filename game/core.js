@@ -57,6 +57,44 @@ const SMG = (() => {
   G.used = p => Object.values(p.stock).reduce((a, b) => a + b, 0);
   G.free = p => p.space - G.used(p);
   G.add = (p, cid, q) => { p.stock[cid] = (p.stock[cid] || 0) + q; if (p.stock[cid] <= 0) delete p.stock[cid]; };
+
+  // ---------- Where a player's goods are ----------
+  // Your own stockpile (p.stock) holds what you buy. With settings.businessStock, what a business
+  // makes stays in that business's own stock (biz.stock) until you sell, deliver or use it.
+  // Everything you own counts wherever it is: G.have / G.holdings add it all up, and G.take
+  // takes from your businesses first (oldest first), then your own stockpile.
+  G.addBiz = (biz, cid, q) => { biz.stock ||= {}; biz.stock[cid] = (biz.stock[cid] || 0) + q; if (biz.stock[cid] <= 0) delete biz.stock[cid]; };
+  G.have = (st, p, cid) => (p.stock[cid] || 0) + st.businesses.reduce((s, b) => s + (b.owner === p.id && b.stock?.[cid] || 0), 0);
+  G.holdings = (st, p) => {
+    const h = { ...p.stock };
+    st.businesses.forEach(b => { if (b.owner === p.id && b.stock) Object.entries(b.stock).forEach(([c, q]) => h[c] = (h[c] || 0) + q); });
+    return h;
+  };
+  // Take q of a good. Returns where it came from: { [bizId]: n, me: n } ("me" = your own stockpile).
+  G.take = (st, p, cid, q) => {
+    G.need(G.have(st, p, cid) >= q, `You only have ${G.have(st, p, cid)} ${G.COM[cid]?.name || cid}.`);
+    const from = {};
+    for (const b of st.businesses) {
+      if (q <= 0) break;
+      if (b.owner !== p.id || !b.stock?.[cid]) continue;
+      const n = Math.min(q, b.stock[cid]); G.addBiz(b, cid, -n); from[b.id] = n; q -= n;
+    }
+    if (q > 0) { G.add(p, cid, -q); from.me = q; }
+    return from;
+  };
+  // Put goods back where they came from (a cancelled sell order). What doesn't fit back in its business
+  // (or whose business is gone) goes to your own stockpile.
+  G.giveBack = (st, p, cid, q, from = {}) => {
+    for (const [k, n] of Object.entries(from)) {
+      if (q <= 0) break;
+      const m = Math.min(q, n), b = k !== "me" && st.businesses.find(x => x.id === +k && x.owner === p.id);
+      const back = b ? Math.max(0, Math.min(m, G.bizRoom(b))) : 0;
+      if (back) G.addBiz(b, cid, back);
+      if (m - back) G.add(p, cid, m - back);
+      q -= m;
+    }
+    if (q > 0) G.add(p, cid, q);
+  };
   G.log = (st, msg, pid = null) => { if (st.drafting) return; st.log.push({ round: st.round, phase: st.phase, pid, msg }); if (st.log.length > 400) st.log.shift(); };
   const moneyFmt = new Intl.NumberFormat(undefined, { maximumFractionDigits: 2 }); // one shared formatter: toLocaleString is slow
   G.money = n => moneyFmt.format(Math.round(n * 100) / 100);
@@ -109,7 +147,11 @@ const SMG = (() => {
         st.businesses.push({ id: st.nextBizId++, owner: i + 1, type: x.id, territory: c.start, built: 0, cost: {} }));
       // A head start: one round's output of the mine, farm or well (a factory on its own: one run's inputs)
       const p = st.players[i];
-      if (b.kind === "extract") Object.entries(b.outputs).forEach(([cid, q]) => G.add(p, cid, Math.floor(q * G.richness(b, c.start) * S.extractOutput)));
+      const mine = st.businesses.find(x => x.owner === p.id && x.type === b.id);
+      if (b.kind === "extract") Object.entries(b.outputs).forEach(([cid, q]) => {
+        const n = Math.floor(q * G.richness(b, c.start) * S.extractOutput);
+        if (S.businessStock) G.addBiz(mine, cid, Math.min(n, S.businessSpace)); else G.add(p, cid, n);
+      });
       else Object.entries(b.inputs).forEach(([cid, q]) => G.add(p, cid, q));
     });
     G.onSetup.forEach(f => f(st));
@@ -204,10 +246,15 @@ const SMG = (() => {
   G.botOrders = st => {
     st.players.filter(p => p.bot && !st.orders[p.id]).forEach(p => {
       const c = clone(st); c.log = []; c.recording = []; c.drafting = true;
+      // Bots think of everything they own as one pile; their orders still work on the real game,
+      // where G.take finds the goods wherever they are
+      const cp = G.player(c, p.id);
+      c.businesses.forEach(b => { if (b.owner === p.id && b.stock) { Object.entries(b.stock).forEach(([g, q]) => G.add(cp, g, q)); b.stock = {}; } });
+      if (S.unlimitedSpace) cp.space = 1e9;
       const bot = G.bots[st.phase];
       if (bot) bot(c, G.player(c, p.id));
       st.orders[p.id] = c.recording;
-      const cp = G.player(c, p.id); p.mem = cp.mem; p.plan = cp.plan; // the bot's private memory carries over
+      p.mem = cp.mem; p.plan = cp.plan; // the bot's private memory carries over
     });
   };
 
@@ -217,7 +264,7 @@ const SMG = (() => {
   G.ranking = st => [...st.players].sort((a, b) => b.points - a.points || G.totalCash(st, b) - G.totalCash(st, a));
   // What a player's cash and goods would be worth at the last traded prices (goods never traded count 0)
   G.netWorth = (st, p) => G.totalCash(st, p)
-    + Object.entries(p.stock).reduce((s, [c, q]) => s + q * (st.prices[c] || 0), 0)
+    + Object.entries(G.holdings(st, p)).reduce((s, [c, q]) => s + q * (st.prices[c] || 0), 0)
     + st.book.filter(o => o.pid === p.id && o.side === "sell").reduce((s, o) => s + o.qty * (st.prices[o.good] || 0), 0);
 
   return G;
