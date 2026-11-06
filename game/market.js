@@ -245,10 +245,13 @@
     // What was left on the book afterwards: best bid and ask (and how many at each) for every good with orders
     record.quotes = quotesNow();
     const after = depthNow();
-    record.depth = {};
-    new Set([...Object.keys(before), ...Object.keys(after)]).forEach(id => record.depth[id] = { pre: before[id] || { b: [], a: [] }, post: after[id] || { b: [], a: [] } });
+    // Kept apart from the history (st.bookLog, by auction number) so copies of the game can skip it
+    const books = {};
+    new Set([...Object.keys(before), ...Object.keys(after)]).forEach(id => books[id] = { pre: before[id] || { b: [], a: [] }, post: after[id] || { b: [], a: [] } });
+    if (!st.drafting) (st.bookLog ||= {})[record.n] = books;
     st.history.push(record);
-    st.history.slice(0, -8).forEach(h => delete h.depth); // full books only for the last 4 rounds (8 auctions)
+    // Full books for the last settings.market.bookRounds rounds (2 auctions a round)
+    if (st.bookLog) Object.keys(st.bookLog).forEach(n => { if (+n <= record.n - 2 * (MS.bookRounds || 30)) delete st.bookLog[n]; });
     if (st.history.length > 120) st.history.shift();
     const n = Object.keys(record.trades).length;
     G.log(st, n ? `Market: ${Object.entries(record.trades).map(([id, t]) => `${t.qty} ${G.COM[id].name} at ${G.money(t.price)}`).join(", ")}.` : "Market: nothing traded.");

@@ -574,12 +574,19 @@
   // back into it, and everything (bars, spread band, price scale) glides from one moment to the next.
   // At each auction the part of each order that fills slides to the clearing price, the bids and asks
   // meet at the centre line, turn yellow and fade away; whatever didn't fill stays where it was.
-  function depthFrames(id) {
+  // The full book kept for an auction (st.bookLog; older games kept it on the history entry)
+  const bookOf = h => st.bookLog?.[h.n] || h.depth;
+  const bookRoundsKept = () => Math.ceil(st.history.filter(bookOf).length / 2);
+  function depthFrames(id, rounds = 4) {
     const frames = [];
     const seg = (side, p, w, x0 = 0, col = side, op = 1) => ({ side, p, w, x0, col, op });
     const book = (lv, keyOf = (s, p) => s + p) => { const segs = {}; lv.b.forEach(([p, q]) => segs[keyOf("b", p)] = seg("b", p, q)); lv.a.forEach(([p, q]) => segs[keyOf("a", p)] = seg("a", p, q)); return segs; };
-    st.history.filter(h => h.depth).forEach(h => {
-      const d = h.depth[id] || { pre: { b: [], a: [] }, post: { b: [], a: [] } }, tr = h.trades[id];
+    const shown = st.history.filter(bookOf).slice(-2 * rounds);
+    // The last sale before the replay starts (from earlier auctions), for the last-sale line
+    let lastBefore = null;
+    for (const h of st.history) { if (shown[0] && h.n >= shown[0].n) break; if (h.trades[id]) lastBefore = h.trades[id].price; }
+    shown.forEach(h => {
+      const d = bookOf(h)[id] || { pre: { b: [], a: [] }, post: { b: [], a: [] } }, tr = h.trades[id];
       const when = `Round ${h.round} ${h.phase}`;
       if (!tr) {
         frames.push({ label: `${when}: orders in`, segs: book(d.pre) });
@@ -601,7 +608,7 @@
       Object.keys(pre).filter(k => k[0] === "t").forEach(k => { meet[k] = { ...pre[k], p: tr.price, x0: 0, col: "y" }; gone[k] = { ...meet[k], op: 0 }; });
       frames.push({ label: `${when}: orders in`, segs: pre });
       frames.push({ label: `${when}: bids meet asks at ${m(tr.price)}`, segs: meet, trade: tr.price, hold: 500 });
-      frames.push({ label: `${when}: traded ${tr.qty} at ${m(tr.price)}`, segs: gone, trade: tr.price, hold: 200 });
+      frames.push({ label: `${when}: traded ${tr.qty} at ${m(tr.price)}`, segs: gone, trade: tr.price, sold: tr.price, hold: 200 });
       frames.push({ label: `${when}: after the auction`, segs: book(d.post) });
     });
     frames.push({ label: "Now", segs: book({ b: G.depth(st, id, "buy").slice(0, 10).map(x => [x.price, x.qty]), a: G.depth(st, id, "sell").slice(0, 10).map(x => [x.price, x.qty]) }) });
@@ -610,26 +617,15 @@
     const has = f => Object.keys(f.segs).length || f.trade != null;
     const kept = frames.filter((f, i) => has(f) || f.label === "Now" || (i > 0 && has(frames[i - 1])));
     frames.length = 0; frames.push(...kept);
-    // The price scale. Each moment covers the 6 prices nearest the spread on each side (and the trade),
-    // so a few far-off orders can't squash the chart; those are pinned to the edge. Each moment's scale
-    // also covers the moments either side of it, so a bar that's arriving or leaving is always on screen
-    // while it grows or shrinks.
+    // The last sale at each moment: it moves when a trade completes
+    let last = lastBefore;
+    frames.forEach(f => { if (f.sold != null) last = f.sold; f.last = last; });
+    // One fixed price scale for the whole replay, covering every bid, ask and sale in it, so nothing ever
+    // leaves the chart and you can see how far prices have moved
     let maxQ = 1;
-    const near = f => {
-      const segs = Object.values(f.segs);
-      segs.forEach(x => maxQ = Math.max(maxQ, x.x0 + x.w));
-      const bids = [...new Set(segs.filter(x => x.side === "b").map(x => x.p))].sort((a, b) => b - a).slice(0, 6);
-      const asks = [...new Set(segs.filter(x => x.side === "a").map(x => x.p))].sort((a, b) => a - b).slice(0, 6);
-      return [...bids, ...asks].concat(f.trade ?? []);
-    };
-    const own = frames.map(near);
-    let prev = null;
-    frames.forEach((f, i) => {
-      const v = [...(own[i - 1] || []), ...own[i], ...(own[i + 1] || [])];
-      if (!v.length) { [f.lo, f.hi] = prev || [0, 12]; return; }
-      const a = Math.min(...v), z = Math.max(...v), w = Math.max(12, (z - a) * 1.25), mid = (a + z) / 2;
-      f.lo = mid - w / 2; f.hi = mid + w / 2; prev = [f.lo, f.hi];
-    });
+    const all = frames.flatMap(f => { Object.values(f.segs).forEach(x => maxQ = Math.max(maxQ, x.x0 + x.w)); return [...Object.values(f.segs).map(x => x.p), f.trade, f.last]; }).filter(x => x != null);
+    const a = all.length ? Math.min(...all) : 0, z = all.length ? Math.max(...all) : 12, wid = Math.max(12, (z - a) * 1.12), mid = (a + z) / 2;
+    frames.forEach(f => { f.lo = mid - wid / 2; f.hi = mid + wid / 2; });
     return { frames, maxQ, empty: frames.length < 2 || frames.every(f => !Object.keys(f.segs).length) };
   }
 
@@ -645,7 +641,8 @@
       const ca = C[a.col], cb = C[b.col];
       segs[k] = { side: b.side, p: mix(a.p, b.p, t), w: mix(a.w, b.w, t), x0: mix(a.x0, b.x0, t), op: mix(a.op, b.op, t), rgb: ca.map((x, i) => mix(x, cb[i], t)) };
     });
-    return { segs, lo: mix(f0.lo, f1.lo, t), hi: mix(f0.hi, f1.hi, t), trade: f1.trade ?? f0.trade ?? null, tradeOp: mix(f0.trade != null ? 1 : 0, f1.trade != null ? 1 : 0, t) };
+    return { segs, lo: mix(f0.lo, f1.lo, t), hi: mix(f0.hi, f1.hi, t), trade: f1.trade ?? f0.trade ?? null, tradeOp: mix(f0.trade != null ? 1 : 0, f1.trade != null ? 1 : 0, t),
+      last: f0.last != null && f1.last != null ? mix(f0.last, f1.last, t) : f1.last ?? f0.last ?? null };
   };
   const still = (f, C) => blend(f, f, 1, C);
   function drawDepthAnim(D, s) {
@@ -665,6 +662,8 @@
       g += `<line class="grid" x1="30" x2="${W - 4}" y1="${y.toFixed(1)}" y2="${y.toFixed(1)}"/><text class="gl" x="26" y="${(y + 3).toFixed(1)}" text-anchor="end">${m(v)}</text>`;
     }
     if (isFinite(bid) && isFinite(ask) && ask > bid) g += `<rect class="band" x="4" y="${Y(ask).toFixed(1)}" width="${W - 8}" height="${(Y(bid) - Y(ask)).toFixed(1)}"/>`;
+    // The last sale: a solid line that glides to each new trade price (labelled unless a trade is happening)
+    if (s.last != null) g += `<line class="lline" x1="30" x2="${W - 4}" y1="${Y(s.last).toFixed(1)}" y2="${Y(s.last).toFixed(1)}"/>${s.tradeOp < 0.5 ? `<text class="llbl" x="${W - 6}" y="${(Y(s.last) - 4).toFixed(1)}" text-anchor="end">last ${m(Math.round(s.last))}</text>` : ""}`;
     if (s.trade != null && s.tradeOp > 0.02) g += `<line class="tline" opacity="${s.tradeOp.toFixed(2)}" x1="4" x2="${W - 4}" y1="${Y(s.trade).toFixed(1)}" y2="${Y(s.trade).toFixed(1)}"/>
       <text class="tlbl" opacity="${s.tradeOp.toFixed(2)}" x="${W - 6}" y="${(Y(s.trade) - 6).toFixed(1)}" text-anchor="end">${m(s.trade)}</text>`;
     segs.forEach(x => {
@@ -682,9 +681,9 @@
       <line class="axis" x1="${cx}" x2="${cx}" y1="${top - 6}" y2="${H - bot + 4}"/>${g}</svg>`;
   }
   // Play: each moment blends into the next over 0.65s, then holds. Returns a stop function.
-  function playDepth(box, label, id, done) {
-    const D = depthFrames(id), C = themeColours();
-    if (D.empty) { label.textContent = `Nothing to replay: nobody bid for or offered ${G.COM[id].name.toLowerCase()} in the last 4 rounds.`; label.classList.add("dnow"); done(); return () => {}; }
+  function playDepth(box, label, id, rounds, done) {
+    const D = depthFrames(id, rounds), C = themeColours();
+    if (D.empty) { label.textContent = `Nothing to replay: nobody bid for or offered ${G.COM[id].name.toLowerCase()} in the last ${rounds} round${rounds === 1 ? "" : "s"}.`; label.classList.add("dnow"); done(); return () => {}; }
     label.classList.add("dnow");
     const MOVE = 650, HOLD = 750, F = D.frames;
     // The clock starts on the first frame: a browser stamps each frame with when the frame began, which can
@@ -726,7 +725,7 @@
       <p class="small muted tused">Used by: ${usedBy.join(" · ") || "no factory"}${S.depreciation?.on ? ` · ${G.lifeOf(id) ? `lasts ${G.lifeOf(id)} rounds` : "never goes off"}` : ""}</p>
       <div class="tcharts">
         <div><h4>Order book</h4><div class="depthbox">${depthChart(q, yours)}</div>
-          <div class="drctl">${st.history.some(h => h.depth) ? `<button class="gbtn ghost" id="dPlay">▶ Replay last 4 rounds</button><span id="dLabel" class="muted small"></span>` : `<button class="gbtn ghost" disabled>▶ Replay last 4 rounds</button><span class="muted small">Replays build up from here on: each auction from now is recorded.</span>`}</div></div>
+          <div class="drctl">${bookRoundsKept() ? `<button class="gbtn ghost" id="dPlay">▶ Replay</button><label class="drr">the last <input type="number" id="dRounds" min="1" max="${bookRoundsKept()}" value="${Math.min(ui.dRounds || 4, bookRoundsKept())}"> rounds <span class="muted">(of ${bookRoundsKept()} recorded)</span></label><span id="dLabel" class="muted small"></span>` : `<button class="gbtn ghost" disabled>▶ Replay</button><span class="muted small">Replays build up from here on: each auction from now is recorded.</span>`}</div></div>
         <div><h4>Price history</h4>${priceChart(id)}</div>
       </div>
       <div class="gtwo">
@@ -891,10 +890,12 @@
     // Order book replay (last 4 rounds): ▶ starts it, ■ stops it; a redraw of the page stops it too
     dStop(); dStop = () => {};
     const dPlay = root.querySelector("#dPlay");
+    // How many rounds back to replay (remembered while you look at other goods)
+    root.querySelector("#dRounds")?.addEventListener("change", e => { ui.dRounds = Math.max(1, Math.min(bookRoundsKept(), Math.floor(+e.target.value) || 4)); e.target.value = ui.dRounds; });
     dPlay?.addEventListener("click", () => {
-      if (dPlay.dataset.on) { dStop(); dStop = () => {}; delete dPlay.dataset.on; dPlay.textContent = "▶ Replay last 4 rounds"; return; }
+      if (dPlay.dataset.on) { dStop(); dStop = () => {}; delete dPlay.dataset.on; dPlay.textContent = "▶ Replay"; return; }
       dPlay.dataset.on = 1; dPlay.textContent = "■ Stop";
-      dStop = playDepth(root.querySelector(".depthbox"), root.querySelector("#dLabel"), ui.good, () => { delete dPlay.dataset.on; dPlay.textContent = "▶ Replay again"; dStop = () => {}; });
+      dStop = playDepth(root.querySelector(".depthbox"), root.querySelector("#dLabel"), ui.good, Math.min(ui.dRounds || 4, bookRoundsKept()), () => { delete dPlay.dataset.on; dPlay.textContent = "▶ Replay again"; dStop = () => {}; });
     });
     // Quote board replay: ▶ steps through the auctions, one every 0.7s; the slider jumps to any of them
     clearInterval(qTimer); qTimer = null;

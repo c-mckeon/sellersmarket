@@ -23,6 +23,7 @@ const GAME_SETTINGS = {
   // One sealed auction per phase. Every good clears at a single price set by the players' own bids and asks.
   market: {
     maxPrice: 10000,       // no order may be priced above this
+    bookRounds: 30,        // how many rounds of full order books to keep, for the order book replay
     // No prices are set by the game: raw goods have none until they trade, and a made good's "cost basis"
     // (G.costBasis) is just its raw materials at their last traded prices.
   },

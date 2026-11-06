@@ -216,7 +216,9 @@ const SMG = (() => {
   //   - Market orders go on the book; the auction at the end of the phase matches them (game/market.js).
   //   - Afternoon moves: if two or more players move into the same territory, none of them gets in.
   //   - Afternoon builds: costs are worked out from the businesses there at the start of the afternoon.
-  const clone = x => JSON.parse(JSON.stringify(x));
+  // A copy of the game. The full order books kept for the replay (st.bookLog) are left out: computer
+  // players copy the game every time they decide something, and don't need them.
+  const clone = x => { const bl = x.bookLog; if (bl) delete x.bookLog; try { return JSON.parse(JSON.stringify(x)); } finally { if (bl) x.bookLog = bl; } };
   G.fail = msg => { throw new Error(msg); };
   G.need = (cond, msg) => { if (!cond) G.fail(msg); };
 
