@@ -8,7 +8,7 @@ const GAME_SETTINGS = {
   startSpace: 30,          // stockpile crates at the start; 1 unit of anything = 1 crate (ignored while unlimitedSpace is on)
   unlimitedSpace: true,    // your own stockpile has no limit, for now
   businessStock: true,     // what a business makes stays in its own stock until you sell or use it…
-  businessSpace: 5,        // …which holds this many units
+  businessSpace: 10,       // …which holds this many units (10: producers have stock to sell; tuned by simulation)
 
   // Starting goods, on top of one round's output of your free business
   startGoods: { lumber: 6, iron: 4 },
@@ -40,7 +40,8 @@ const GAME_SETTINGS = {
     // gold, lithium, rare earths, bauxite and what's made from them) can still be made, but no contract
     // asks for it. Waste and raw goods never go in this list (rawShare and raws below cover raw ones).
     // Simulations: 13 made + 8 raw → 9 + 6 took players who never deliver from 75% to 42%.
-    rawShare: 0.3,         // chance that each good on a contract is a raw one (wood, clay, coal…) instead
+    rawShare: 0.5,         // chance that each good on a contract is a raw one (wood, clay, coal…) instead: raw goods come
+                           // from one faraway region, so these usually have to be bought from whoever mines them
     tierBonus: 0.25,        // +this share of points per processing step (raw 0, lumber 1, steel 2…)
     goods: ["flour", "lumber", "glass", "ceramic", "iron",   // level 1
             "bread", "paper", "cement", "steel"],          // level 2
@@ -54,7 +55,7 @@ const GAME_SETTINGS = {
   // cost level and crowding. Any building material will do, so no single good can block building.
   build: {
     valuePerCrate: 40,
-    ownedCostStep: 0.15,   // each business you already own makes your next one 15% dearer
+    ownedCostStep: 0.3,    // each business you already own makes your next one 30% dearer (so players specialise and trade)
     // Building materials, and how many crates one unit counts for
     // (raw wood, clay, sand and limestone count half: you can always build, slowly, from what your own mines make)
     materials: { lumber: 1, iron: 1, ceramic: 1, cement: 1, glass: 1, concrete: 0.5, steel: 2, aluminium: 2,
@@ -100,7 +101,7 @@ const GAME_SETTINGS = {
     { for: "slag",      use: "fly_ash",    ratio: 1, at: ["cement_kiln"] },
     { for: "fly_ash",   use: "slag",       ratio: 1, at: ["concrete_plant"] },
   ],
-  extractOutput: 0.6,      // multiplies what every mine, farm and well makes (1 = as listed on the Territories tab)
+  extractOutput: 1.0,      // multiplies what every mine, farm and well makes (1 = as listed on the Territories tab)
 
   // ---------- Switched off for now ----------
   // Cards, wages, inflation and the broker (loans, bonds, futures, ETFs) are kept in the code but not
