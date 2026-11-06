@@ -110,6 +110,7 @@ const summary = {
   "businesses per player (median / max)": `${q(flat("biz"), .5)} / ${Math.max(...flat("biz"))}`,
   "businesses idle (share of runs)": f(100 * avg(res.map(r => r.stats.idle / Math.max(1, r.stats.runs)))) + "%",
   "goods thrown away (overflow) per game": f(avg(res.map(r => r.stats.overflow))),
+  "goods gone off (depreciation) per game": f(avg(res.map(r => r.stats.spoiled || 0))),
   "goods trading per auction (average)": f(avg(res.map(r => (r.stats.trades || 0) / r.auctions)), 1),
   "goods that ever traded in a game (median of 50)": q(res.map(r => Object.keys(r.traded).length), .5),
   "goods with both a bid and an ask at the end (median)": q(res.map(r => r.twoSided), .5),

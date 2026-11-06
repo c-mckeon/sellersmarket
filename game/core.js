@@ -56,44 +56,92 @@ const SMG = (() => {
   G.player = (st, pid) => st.players.find(p => p.id === pid);
   G.used = p => Object.values(p.stock).reduce((a, b) => a + b, 0);
   G.free = p => p.space - G.used(p);
-  G.add = (p, cid, q) => { p.stock[cid] = (p.stock[cid] || 0) + q; if (p.stock[cid] <= 0) delete p.stock[cid]; };
+  // ---------- Goods age (settings.depreciation, game/depreciation.js) ----------
+  // Each holder (a player, or a business with its own stock) keeps, beside its counts, when its units
+  // were made: holder.lots[good] = [[qty, round made], …], oldest first. Goods are always used, sold and
+  // delivered oldest first, and keep their age wherever they go (into a sell order, to a buyer, back
+  // again). G.clock is the round now; it's set wherever the game runs (actions, steps, a new game).
+  G.clock = 0;
+  const lotsOn = () => !!S.depreciation?.on;
+  // Make the ages match the count (units put in some other way count as made now)
+  const syncLots = (h, cid) => {
+    h.lots ||= {};
+    const L = h.lots[cid] ||= [], n = h.stock[cid] || 0;
+    let sum = L.reduce((s, l) => s + l[0], 0);
+    if (sum < n) { L.push([n - sum, G.clock]); L.sort((a, b) => a[1] - b[1]); }
+    while (sum > n && L.length) { const k = Math.min(L[0][0], sum - n); L[0][0] -= k; sum -= k; if (!L[0][0]) L.shift(); }
+    if (!L.length) delete h.lots[cid];
+  };
+  // Change a holder's count of a good by q. Adding: `made` is when the units were made (default now).
+  // Removing: oldest first. Returns the units removed, as lots.
+  const change = (h, cid, q, made) => {
+    if (lotsOn()) syncLots(h, cid);
+    h.stock[cid] = (h.stock[cid] || 0) + q;
+    if (h.stock[cid] <= 0) delete h.stock[cid];
+    if (!lotsOn()) return [];
+    const L = h.lots[cid] ||= [], out = [];
+    if (q > 0) { L.push([q, made ?? G.clock]); L.sort((a, b) => a[1] - b[1]); }
+    else { let r = -q; while (r > 0 && L.length) { const k = Math.min(L[0][0], r); out.push([k, L[0][1]]); L[0][0] -= k; r -= k; if (!L[0][0]) L.shift(); } }
+    if (!L.length) delete h.lots[cid];
+    return out;
+  };
+  // Take n units off the front of a list of lots (oldest first); returns them as lots
+  G.takeLots = (lots, n) => {
+    const out = [];
+    while (n > 0 && lots?.length) { const k = Math.min(lots[0][0], n); out.push([k, lots[0][1]]); lots[0][0] -= k; n -= k; if (!lots[0][0]) lots.shift(); }
+    return out;
+  };
+
+  G.add = (p, cid, q, made) => change(p, cid, q, made);
 
   // ---------- Where a player's goods are ----------
   // Your own stockpile (p.stock) holds what you buy. With settings.businessStock, what a business
   // makes stays in that business's own stock (biz.stock) until you sell, deliver or use it.
   // Everything you own counts wherever it is: G.have / G.holdings add it all up, and G.take
   // takes from your businesses first (oldest first), then your own stockpile.
-  G.addBiz = (biz, cid, q) => { biz.stock ||= {}; biz.stock[cid] = (biz.stock[cid] || 0) + q; if (biz.stock[cid] <= 0) delete biz.stock[cid]; };
+  G.addBiz = (biz, cid, q, made) => { biz.stock ||= {}; return change(biz, cid, q, made); };
   G.have = (st, p, cid) => (p.stock[cid] || 0) + st.businesses.reduce((s, b) => s + (b.owner === p.id && b.stock?.[cid] || 0), 0);
   G.holdings = (st, p) => {
     const h = { ...p.stock };
     st.businesses.forEach(b => { if (b.owner === p.id && b.stock) Object.entries(b.stock).forEach(([c, q]) => h[c] = (h[c] || 0) + q); });
     return h;
   };
-  // Take q of a good. Returns where it came from: { [bizId]: n, me: n } ("me" = your own stockpile).
+  // Take q of a good. Returns where it came from, { [bizId]: n, me: n } ("me" = your own stockpile),
+  // and the units taken as lots (when they were made).
   G.take = (st, p, cid, q) => {
     G.need(G.have(st, p, cid) >= q, `You only have ${G.have(st, p, cid)} ${G.COM[cid]?.name || cid}.`);
-    const from = {};
+    const from = {}, lots = [];
     for (const b of st.businesses) {
       if (q <= 0) break;
       if (b.owner !== p.id || !b.stock?.[cid]) continue;
-      const n = Math.min(q, b.stock[cid]); G.addBiz(b, cid, -n); from[b.id] = n; q -= n;
+      const n = Math.min(q, b.stock[cid]); lots.push(...G.addBiz(b, cid, -n)); from[b.id] = n; q -= n;
     }
-    if (q > 0) { G.add(p, cid, -q); from.me = q; }
-    return from;
+    if (q > 0) { lots.push(...G.add(p, cid, -q)); from.me = q; }
+    lots.sort((a, b) => a[1] - b[1]);
+    return { from, lots };
   };
   // Put goods back where they came from (a cancelled sell order). What doesn't fit back in its business
   // (or whose business is gone) goes to your own stockpile.
-  G.giveBack = (st, p, cid, q, from = {}) => {
+  // `lots`: when the units were made (they keep their age).
+  G.giveBack = (st, p, cid, q, from = {}, lots = null) => {
+    lots = lots ? lots.map(l => [...l]) : null;
+    // Put n units into a holder, with their ages if we know them (any we don't count as made now)
+    const put = (h, n, biz) => {
+      const add = (k, made) => biz ? G.addBiz(h, cid, k, made) : G.add(h, cid, k, made);
+      const got = lots ? G.takeLots(lots, n) : [];
+      got.forEach(([k, made]) => add(k, made));
+      const rest = n - got.reduce((x, l) => x + l[0], 0);
+      if (rest > 0) add(rest);
+    };
     for (const [k, n] of Object.entries(from)) {
       if (q <= 0) break;
       const m = Math.min(q, n), b = k !== "me" && st.businesses.find(x => x.id === +k && x.owner === p.id);
       const back = b ? Math.max(0, Math.min(m, G.bizRoom(b))) : 0;
-      if (back) G.addBiz(b, cid, back);
-      if (m - back) G.add(p, cid, m - back);
+      if (back) put(b, back, true);
+      if (m - back) put(p, m - back, false);
       q -= m;
     }
-    if (q > 0) G.add(p, cid, q);
+    if (q > 0) put(p, q, false);
   };
   G.log = (st, msg, pid = null) => { if (st.drafting) return; st.log.push({ round: st.round, phase: st.phase, pid, msg }); if (st.log.length > 400) st.log.shift(); };
   const moneyFmt = new Intl.NumberFormat(undefined, { maximumFractionDigits: 2 }); // one shared formatter: toLocaleString is slow
@@ -132,6 +180,7 @@ const SMG = (() => {
       effects: [], pending: [], log: [],
       stats: { runs: 0, idle: 0, overflow: 0 },
     };
+    G.clock = st.round;
     config.players.forEach((c, i) => {
       st.players.push({ id: i + 1, name: c.name, colour: c.colour, bot: !!c.bot, strategy: c.strategy || "best",
         cash: S.startCash, space: S.startSpace, upgrades: 0, pos: c.start, stock: { ...S.startGoods }, hand: [],
@@ -173,6 +222,7 @@ const SMG = (() => {
 
   // Carry out one action now. Used when resolving orders, and on draft copies of the game.
   G.act = (st, pid, name, args = {}) => {
+    G.clock = st.round;
     if (st.over) return { ok: false, msg: "The game is over." };
     const fn = G.actions[name];
     if (!fn) return { ok: false, msg: `Unknown action: ${name}` };
@@ -208,6 +258,7 @@ const SMG = (() => {
   G.resolve = st => {
     let guard = 0;
     do {
+      G.clock = st.round;
       if (st.phase === "morning") {
         st.players.forEach(p => (st.orders[p.id] || []).forEach(o => G.act(st, p.id, o.name, o.args)));
         st.orders = {};
@@ -244,6 +295,7 @@ const SMG = (() => {
 
   // Computer players decide on a draft copy of the game; whatever they did there becomes their orders.
   G.botOrders = st => {
+    G.clock = st.round;
     st.players.filter(p => p.bot && !st.orders[p.id]).forEach(p => {
       const c = clone(st); c.log = []; c.recording = []; c.drafting = true;
       // Bots think of everything they own as one pile; their orders still work on the real game,

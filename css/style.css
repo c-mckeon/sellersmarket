@@ -770,3 +770,6 @@ svg.spark .spark-none { stroke: var(--line); stroke-width: 1.5; stroke-dasharray
 tr.flash td { animation: tradeflashrow 1.6s ease-out; }
 .matbox { background: var(--bg); border-radius: 8px; padding: 8px 10px; margin-bottom: 8px; display: grid; gap: 3px; font-size: 13.5px; }
 .glink.blink { color: var(--accent); font-size: inherit; font-weight: 700; padding: 0; text-decoration: underline; }
+.offb { color: var(--waste); font-weight: 700; font-size: 11px; margin-left: 2px; }
+.qc-band.cross { background: color-mix(in srgb, #e0b800 55%, transparent); }
+.qctl .gseg button { padding: 5px 10px; }

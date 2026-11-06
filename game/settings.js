@@ -47,9 +47,28 @@ const GAME_SETTINGS = {
     valuePerCrate: 40,
     ownedCostStep: 0.15,   // each business you already own makes your next one 15% dearer
     // Building materials, and how many crates one unit counts for
-    materials: { lumber: 1, iron: 1, ceramic: 1, cement: 1, glass: 1, concrete: 0.5, steel: 2, aluminium: 2 },
+    // (raw wood, clay, sand and limestone count half: you can always build, slowly, from what your own mines make)
+    materials: { lumber: 1, iron: 1, ceramic: 1, cement: 1, glass: 1, concrete: 0.5, steel: 2, aluminium: 2,
+                 wood: 0.5, clay: 0.5, sand: 0.5, limestone: 0.5 },
     // Big factories (tier 3 and up) need at least this share of their crates in heavy materials
     heavy: { fromTier: 3, share: 0.5, goods: ["steel", "glass", "concrete", "aluminium"] },
+  },
+
+  // ---------- Depreciation (game/depreciation.js) ----------
+  // How many rounds a good lasts before it goes off. Its own entry first, then its kind, then life.
+  // 0 = never. Lifetimes need to be longer than it takes to gather a contract or a big build.
+  depreciation: {
+    on: true,
+    life: 8,
+    byType: { raw: 8, made: 8, waste: 4 },
+    goods: {
+      wheat: 4, water: 3, flour: 4, bread: 2,               // food and water spoil quickly
+      latex: 4, crude_oil: 6, fuel: 6,
+      iron: 12, steel: 15, copper: 12, aluminium: 15, gold: 0, // metals keep
+      glass: 12, ceramic: 12, concrete: 12, wire: 12, magnets: 12,
+      chips: 10, circuit_board: 10, battery: 10, solar_panel: 12, motor: 12,
+      tyres: 12, smartphone: 12, electric_car: 15, wind_turbine: 15,
+    },
   },
 
   // Production

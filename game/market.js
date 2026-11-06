@@ -94,15 +94,16 @@
       G.need(G.have(st, p, id) >= qty, `You only have ${G.have(st, p, id)} ${name} that isn't already on offer.`);
     }
     // A sell order takes the goods from your businesses first, then your own stockpile, and remembers where
-    const from = side === "sell" ? G.take(st, p, id, qty) : undefined;
-    st.book.push({ id: st.nextOrderId++, pid: p.id, good: id, side, price, qty, round: st.round, phase: st.phase, ...(from ? { from } : {}) });
+    const taken = side === "sell" ? G.take(st, p, id, qty) : null;
+    st.book.push({ id: st.nextOrderId++, pid: p.id, good: id, side, price, qty, round: st.round, phase: st.phase,
+      ...(taken ? { from: taken.from, ...(taken.lots.length ? { lots: taken.lots } : {}) } : {}) });
     return null; // private until the auction
   };
 
   // Give back what an order locked
   const release = (st, o) => {
     const p = G.player(st, o.pid);
-    if (o.side === "buy") p.cash = cents(p.cash + o.price * o.qty); else G.giveBack(st, p, o.good, o.qty, o.from);
+    if (o.side === "buy") p.cash = cents(p.cash + o.price * o.qty); else G.giveBack(st, p, o.good, o.qty, o.from, o.lots);
   };
   G.actions.cancelOrder = (st, p, { order }) => {
     const o = st.book.find(x => x.id === order && x.pid === p.id);
@@ -167,8 +168,13 @@
   };
 
   G.auction = st => {
+    G.clock = st.round;
     const ph = st.phase === "midday" ? "morning" : st.phase === "overnight" ? "afternoon" : st.phase;
     const record = { n: st.stats.auctions || 0, round: st.round, phase: ph, trades: {} }; // n: auctions before this one (history keeps the last 120)
+    // The book just before it cleared (everyone's new orders in, bids may cross asks), for the replay
+    const quotesNow = () => { const q = {}; new Set(st.book.map(o => o.good)).forEach(id => { const b = G.bestBid(st, id), a = G.bestAsk(st, id);
+      q[id] = { bid: b?.price ?? null, ask: a?.price ?? null, bq: b?.qty || 0, aq: a?.qty || 0 }; }); return q; };
+    record.pre = quotesNow();
     const mine = {}; // pid → messages
     const say = (pid, msg) => (mine[pid] ||= []).push(msg);
     COMMODITIES.forEach(c => {
@@ -181,9 +187,15 @@
       const vol = Math.min(inB.reduce((s, o) => s + o.qty, 0), inA.reduce((s, o) => s + o.qty, 0));
       const bf = allocate(inB, vol, (a, b) => b - a), af = allocate(inA, vol, (a, b) => a - b);
       const bought = {}, sold = {};
+      // The units sold keep their age: sellers part with their oldest first, and buyers get them in that order
+      const pool = [];
+      af.forEach((n, o) => pool.push(...G.takeLots(o.lots, n)));
+      pool.sort((a, b) => a[1] - b[1]);
       bf.forEach((n, o) => {
         const p = G.player(st, o.pid);
-        G.add(p, id, n);
+        const got = G.takeLots(pool, n), known = got.reduce((s, l) => s + l[0], 0);
+        got.forEach(([k, made]) => G.add(p, id, k, made));
+        if (n > known) G.add(p, id, n - known);
         p.cash = cents(p.cash + (o.price - P) * n); // refund what was locked above the clearing price
         G.book(st, p, "Market purchases", -P * n);
         o.qty -= n; bought[p.id] = (bought[p.id] || 0) + n;
@@ -202,9 +214,7 @@
       record.trades[id] = { price: P, qty: vol };
     });
     // What was left on the book afterwards: best bid and ask (and how many at each) for every good with orders
-    record.quotes = {};
-    new Set(st.book.map(o => o.good)).forEach(id => { const b = G.bestBid(st, id), a = G.bestAsk(st, id);
-      record.quotes[id] = { bid: b?.price ?? null, ask: a?.price ?? null, bq: b?.qty || 0, aq: a?.qty || 0 }; });
+    record.quotes = quotesNow();
     st.history.push(record);
     if (st.history.length > 120) st.history.shift();
     const n = Object.keys(record.trades).length;

@@ -45,6 +45,7 @@
   G.bizRoom = biz => S.businessSpace - Object.values(biz.stock || {}).reduce((a, b) => a + b, 0);
 
   G.produce = st => {
+    G.clock = st.round;
     const yieldMod = G.businessYield ? G.businessYield(st) : {};
     const report = {};
     const own = S.businessStock; // outputs stay at the business, which holds settings.businessSpace units

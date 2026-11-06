@@ -12,5 +12,6 @@ SMG.steps.midday = [
 
 SMG.steps.overnight = [
   SMG.auction,             // the afternoon's orders are matched
+  SMG.expire,              // goods at the end of their life go off (game/depreciation.js)
   SMG.refillContracts,     // delivered and discarded contracts are replaced
 ];
