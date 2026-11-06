@@ -12,7 +12,8 @@
 //
 // The auction (once at the end of every phase, after everyone's orders are in)
 //   Each good clears at one price: the price at which the most units change hands.
-//   If several prices tie, the one that leaves the fewest units unmatched; if still tied, the middle one.
+//   If several prices tie: the one that leaves the fewest units unmatched; then, if buyers are left
+//   over the highest (sellers left over: the lowest); then the one nearest the last traded price.
 //   Everyone who trades pays or gets that same price. A buyer who bid more gets the difference back.
 //   If one side has more than can be matched, better prices fill first; orders at the clearing price
 //   share what's left in proportion to their size (oldest first for the odd unit).
@@ -45,8 +46,31 @@
     st.book.filter(o => o.good === id && o.side === side).forEach(o => lv[o.price] = (lv[o.price] || 0) + o.qty);
     return Object.entries(lv).map(([price, qty]) => ({ price: +price, qty })).sort((a, b) => side === "buy" ? b.price - a.price : a.price - b.price);
   };
-  G.bestBid = (st, id) => G.depth(st, id, "buy")[0] || null;
-  G.bestAsk = (st, id) => G.depth(st, id, "sell")[0] || null;
+  // Best price on one side and the quantity at it (null if that side is empty)
+  const best = (st, id, side) => {
+    let price = null, qty = 0;
+    for (const o of st.book) {
+      if (o.good !== id || o.side !== side) continue;
+      if (price === null || (side === "buy" ? o.price > price : o.price < price)) { price = o.price; qty = o.qty; }
+      else if (o.price === price) qty += o.qty;
+    }
+    return price === null ? null : { price, qty };
+  };
+  G.bestBid = (st, id) => best(st, id, "buy");
+  G.bestAsk = (st, id) => best(st, id, "sell");
+
+  // Everything public about one good, for the Game tab and the tools:
+  //   bid, ask (best prices or null), spread (ask ÷ bid − 1, or null), bids/asks (price levels),
+  //   last (last trade { price, qty, round, phase } or null), volume (units traded in the last `n` auctions)
+  G.quote = (st, id, n = 6) => {
+    const bids = G.depth(st, id, "buy"), asks = G.depth(st, id, "sell");
+    const bid = bids[0]?.price ?? null, ask = asks[0]?.price ?? null;
+    return {
+      bid, ask, spread: bid && ask ? ask / bid - 1 : null, bids, asks,
+      last: st.lastTrade[id] || null,
+      volume: st.history.slice(-n).reduce((s, h) => s + (h.trades[id]?.qty || 0), 0),
+    };
+  };
 
   // ---------- Actions ----------
   G.actions.placeOrder = (st, p, { id, side, price, qty }) => {
@@ -94,21 +118,30 @@
 
   // ---------- The auction ----------
   // Pick the clearing price for one good. Returns null if nothing crosses.
-  G.clearingPrice = (bids, asks) => {
+  //   1. the most units traded
+  //   2. then the fewest units left unmatched at that price
+  //   3. then, if the leftover is all on one side: buyers left over → the top of the range, sellers → the bottom
+  //   4. then the last traded price (`ref`), kept inside the range; never traded → the middle of the range
+  // Step 4 matters: without it, one bid at the price limit "to be sure of filling" would drag the
+  // price halfway to the limit.
+  G.clearingPrice = (bids, asks, ref) => {
     if (!bids.length || !asks.length) return null;
     const prices = [...new Set([...bids, ...asks].map(o => o.price))].sort((a, b) => a - b);
     const at = P => {
       const d = bids.filter(o => o.price >= P).reduce((s, o) => s + o.qty, 0);
       const s = asks.filter(o => o.price <= P).reduce((s, o) => s + o.qty, 0);
-      return { P, vol: Math.min(d, s), gap: Math.abs(d - s) };
+      return { P, vol: Math.min(d, s), surplus: d - s };
     };
     const opts = prices.map(at).filter(x => x.vol > 0);
     if (!opts.length) return null;
     const vol = Math.max(...opts.map(x => x.vol));
-    const best = opts.filter(x => x.vol === vol);
-    const gap = Math.min(...best.map(x => x.gap));
-    const tied = best.filter(x => x.gap === gap);
-    return cents((tied[0].P + tied.at(-1).P) / 2);
+    let best = opts.filter(x => x.vol === vol);
+    const gap = Math.min(...best.map(x => Math.abs(x.surplus)));
+    best = best.filter(x => Math.abs(x.surplus) === gap);
+    const lo = best[0].P, hi = best.at(-1).P;
+    if (best.every(x => x.surplus > 0)) return hi;
+    if (best.every(x => x.surplus < 0)) return lo;
+    return cents(ref ? Math.min(hi, Math.max(lo, ref)) : (lo + hi) / 2);
   };
 
   // Share `vol` units among orders, best price first, pro rata within a price level.
@@ -140,7 +173,7 @@
       const id = c.id;
       const bids = st.book.filter(o => o.good === id && o.side === "buy");
       const asks = st.book.filter(o => o.good === id && o.side === "sell");
-      const P = G.clearingPrice(bids, asks);
+      const P = G.clearingPrice(bids, asks, st.lastTrade[id]?.price);
       if (P == null) return;
       const inB = bids.filter(o => o.price >= P), inA = asks.filter(o => o.price <= P);
       const vol = Math.min(inB.reduce((s, o) => s + o.qty, 0), inA.reduce((s, o) => s + o.qty, 0));
@@ -166,6 +199,9 @@
       st.lastTrade[id] = { price: P, qty: vol, round: st.round, phase: ph };
       record.trades[id] = { price: P, qty: vol };
     });
+    // What was left on the book afterwards: best bid and ask for every good with orders
+    record.quotes = {};
+    new Set(st.book.map(o => o.good)).forEach(id => record.quotes[id] = { bid: G.bestBid(st, id)?.price ?? null, ask: G.bestAsk(st, id)?.price ?? null });
     st.history.push(record);
     if (st.history.length > 120) st.history.shift();
     const n = Object.keys(record.trades).length;

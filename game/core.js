@@ -57,8 +57,9 @@ const SMG = (() => {
   G.used = p => Object.values(p.stock).reduce((a, b) => a + b, 0);
   G.free = p => p.space - G.used(p);
   G.add = (p, cid, q) => { p.stock[cid] = (p.stock[cid] || 0) + q; if (p.stock[cid] <= 0) delete p.stock[cid]; };
-  G.log = (st, msg, pid = null) => { st.log.push({ round: st.round, phase: st.phase, pid, msg }); if (st.log.length > 400) st.log.shift(); };
-  G.money = n => (Math.round(n * 100) / 100).toLocaleString(undefined, { maximumFractionDigits: 2 });
+  G.log = (st, msg, pid = null) => { if (st.drafting) return; st.log.push({ round: st.round, phase: st.phase, pid, msg }); if (st.log.length > 400) st.log.shift(); };
+  const moneyFmt = new Intl.NumberFormat(undefined, { maximumFractionDigits: 2 }); // one shared formatter: toLocaleString is slow
+  G.money = n => moneyFmt.format(Math.round(n * 100) / 100);
   G.myBusinesses = (st, pid) => st.businesses.filter(b => b.owner === pid);
   // Money ledger: every cash movement, by round and category (positive = money in)
   G.book = (st, p, cat, amount) => {

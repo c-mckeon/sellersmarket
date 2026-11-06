@@ -22,10 +22,21 @@
   // pid: the player building (their own businesses add settings.build.ownedCostStep each)
   // Returns the goods it takes: { lumber: 3, iron: 2 }
   G.bizTier = b => b.kind === "extract" ? 0 : G.tier(b.makes);
+  // Businesses per territory and per owner, remembered until the list grows
+  const countMemo = new WeakMap();
+  const counts = list => {
+    let c = countMemo.get(list);
+    if (c && c.len === list.length) return c;
+    c = { len: list.length, here: {}, owns: {} };
+    list.forEach(x => { c.here[x.territory] = (c.here[x.territory] || 0) + 1; c.owns[x.owner] = (c.owns[x.owner] || 0) + 1; });
+    countMemo.set(list, c);
+    return c;
+  };
   G.buildCost = (st, b, tid, pid) => {
     const list = st.costBasis || st.businesses; // while orders resolve, costs are as at the start of the afternoon
-    const n = list.filter(x => x.territory === tid).length;
-    const owned = pid ? list.filter(x => x.owner === pid).length : 0;
+    const { here, owns } = counts(list);
+    const n = here[tid] || 0;
+    const owned = pid ? owns[pid] || 0 : 0;
     const crates = Math.max(1, Math.round(b.base * (TERRITORY_INFO[tid].cost ?? 1) * (1 + BUILD.crowding * n) * (1 + S.build.ownedCostStep * owned) / S.build.valuePerCrate));
     const mix = S.build.materials[Math.min(4, G.bizTier(b))];
     const cost = {};
