@@ -23,6 +23,9 @@ const GAME_SETTINGS = {
   // One sealed auction per phase. Every good clears at a single price set by the players' own bids and asks.
   market: {
     maxPrice: 10000,       // no order may be priced above this
+    // New games start every good with a reference "last price": the value of its raw materials
+    // (a raw good: rawShare × its mine's build cost ÷ what the mine makes a round). Trades replace it.
+    startPrices: { on: true, rawShare: 0.2 },
   },
 
   // ---------- Contracts (game/contracts.js) ----------

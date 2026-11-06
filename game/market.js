@@ -30,7 +30,30 @@
     st.prices = Object.fromEntries(COMMODITIES.map(c => [c.id, 0])); // last trade price (0 = never traded)
     st.lastTrade = {};                                                // id → { price, qty, round, phase }
     st.history = [];                                                  // one entry per auction
+    // A starting reference for every good, so players have a sense of scale before anything trades.
+    // It counts as the "last price" (marked start: true) until a real trade replaces it.
+    if (MS.startPrices?.on) Object.entries(G.startPrices()).forEach(([id, price]) => {
+      st.lastTrade[id] = { price, qty: 0, round: 0, phase: "start", start: true }; st.prices[id] = price;
+    });
   });
+
+  // Starting reference prices: what the raw materials in a good are worth.
+  //   a raw good:  share × (its mine's build cost ÷ what the mine makes a round), the cheapest mine if several
+  //   a made good: the sum of its inputs' prices ÷ how many it makes (waste inputs count as free)
+  // Rounded to whole numbers, at least 1. Waste has none.
+  G.startPrices = () => {
+    const raw = {}, memo = {};
+    EXTRACTORS.forEach(([, makes, out, base]) => raw[makes] = Math.min(raw[makes] ?? Infinity, MS.startPrices.rawShare * base / out));
+    const value = id => {
+      if (id in memo) return memo[id];
+      const c = G.COM[id];
+      if (c.type === "raw") return (memo[id] = raw[id] ?? 0);
+      if (c.type === "waste") return (memo[id] = 0);
+      const r = RECIPES.find(x => Object.keys(x.out)[0] === id);
+      return (memo[id] = Object.entries(r.in).reduce((s, [i, q]) => s + q * value(i), 0) / r.out[id]);
+    };
+    return Object.fromEntries(COMMODITIES.filter(c => c.type !== "waste").map(c => [c.id, Math.max(1, Math.round(value(c.id)))]));
+  };
 
   // ---------- Helpers ----------
   G.myOrders = (st, pid) => st.book.filter(o => o.pid === pid);
