@@ -30,9 +30,9 @@
     root.innerHTML = `
       <div class="gsetup">
         <h1>New game</h1>
-        <p class="muted">Pick who's playing. Each player starts with ${S.startCash} cash, ${S.startSpace} crates of stockpile space, one free business where they start, and ${S.contracts.hand} secret contracts. Deliver contracts to score points; most points after the last round wins, and cash breaks ties. There's no price list: every price comes from what players bid and ask.</p>
+        <p class="muted">Pick who's playing. Each player starts with ${S.startCash} cash, ${S.startSpace} crates of stockpile space, ${S.startBusinesses > 1 ? "two free businesses where they start (the one picked here and the one that uses its output)" : "one free business where they start"}, and ${S.contracts.hand} secret contracts. Deliver contracts to score points; most points after the last round wins, and cash breaks ties. There's no price list: every price comes from what players bid and ask.</p>
         ${saved && saved.version === 6 && !saved.over ? `<div class="gresume">A game in round ${saved.round} is saved in this browser. <button class="gbtn" id="gResume">Continue it</button></div>` : ""}
-        <table class="gplayers"><thead><tr><th></th><th>Name</th><th>Who</th><th>Starts in</th><th>Free business</th><th></th></tr></thead><tbody>
+        <table class="gplayers"><thead><tr><th></th><th>Name</th><th>Who</th><th>Starts in</th><th>Free businesses</th><th></th></tr></thead><tbody>
         ${setup.players.map((p, i) => {
           const opts = G.BIZ.filter(b => G.canBuildAt(b, p.start));
           return `<tr data-i="${i}">
@@ -43,7 +43,7 @@
             <td><select data-k="business">
               <optgroup label="Extraction">${opts.filter(b => b.kind === "extract").map(b => `<option value="${b.id}"${b.id === p.business ? " selected" : ""}>${b.name}</option>`).join("")}</optgroup>
               <optgroup label="Factories">${opts.filter(b => b.kind === "factory").map(b => `<option value="${b.id}"${b.id === p.business ? " selected" : ""}>${b.name}</option>`).join("")}</optgroup>
-            </select></td>
+            </select>${(() => { const x = S.startBusinesses > 1 && G.starterPartner(p.business, p.start); return x ? `<div class="muted small">+ ${x.name.toLowerCase()}</div>` : ""; })()}</td>
             <td>${setup.players.length > 1 ? `<button class="glink" data-del="${i}" title="Remove">✕</button>` : ""}</td>
           </tr>`; }).join("")}
         </tbody></table>
@@ -62,6 +62,7 @@
         if (!ok.some(b => b.id === p.business)) p.business = (ok.find(b => b.kind === "extract") || ok[0]).id;
         renderSetup();
       }
+      if (k === "business") renderSetup(); // show its partner business
     }));
     root.querySelectorAll("[data-del]").forEach(b => b.addEventListener("click", () => { setup.players.splice(+b.dataset.del, 1); renderSetup(); }));
     root.querySelector("#gAdd")?.addEventListener("click", () => { setup.players.push(defaultPlayer(setup.players.length)); setup.players.at(-1).bot = true; renderSetup(); });

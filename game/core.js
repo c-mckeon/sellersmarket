@@ -69,6 +69,20 @@ const SMG = (() => {
     Object.keys(p.book).forEach(k => { if (+k < st.round - 5) delete p.book[k]; });
   };
 
+  // The second free business that goes with a starting one, making a two-step chain:
+  //   a mine, farm or well → the factory that uses its output most (then the fewest other inputs, then the simplest)
+  //   a factory → a mine, farm or well there that makes one of its inputs (the most it needs)
+  // Returns null if there's nothing that fits.
+  G.starterPartner = (bizId, tid) => {
+    const b = G.BIZ_BY[bizId];
+    if (!b) return null;
+    const share = f => f.inputs[b.makes] / Object.values(f.inputs).reduce((s, q) => s + q, 0);
+    const others = f => Object.keys(f.inputs).filter(c => c !== b.makes && c !== "water").length;
+    if (b.kind === "extract") return G.BIZ.filter(f => f.kind === "factory" && f.inputs[b.makes] && G.canBuildAt(f, tid))
+      .sort((x, y) => share(y) - share(x) || others(x) - others(y) || G.tier(x.makes) - G.tier(y.makes))[0] || null;
+    return G.BIZ.filter(e => e.kind === "extract" && b.inputs[e.makes] && G.canBuildAt(e, tid)).sort((x, y) => b.inputs[y.makes] - b.inputs[x.makes])[0] || null;
+  };
+
   // ---------- A new game ----------
   // config.players: [{ name, colour, bot, start: territoryId, business: businessTypeId }]
   G.newGame = config => {
@@ -85,12 +99,15 @@ const SMG = (() => {
         cash: S.startCash, space: S.startSpace, upgrades: 0, pos: c.start, stock: { ...S.startGoods }, hand: [],
         points: 0, contracts: [], delivered: 0, acted: false, cardsPlayed: 0 });
     });
-    // Free starting business, where each player starts
+    // Free starting businesses, where each player starts: the one they picked plus its partner,
+    // so everyone begins with a small chain (see G.starterPartner)
     config.players.forEach((c, i) => {
       const b = G.BIZ_BY[c.business];
       if (!b || !G.canBuildAt(b, c.start)) return;
-      st.businesses.push({ id: st.nextBizId++, owner: i + 1, type: b.id, territory: c.start, built: 0, cost: G.buildCost(st, b, c.start, i + 1) });
-      // A head start: one round's output of it (factories: one run's worth of inputs instead)
+      const partner = S.startBusinesses > 1 ? G.starterPartner(b.id, c.start) : null;
+      [b, partner].filter(Boolean).forEach(x =>
+        st.businesses.push({ id: st.nextBizId++, owner: i + 1, type: x.id, territory: c.start, built: 0, cost: G.buildCost(st, x, c.start, i + 1) }));
+      // A head start: one round's output of the mine, farm or well (a factory on its own: one run's inputs)
       const p = st.players[i];
       if (b.kind === "extract") Object.entries(b.outputs).forEach(([cid, q]) => G.add(p, cid, Math.floor(q * G.richness(b, c.start) * S.extractOutput)));
       else Object.entries(b.inputs).forEach(([cid, q]) => G.add(p, cid, q));
