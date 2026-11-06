@@ -1,18 +1,24 @@
 // Sellers Market game engine: simple computer players.
-// Deliberately basic: enough to test the rules and run simulations.
+// Deliberately simple: enough to play against and to run simulations (tools/sim.js).
 //
 // Every phase a bot:
-//   1. cancels its old orders and delivers any contract it can
-//   2. works out what it wants (contract goods, its factories' inputs, materials for its next build)
-//      and what it can spare (everything else)
-//   3. bids for wants and asks for spares, around its own guess of what each good is worth:
-//        guess = last traded price, or (never traded) raw-material units × settings.bots.perRawUnit
-//      Bids creep up each phase a want goes unfilled; asks creep down each phase a spare goes unsold.
-// In the afternoon it also builds (or heads somewhere it can build) something that feeds its contracts.
+//   1. cancels its old orders, delivers any contract it can, and throws away a contract that can't be
+//      done (after 3 rounds, under a third of its goods exist anywhere)
+//   2. works out what it wants (goods for its two best contracts, its factories' inputs, materials for
+//      its next build) and what it can spare (everything else)
+//   3. sells spares: from its guess of the price, falling the longer they go unsold; if a buyer is already
+//      bidding near that, at their bid; goods going off tonight or piling up go at the best bid there is
+//   4. buys wants, up to what each is worth to it: a contract good is worth its share of the contract's
+//      points at the bot's cash value of a point (its cash over the rounds left, so it spends more
+//      freely near the end); if someone asks no more than that it pays their ask, otherwise it creeps up
+//        guess = last traded price, else the cost basis, else its own rough estimate (never shown)
+// In the afternoon it also builds (or heads somewhere it can build) something that feeds its contracts,
+// that others are bidding for, or that other players' contracts want (the public demand count).
 
 (() => {
   const G = SMG, S = GAME_SETTINGS;
-  const B = S.bots || (S.bots = {
+  // Defaults; anything in settings.bots overrides them
+  const B = S.bots = Object.assign({
     perRawUnit: 30,        // what a bot guesses a raw-material unit is worth, before anything has traded
     bidStart: 0.8,         // first bid: 80% of its guess…
     bidStep: 0.15,         // …+15% of the guess for every phase it goes unfilled…
@@ -22,7 +28,11 @@
     askMin: 0.4,           // …down to 40%
     cashPerPhase: 0.6,     // spend at most this share of cash in one auction
     reserve: 6,            // crates of building materials a bot always keeps
-  });
+    pointsPerRound: 0.7,   // how many points a bot expects to score a round: sets what a point is worth in cash
+    inputPremium: 1.5,     // what a factory input or building material is worth: × its going price
+    reach: 4,              // how many moves away a bot will travel to build
+    demandWeight: 1,       // how much a bot favours building what other players' contracts want (the public count)
+  }, S.bots || {});
 
   // A bot's private guess of what a good is worth
   // (never traded: its cost basis if all its raw materials have traded, otherwise its own rough estimate:
@@ -71,43 +81,66 @@
     return want;
   };
 
+  // What a good is worth to this bot, per unit. A contract good is worth its share of the contract's points
+  // (by raw-material content) at the bot's value of a point: its cash spread over the rounds left, so it
+  // spends more freely as the game nears its end (cash left over only breaks ties). Anything else (factory
+  // inputs, building materials) is worth a bit more than its going price.
+  const worthOf = (st, p, c) => {
+    const vpp = Math.max(5, (p.cash + G.lockedCash(st, p)) / Math.max(4, (st.rounds - st.round + 1) * B.pointsPerRound));
+    let w = G.guess(st, c) * B.inputPremium;
+    p.contracts.forEach(k => {
+      if (!k.goods[c]) return;
+      const raw = Object.entries(k.goods).reduce((s, [g, q]) => s + q * Math.max(0.2, G.rawUnits(g)), 0);
+      w = Math.max(w, k.points * vpp * Math.max(0.2, G.rawUnits(c)) / raw);
+    });
+    return w;
+  };
+  // How likely a contract is to be done: the share of its goods (by units) that exist somewhere —
+  // held by this bot, on offer, or made by somebody's business
+  const feasible = (st, p, k) => {
+    const tot = Object.values(k.goods).reduce((s, q) => s + q, 0);
+    const ok = Object.entries(k.goods).reduce((s, [c, q]) => s + (p.stock[c] >= q || G.bestAsk(st, c) || st.businesses.some(b => G.BIZ_BY[b.type].outputs[c]) ? q : Math.min(q, p.stock[c] || 0)), 0);
+    return ok / tot;
+  };
+
   const trade = (st, p) => {
     p.mem ||= { bid: {}, ask: {} };
     G.act(st, p.id, "cancelAll", {});
     // Deliver whatever we can, best first
     [...p.contracts].sort((a, b) => b.points - a.points).forEach(k => { if (G.canDeliver(st, p, k)) G.act(st, p.id, "deliver", { contract: k.id }); });
-    // Throw away a contract that's gone nowhere for a long time
-    const stale = p.contracts.find(k => st.round - k.drawn >= 8 && !Object.keys(k.goods).some(c => p.stock[c]));
-    if (stale && p.discardRound !== st.round) G.act(st, p.id, "discardContract", { contract: stale.id });
+    // Throw away a contract that can't be done: after 3 rounds, if under a third of its goods exist anywhere
+    // (or one that's gone nowhere for 8 rounds)
+    if (p.discardRound !== st.round) {
+      const dead = p.contracts.filter(k => st.round - k.drawn >= 3 && feasible(st, p, k) < 1 / 3).sort((a, b) => feasible(st, p, a) - feasible(st, p, b))[0]
+        || p.contracts.find(k => st.round - k.drawn >= 8 && !Object.keys(k.goods).some(c => p.stock[c]));
+      if (dead) G.act(st, p.id, "discardContract", { contract: dead.id });
+    }
 
     const want = wantsOf(st, p);
     const end = st.round >= st.rounds - 2;
-    // Make room for what we want: throw away the cheapest spares
-    let short = Object.entries(want).reduce((s, [c, q]) => s + Math.max(0, q - (p.stock[c] || 0)), 0);
-    let over = G.used(p) + short - p.space;
-    Object.keys(p.stock).filter(c => p.stock[c] > (want[c] || 0)).sort((a, b) => G.guess(st, a) - G.guess(st, b)).forEach(c => {
-      if (over <= 0) return;
-      const n = Math.min(over, p.stock[c] - (want[c] || 0));
-      G.act(st, p.id, "dump", { id: c, qty: n }); over -= n;
-    });
-    // Sell spares
+    // Sell spares. Floor: its going price (falling the longer it goes unsold). If a buyer is already bidding
+    // at least that, sell at their bid. Goods that go off tonight, or would just pile up, go at the best bid.
     Object.entries({ ...p.stock }).forEach(([c, q]) => {
       const spare = q - (want[c] || 0);
       if (spare <= 0) { delete p.mem.ask[c]; return; }
       if (G.COM[c].type === "waste" && !RECIPES.some(r => r.in[c])) { G.act(st, p.id, "dump", { id: c, qty: spare }); return; }
       const age = p.mem.ask[c] = (p.mem.ask[c] ?? -1) + 1;
-      const price = G.guess(st, c) * Math.max(end ? 0.1 : B.askMin, B.askStart - B.askStep * age);
+      const bid = G.bestBid(st, c), urgent = end || (G.goingOff && G.goingOff(st, p, c) > 0) || spare > S.businessSpace;
+      let price = G.guess(st, c) * Math.max(end ? 0.1 : B.askMin, B.askStart - B.askStep * age);
+      if (bid && bid.price >= price * 0.9) price = bid.price;          // take the bid that's there
+      if (urgent) price = bid ? Math.min(price, bid.price) : Math.min(price, G.guess(st, c) * B.askMin);
       G.act(st, p.id, "placeOrder", { id: c, side: "sell", price: Math.max(1, Math.round(price)), qty: spare });
     });
-    // Short of space? Dump waste
-    if (G.spaceLeft(st, p) < 3) Object.keys(p.stock).filter(c => G.COM[c].type === "waste").forEach(c => G.act(st, p.id, "dump", { id: c, qty: p.stock[c] }));
-    // Buy wants, most valuable first
-    let budget = p.cash * B.cashPerPhase;
+    // Buy wants, the ones closest to finishing a contract first. Bid what it's worth at most: if someone is
+    // asking no more than that, bid their ask (it fills); otherwise creep up towards it.
+    let budget = (p.cash) * (end ? 1 : B.cashPerPhase);
     Object.entries(want).map(([c, q]) => [c, q - (p.stock[c] || 0)]).filter(([, n]) => n > 0)
-      .sort((a, b) => G.rawUnits(b[0]) - G.rawUnits(a[0]))
-      .forEach(([c, n]) => {
-        const age = p.mem.bid[c] = (p.mem.bid[c] ?? -1) + 1;
-        const price = Math.max(1, Math.round(G.guess(st, c) * Math.min(B.bidMax, B.bidStart + B.bidStep * age)));
+      .map(([c, n]) => ({ c, n, w: worthOf(st, p, c) })).sort((a, b) => b.w - a.w)
+      .forEach(({ c, n, w }) => {
+        const age = p.mem.bid[c] = (p.mem.bid[c] ?? -1) + 1, ask = G.bestAsk(st, c);
+        let price = Math.min(w, G.guess(st, c) * (B.bidStart + B.bidStep * age));
+        if (ask && ask.price <= w) price = Math.max(price, ask.price);
+        price = Math.max(1, Math.round(price));
         n = Math.min(n, Math.max(0, G.spaceLeft(st, p)), Math.floor(budget / price));
         if (n > 0 && G.act(st, p.id, "placeOrder", { id: c, side: "buy", price, qty: n }).ok) budget -= price * n;
       });
@@ -140,6 +173,7 @@
     const out = b.makes;
     let s = out in links ? 2 + links[out] : 0.3;
     if (G.bestBid(st, out)) s += 1.5;                                                     // someone wants it now
+    s += (B.demandWeight || 0) * G.demand(st, out, p.id);                                // others' contracts want it (public count)
     { const bid = G.bestBid(st, out), cb = G.costBasis(st, out);                            // …and pays more than it costs to make
       if (bid && cb && !cb.missing.length && bid.price > cb.value * 1.1) s += 2 * Math.min(2, bid.price / Math.max(1, cb.value) - 1); }
     if (b.kind === "extract") s *= G.richness(b, tid);
@@ -161,7 +195,7 @@
     // Somewhere within reach with something better? Head there; meanwhile save up materials for it.
     const d = G.distances(p.pos);
     let target = { tid: p.pos, o: here, s: here ? here.s : 0 };
-    Object.entries(d).filter(([t, n]) => n > 0 && n <= 4 && !G.isSea(t)).forEach(([t, n]) => {
+    Object.entries(d).filter(([t, n]) => n > 0 && n <= (B.reach || 4) && !G.isSea(t)).forEach(([t, n]) => {
       const o = bestHere(st, p, t, links); if (o && o.s / (1 + 0.25 * n) > target.s) target = { tid: t, o, s: o.s / (1 + 0.25 * n) };
     });
     p.plan = target.o ? { type: target.o.b.id, tid: target.tid, cost: materialsFor(st, p, target.o.cost) } : null;
