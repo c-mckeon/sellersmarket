@@ -21,14 +21,19 @@
 
   // ================= Setup =================
   let setup = null;
+  // Default players start spread across the map, each with a different region's mine (G.spreadStarts),
+  // so the game has its raw materials from the first round
+  const defaultPlayers = n => G.spreadStarts(n, { seed: Math.floor(Math.random() * 1e9) }).map((x, i) =>
+    ({ name: NAMES[i] || `Player ${i + 1}`, colour: COLOURS[i % COLOURS.length], bot: i > 0, ...x }));
   const defaultPlayer = i => {
-    const start = i === 0 ? "ukraine" : LAND[(i * 13 + 5) % LAND.length].id;
-    const ext = G.BIZ.filter(b => b.kind === "extract" && G.canBuildAt(b, start));
-    return { name: NAMES[i] || `Player ${i + 1}`, colour: COLOURS[i % COLOURS.length], bot: i > 0, start, business: (ext.find(b => b.id === "farm") || ext[0] || G.BIZ_BY.water_works).id };
+    const used = new Set(setup.players.map(p => p.start)), have = new Set(setup.players.map(p => G.BIZ_BY[p.business]?.makes));
+    const opts = defaultPlayers(i + 1).filter(x => !used.has(x.start));
+    const x = opts.find(o => !have.has(G.BIZ_BY[o.business].makes)) || opts[0] || defaultPlayers(1)[0];
+    return { ...x, name: NAMES[i] || `Player ${i + 1}`, colour: COLOURS[i % COLOURS.length], bot: true };
   };
 
   function renderSetup() {
-    setup ||= { players: [0, 1, 2, 3].map(defaultPlayer), rounds: S.rounds };
+    setup ||= { players: defaultPlayers(4), rounds: S.rounds };
     const saved = load();
     root.innerHTML = `
       <div class="gsetup">

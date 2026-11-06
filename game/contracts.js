@@ -58,7 +58,28 @@
   G.contractGoods = () => C.goods.filter(id => G.rawsOf(id).every(raw => { const s = sourcesOf(raw); return !s || s.length; }));
 
   // Raw goods a contract can ask for: any with a source on the map, except ones that can be had anywhere (water)
-  G.contractRaws = () => COMMODITIES.filter(c => c.type === "raw" && !anywhere.has(c.id) && sourcesOf(c.id)?.length).map(c => c.id);
+  G.contractRaws = () => COMMODITIES.filter(c => c.type === "raw" && !anywhere.has(c.id) && sourcesOf(c.id)?.length && (!C.raws || C.raws.includes(c.id))).map(c => c.id);
+
+  // Starting places for n players, spread across the map so the economy has its raw materials:
+  // each player gets a different regional raw material (from the ones contracts ask for), starts in
+  // a territory that has it (richer ones more likely, never next to another player) and begins with
+  // that mine. rng: { seed } for G.rand. Returns [{ start, business }].
+  G.spreadStarts = (n, rng) => {
+    const raws = [...(S.contracts.raws || G.contractRaws())];
+    const picks = [], taken = new Set();
+    for (let i = 0; i < n; i++) {
+      const pool = raws.filter(r => !picks.some(x => x.raw === r));
+      const raw = pool.length ? pool[Math.floor(G.rand(rng) * pool.length)] : raws[Math.floor(G.rand(rng) * raws.length)];
+      const mine = G.BIZ.find(b => b.kind === "extract" && b.makes === raw && b.where === "res");
+      const spots = TERRITORIES.filter(t => !t.sea && mine && G.canBuildAt(mine, t.id) && !taken.has(t.id));
+      const free = spots.filter(t => !G.neighbours(t.id).some(x => taken.has(x)));
+      const list = (free.length ? free : spots).flatMap(t => Array(G.richness(mine, t.id) * 2).fill(t.id));
+      const start = list.length ? list[Math.floor(G.rand(rng) * list.length)] : G.pick(rng, TERRITORIES.filter(t => !t.sea).map(t => t.id));
+      taken.add(start);
+      picks.push({ raw, start, business: mine && G.canBuildAt(mine, start) ? mine.id : "farm" });
+    }
+    return picks.map(({ start, business }) => ({ start, business }));
+  };
 
   G.newContract = (st, p) => {
     const home = p.home || p.pos;

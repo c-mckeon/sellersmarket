@@ -39,6 +39,7 @@
 
   // Starting reference prices: what the raw materials in a good are worth.
   //   a raw good:  share × (its mine's build cost ÷ what the mine makes a round), the cheapest mine if several
+  //   (everything × settings.market.startPrices.scale)
   //   a made good: the sum of its inputs' prices ÷ how many it makes (waste inputs count as free)
   // Rounded to whole numbers, at least 1. Waste has none.
   G.startPrices = () => {
@@ -52,7 +53,7 @@
       const r = RECIPES.find(x => Object.keys(x.out)[0] === id);
       return (memo[id] = Object.entries(r.in).reduce((s, [i, q]) => s + q * value(i), 0) / r.out[id]);
     };
-    return Object.fromEntries(COMMODITIES.filter(c => c.type !== "waste").map(c => [c.id, Math.max(1, Math.round(value(c.id)))]));
+    return Object.fromEntries(COMMODITIES.filter(c => c.type !== "waste").map(c => [c.id, Math.max(1, Math.round(value(c.id) * (MS.startPrices.scale || 1)))]));
   };
 
   // ---------- Helpers ----------

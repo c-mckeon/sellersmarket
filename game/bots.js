@@ -13,7 +13,7 @@
 (() => {
   const G = SMG, S = GAME_SETTINGS;
   const B = S.bots || (S.bots = {
-    perRawUnit: 3,         // what a bot guesses a raw-material unit is worth, before anything has traded
+    perRawUnit: 30,        // what a bot guesses a raw-material unit is worth, before anything has traded
     bidStart: 0.8,         // first bid: 80% of its guess…
     bidStep: 0.15,         // …+15% of the guess for every phase it goes unfilled…
     bidMax: 3,             // …up to 3× the guess

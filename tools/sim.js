@@ -1,5 +1,7 @@
 // Run Sellers Market games with computer players only, and summarise how the market behaves.
-//   node tools/sim.js [--games 20] [--players 4] [--seed 1] [--set '{"contracts.size":20}'] [--json] [--prices]
+//   node tools/sim.js [--games 20] [--players 4] [--seed 1] [--starts spread|random] [--set '{"contracts.size":20}'] [--json] [--prices]
+// --starts: spread (default) gives each player a different regional raw material (G.spreadStarts);
+//           random picks any territory and its best mine.
 // Uses exactly the same engine files as the website. --set overrides game/settings.js values
 // (nested ones with dots).
 //
@@ -15,7 +17,7 @@
 const engine = require("./engine");
 
 const arg = (k, d) => { const i = process.argv.indexOf("--" + k); return i > 0 ? process.argv[i + 1] : d; };
-const games = +arg("games", 20), players = +arg("players", 4), seed = +arg("seed", 1);
+const games = +arg("games", 20), players = +arg("players", 4), seed = +arg("seed", 1), starts = arg("starts", "spread");
 const overrides = JSON.parse(arg("set", "{}"));
 const E = engine(overrides), G = E.G, COMMODITIES = E.COMMODITIES;
 const land = E.run("TERRITORIES").filter(t => !t.sea).map(t => t.id);
@@ -58,7 +60,8 @@ const out = [];
 for (let g = 0; g < games; g++) {
   const rng = { seed: seed * 1000 + g * 7919 };
   const ps = [];
-  for (let i = 0; i < players; i++) {
+  if (starts === "spread") G.spreadStarts(players, rng).forEach((x, i) => ps.push({ name: "Bot " + (i + 1), bot: true, ...x }));
+  else for (let i = 0; i < players; i++) {
     const start = G.pick(rng, land);
     const opts = G.BIZ.filter(b => G.canBuildAt(b, start) && b.kind === "extract").sort((a, b) => G.richness(b, start) * G.rawUnits(b.makes) * b.outputs[b.makes] - G.richness(a, start) * G.rawUnits(a.makes) * a.outputs[a.makes]);
     ps.push({ name: "Bot " + (i + 1), bot: true, start, business: opts[0].id });

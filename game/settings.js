@@ -24,8 +24,9 @@ const GAME_SETTINGS = {
   market: {
     maxPrice: 10000,       // no order may be priced above this
     // New games start every good with a reference "last price": the value of its raw materials
-    // (a raw good: rawShare × its mine's build cost ÷ what the mine makes a round). Trades replace it.
-    startPrices: { on: true, rawShare: 0.2 },
+    // (a raw good: rawShare × its mine's build cost ÷ what the mine makes a round), × scale. Trades replace it.
+    // scale: 10 gives prices an extra digit (water 20, wood 40, steel 210), so whole numbers are fine-grained. Cash stays 1000: goods are meant to be expensive.
+    startPrices: { on: true, rawShare: 0.2, scale: 10 },
   },
 
   // ---------- Contracts (game/contracts.js) ----------
@@ -35,11 +36,15 @@ const GAME_SETTINGS = {
     size: 10,              // how big a contract is, in raw-material units (see G.rawUnits)
     pointsPerUnit: 0.5,    // points per raw-material unit delivered
     distanceBonus: 0.15,   // +15% points for every step the goods' nearest source is away from you
-    // The goods that contracts ask for. The other goods only matter as steps in making these.
+    // The goods that contracts ask for: a core economy that 4 players can actually run. The rest (gold,
+    // lithium, rare earths, bauxite and what is made from them) can still be made, but no contract asks
+    // for them yet. Waste and raw goods never go in this list (rawShare and raws below cover raw ones).
     rawShare: 0.3,         // chance that each good on a contract is a raw one (wood, clay, coal…) instead
     tierBonus: 0.25,        // +this share of points per processing step (raw 0, lumber 1, steel 2…)
-    goods: ["bread", "flour", "lumber", "iron", "glass", "ceramic", "paper", "fuel", "plastic", "copper",
-            "aluminium", "cement", "steel", "wire"],
+    goods: ["bread", "flour", "lumber", "paper", "glass", "ceramic", "cement", "iron", "steel", "copper",
+            "fuel", "plastic", "wire"],
+    // The raw materials contracts can ask for (and that spread-out starts hand out: G.spreadStarts)
+    raws: ["wood", "sand", "clay", "limestone", "coal", "iron_ore", "copper_ore", "crude_oil"],
   },
 
   // ---------- Building (game/map.js) ----------
