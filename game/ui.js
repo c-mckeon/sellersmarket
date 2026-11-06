@@ -230,13 +230,18 @@
       <circle cx="${X(n - 1).toFixed(1)}" cy="${Y(pts[n - 1].price).toFixed(1)}" r="2.6"/></svg>`;
   };
   // Last price, and change since the trade before
-  // Last price and change since the trade before. Nothing traded yet: the game's starting reference price
-  // (start: true), so there's always a sense of scale.
   const lastBits = id => {
-    const s = series(id), a = s.at(-1), b = s.at(-2), ref = !a && st.lastTrade[id]?.start ? st.lastTrade[id].price : null;
-    return { s, last: a?.price ?? ref, start: ref != null, chg: a && b ? a.price / b.price - 1 : null };
+    const s = series(id), a = s.at(-1), b = s.at(-2);
+    return { s, last: a?.price ?? st.lastTrade[id]?.price ?? null, chg: a && b ? a.price / b.price - 1 : null };
   };
-  const isStart = q => !!q.last?.start;
+  // Today's cost basis as text: "105", "≥ 60" (some raw materials haven't traded), or "" (nothing known)
+  const basisText = id => { const b = G.costBasis(vw, id); return !b || G.COM[id].type === "raw" ? "" : `${b.missing.length ? "≥ " : ""}${m(b.value)}`; };
+  const basisNote = id => { const b = G.costBasis(vw, id); return b?.missing.length ? ` (${b.missing.map(c => G.COM[c].name.toLowerCase()).join(", ")} not traded yet)` : ""; };
+  // What to show where a price would go: the last trade, else today's cost basis, else nothing yet
+  const priceOrBasis = (id, last, chg) => last != null
+    ? `<b>${m(last)}</b>${chg != null ? ` <small class="${chg > 0 ? "up" : chg < 0 ? "dn" : ""}">${pct(chg)}</small>` : ""}`
+    : basisText(id) ? `<small class="muted" title="Today's cost basis: its raw materials at their last traded prices${basisNote(id)}">cost ${basisText(id)}</small>`
+    : `<small class="muted">${G.COM[id].type === "raw" ? "no price yet" : "never traded"}</small>`;
 
   // ================= Quote board and replay =================
   // A card per active good: best bid and ask, the spread between them drawn on a price line, and the
@@ -273,13 +278,11 @@
     // Each good's price scale, fixed for the whole replay so the bars move rather than the axis
     const scale = {};
     goods.forEach(id => {
-      const v = [...frames.flatMap(f => [f.q[id]?.[0], f.q[id]?.[1], f.t[id]?.[0]]), st.lastTrade[id]?.start ? st.lastTrade[id].price : null].filter(x => x != null);
+      const v = frames.flatMap(f => [f.q[id]?.[0], f.q[id]?.[1], f.t[id]?.[0]]).filter(x => x != null);
       const lo = Math.min(...v), hi = Math.max(...v), pad = Math.max(1, (hi - lo) * 0.15);
       scale[id] = [Math.max(0, lo - pad), hi + pad];
     });
-    // Starting reference prices (until a good's first trade)
-    const start = S.market.startPrices?.on ? G.startPrices() : {};
-    return { goods, frames, scale, lastStart, start };
+    return { goods, frames, scale, lastStart };
   }
 
   // One card's contents for a frame. last: the last trade up to that frame, or null.
@@ -290,7 +293,7 @@
       xb: q[0] != null ? X(q[0]) : null, xa: q[1] != null ? X(q[1]) : null, xl: last != null ? X(last) : null };
   };
   const cardHTML = (id, c, flash) => `<button class="qcard${flash ? " flash" : ""}" data-good="${id}">
-      <span class="qc-h"><b>${G.COM[id].name}</b><span class="qc-last">${c.tr ? `traded ${c.tr[1]} at ${m(c.tr[0])}` : c.last != null ? `${c.startRef ? "start" : "last"} ${m(c.last)}` : "no trades"}</span></span>
+      <span class="qc-h"><b>${G.COM[id].name}</b><span class="qc-last">${c.tr ? `traded ${c.tr[1]} at ${m(c.tr[0])}` : c.last != null ? `last ${m(c.last)}` : "no trades"}</span></span>
       <span class="qc-bar"><span class="qc-band${c.crossed ? " cross" : ""}" style="${c.xb != null && c.xa != null ? `left:${Math.min(c.xb, c.xa)}%;width:${Math.abs(c.xa - c.xb).toFixed(1)}%` : "display:none"}"></span>
         <i class="qc-bid" style="${c.xb != null ? `left:${c.xb}%` : "display:none"}"></i><i class="qc-ask" style="${c.xa != null ? `left:${c.xa}%` : "display:none"}"></i>
         <i class="qc-tr" style="${c.xl != null ? `left:${c.xl}%` : "display:none"}"></i></span>
@@ -301,14 +304,13 @@
     const d = boardData();
     if (!d.goods.length) return `<section class="msec"><h3>Quote board</h3><p class="muted">No orders or trades yet. Cards appear here as goods get bids and asks.</p></section>`;
     const lastTrade = id => st.lastTrade[id]?.price ?? null, f = d.frames.at(-1);
-    const startRef = id => !!st.lastTrade[id]?.start;
     ui.board = d; // the replay reads this
     return `<section class="msec qboard">
       <h3>Quote board <span class="muted small">bid ↔ ask for each good; the dot is the last trade</span></h3>
       <div class="qctl"><div class="gseg"><button data-rmode="last" class="${ui.rmode !== "game" ? "on" : ""}">Last auction</button><button data-rmode="game" class="${ui.rmode === "game" ? "on" : ""}">Whole game</button></div>
         <button class="gbtn ghost" id="qPlay">▶ Replay</button><input type="range" id="qSlide" min="${ui.rmode === "game" ? 0 : d.lastStart}" max="${d.frames.length - 1}" value="${d.frames.length - 1}" aria-label="Step through the auctions">
         <span id="qLabel" class="muted small">${f.label}</span></div>
-      <div class="qgrid" id="qGrid">${d.goods.map(id => cardHTML(id, { ...cardState(d, id, f, lastTrade(id)), startRef: startRef(id) }, fresh.has(id))).join("")}</div>
+      <div class="qgrid" id="qGrid">${d.goods.map(id => cardHTML(id, cardState(d, id, f, lastTrade(id)), fresh.has(id))).join("")}</div>
     </section>`;
   }
 
@@ -322,8 +324,7 @@
     d.goods.forEach(id => {
       let last = null;
       for (let i = k; i >= 0 && last == null; i--) last = d.frames[i].t[id]?.[0] ?? null;
-      const startRef = last == null && d.start[id] != null;
-      const el = grid.querySelector(`.qcard[data-good="${id}"]`), c = { ...cardState(d, id, f, startRef ? d.start[id] : last), startRef };
+      const el = grid.querySelector(`.qcard[data-good="${id}"]`), c = cardState(d, id, f, last);
       const tmp = document.createElement("div"); tmp.innerHTML = cardHTML(id, c, false);
       const fresh = tmp.firstElementChild;
       // Keep the element (so transitions run); swap its insides
@@ -398,6 +399,29 @@
     return set;
   }
 
+  // Opportunities: goods other players are bidding for that nobody is selling, or whose best bid beats
+  // today's cost basis. Making them earns that margin, which is the market's reason to make what others need.
+  function opportunities(p) {
+    const list = COMMODITIES.map(c => {
+      const bid = G.bestBid(vw, c.id); if (!bid) return null;
+      if (vw.book.some(o => o.good === c.id && o.side === "buy" && o.pid === p.id && o.price === bid.price)) return null; // that's you bidding
+      const ask = G.bestAsk(vw, c.id), cb = G.costBasis(vw, c.id), basis = cb && !cb.missing.length && c.type !== "raw" ? cb.value : null;
+      const margin = basis != null ? bid.price - basis : null;
+      if (ask && ask.price <= bid.price) return null;
+      if (ask && (margin == null || margin <= 0)) return null;
+      const makers = vw.businesses.filter(b => G.BIZ_BY[b.type].outputs[c.id]).map(b => b.owner === p.id ? "you" : G.player(vw, b.owner).name);
+      const biz = G.BIZ.find(b => b.makes === c.id);
+      return { id: c.id, bid, ask, basis, margin, makers: [...new Set(makers)], biz, score: (margin ?? bid.price * 0.3) * bid.qty + (ask ? 0 : 1000) };
+    }).filter(Boolean).sort((a, b) => b.score - a.score).slice(0, 6);
+    if (!list.length) return "";
+    return `<section class="msec"><h3>Opportunities <span class="muted small">what other players want and nobody is selling</span></h3>
+      <div class="opps">${list.map(o => `<button class="opp" data-good="${o.id}">
+        <b>${G.COM[o.id].name}</b> <span class="mtag good">wanted: ${o.bid.qty} at ${m(o.bid.price)}</span>
+        ${o.margin != null ? `<span class="${o.margin > 0 ? "up" : "dn"}">cost basis ${m(o.basis)}: ${o.margin >= 0 ? "+" : "−"}${m(Math.abs(o.margin))} a unit</span>` : ""}
+        <small>${o.ask ? `cheapest ask ${m(o.ask.price)}` : "nobody selling"} · ${o.makers.length ? `made by ${esc(o.makers.join(", "))}` : `nobody makes it${o.biz ? `: a ${o.biz.name.toLowerCase()} would` : ""}`}</small>
+      </button>`).join("")}</div></section>`;
+  }
+
   function marketPanel(p) {
     const want = wantsOf(p), hold = G.holdings(vw, p), fresh = freshTrades(); // fresh: goods that traded since you last looked (they flash)
     const sel = ui.good && G.COM[ui.good] ? ui.good : null;
@@ -415,7 +439,7 @@
     recent.forEach(h => Object.entries(h.trades).forEach(([id, t]) => moved[id] = (moved[id] || 0) + t.qty));
 
     const sellCard = id => {
-      const bid = G.bestBid(vw, id), { s, last, start, chg } = lastBits(id), users = usersOf(p, id);
+      const bid = G.bestBid(vw, id), { s, last, chg } = lastBits(id), users = usersOf(p, id);
       const spare = (hold[id] || 0) - (want[id] || 0), off = onOffer(p, id);
       const demand = bid ? `<span class="mtag good">Bid ${m(bid.price)} ×${bid.qty}</span>`
         : users.length ? `<span class="mtag">No bids · ${names(users)} could use it</span>`
@@ -425,11 +449,11 @@
       return `<button class="mcard${id === sel ? " sel" : ""}${fresh.has(id) ? " flash" : ""}" data-good="${id}">
         <span class="mc-top"><b>${G.COM[id].name}</b><span class="mc-qty">${spare > 0 ? spare : 0}${off ? ` <small>+${off} on offer</small>` : ""}</span></span>
         <span class="mc-where">${whereIs(p, id).map(x => `${x.qty} ${x.label === "your stockpile" ? "in" : "at"} ${x.label.toLowerCase()}`).join(" · ") || "all on offer"}</span>
-        <span class="mc-mid">${spark(s)}<span class="mc-px">${last != null ? `<b>${m(last)}</b>${start ? ` <small class="muted" title="Starting reference: the value of its raw materials. Nothing has traded yet.">start</small>` : ""}${chg != null ? ` <small class="${chg > 0 ? "up" : chg < 0 ? "dn" : ""}">${pct(chg)}</small>` : ""}` : `<small class="muted">never traded</small>`}</span></span>
+        <span class="mc-mid">${spark(s)}<span class="mc-px">${priceOrBasis(id, last, chg)}</span></span>
         ${demand}${spoils(p, id) ? `<span class="mtag warn">⌛ ${spoils(p, id)} go off tonight: sell or use them</span>` : ""}</button>`;
     };
     const buyCard = id => {
-      const ask = G.bestAsk(vw, id), { s, last, start, chg } = lastBits(id), makers = makersOf(p, id);
+      const ask = G.bestAsk(vw, id), { s, last, chg } = lastBits(id), makers = makersOf(p, id);
       const need = Math.max(0, (want[id] || 0) - (hold[id] || 0)), bidding = myOrders.filter(o => o.side === "buy" && o.good === id).reduce((x, o) => x + o.qty, 0);
       const why = [p.contracts.some(k => k.goods[id]) ? "contract" : "", needsOf(p)[id] ? "factory input" : ""].filter(Boolean).join(" + ");
       const supply = ask ? `<span class="mtag good">Ask ${m(ask.price)} ×${ask.qty}</span>`
@@ -438,7 +462,7 @@
       return `<button class="mcard${id === sel ? " sel" : ""}${fresh.has(id) ? " flash" : ""}" data-good="${id}">
         <span class="mc-top"><b>${G.COM[id].name}</b><span class="mc-qty">${need ? `need ${need}` : "✓"}${bidding ? ` <small>bidding ${bidding}</small>` : ""}</span></span>
         <span class="mc-where">${why || "you're bidding"}${hold[id] ? ` · have ${hold[id]}` : ""}</span>
-        <span class="mc-mid">${spark(s)}<span class="mc-px">${last != null ? `<b>${m(last)}</b>${start ? ` <small class="muted" title="Starting reference: the value of its raw materials. Nothing has traded yet.">start</small>` : ""}${chg != null ? ` <small class="${chg > 0 ? "up" : chg < 0 ? "dn" : ""}">${pct(chg)}</small>` : ""}` : `<small class="muted">never traded</small>`}</span></span>
+        <span class="mc-mid">${spark(s)}<span class="mc-px">${priceOrBasis(id, last, chg)}</span></span>
         ${supply}</button>`;
     };
     const movers = Object.entries(moved).sort((a, b) => b[1] - a[1]);
@@ -455,6 +479,7 @@
       <p class="muted small">One sealed auction at the end of this phase: each good trades at a single price, where the most units change hands. Orders stay until they fill or you cancel.</p>
       ${sel ? ticket(p, sel, want) : ""}
       ${quoteBoard(fresh)}
+      ${opportunities(p)}
       <section class="msec"><h3>Sell what you make</h3>
         ${sellIds.length ? `<div class="mgrid">${sellIds.map(sellCard).join("")}</div>` : `<p class="muted">Nothing spare right now.</p>`}</section>
       <section class="msec"><h3>Buy what you need <span class="muted small">for your contracts and factories</span></h3>
@@ -469,11 +494,11 @@
       <details class="msec mall" ${ui.allOpen ? "open" : ""}><summary><h3>${ui.allGoods ? `All ${COMMODITIES.length} goods` : `Goods in play (${inPlay.size})`}</h3></summary>
         <div class="grow"><input class="gsearch" id="gSearch" placeholder="Search" value="${esc(ui.search)}">
           <button class="glink blink" id="gAllGoods">${ui.allGoods ? "Show only goods in play" : `Show the other ${hidden} goods`}</button></div>
-        <table class="gmkt gbook-list"><thead><tr><th>Good</th><th class="n">Bid</th><th class="n">Ask</th><th class="n">Last</th><th class="n">Have</th><th class="n">Want</th><th>Made by</th></tr></thead><tbody>
+        <table class="gmkt gbook-list"><thead><tr><th>Good</th><th class="n">Bid</th><th class="n">Ask</th><th class="n">Last</th><th class="n" title="Its raw materials at their last traded prices">Cost basis</th><th class="n">Have</th><th class="n">Want</th><th>Made by</th></tr></thead><tbody>
         ${rows.map(c => { const q = G.quote(vw, c.id), mk = makersOf(p, c.id);
           return `<tr data-good="${c.id}" class="${c.id === sel ? "sel" : ""}"><td>${c.name}</td>
             <td class="n">${q.bid != null ? `${m(q.bid)} <small>×${q.bids[0].qty}</small>` : "–"}</td><td class="n">${q.ask != null ? `${m(q.ask)} <small>×${q.asks[0].qty}</small>` : "–"}</td>
-            <td class="n">${q.last ? `${m(q.last.price)}${isStart(q) ? ` <small>start</small>` : ""}` : "–"}</td><td class="n">${hold[c.id] || ""}</td><td class="n">${want[c.id] || ""}</td>
+            <td class="n">${q.last ? m(q.last.price) : "–"}</td><td class="n muted">${basisText(c.id) || "–"}</td><td class="n">${hold[c.id] || ""}</td><td class="n">${want[c.id] || ""}</td>
             <td class="small muted">${[vw.businesses.some(b => b.owner === p.id && G.BIZ_BY[b.type].outputs[c.id]) ? "you" : "", ...mk.map(x => esc(x.name))].filter(Boolean).join(", ")}</td></tr>`; }).join("")}
         </tbody></table></details>`;
   }
@@ -526,7 +551,7 @@
         <text class="px" x="${sell ? cx - 6 : cx + 6}" y="${y + rowH - 4}" text-anchor="${sell ? "end" : "start"}">${m(x.price)}</text>
         <text class="qt" x="${sell ? bx + bw + 4 : bx - 4}" y="${y + rowH - 4}" text-anchor="${sell ? "start" : "end"}">${x.qty}${mine ? " ●" : ""}</text></g>`;
     };
-    const spread = q.spread != null ? `Spread ${m(q.ask - q.bid)} · ${Math.round(q.spread * 100)}%` : q.last ? `One side empty · ${isStart(q) ? "starting price" : "last trade"} ${m(q.last.price)}` : "One side empty";
+    const spread = q.spread != null ? `Spread ${m(q.ask - q.bid)} · ${Math.round(q.spread * 100)}%` : q.last ? `One side empty · last trade ${m(q.last.price)}` : "One side empty";
     return `<div class="depth"><svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Order book. Asks: ${asks.map(x => `${x.qty} at ${m(x.price)}`).join(", ") || "none"}. Bids: ${bids.map(x => `${x.qty} at ${m(x.price)}`).join(", ") || "none"}.">
       <text class="lbl" x="${cx + 6}" y="12">Sell orders (asks)</text>
       ${A.map((x, i) => row(x, yA(i), "sell")).join("") || `<text class="none" x="${cx + 8}" y="${yA(0) + rowH - 4}">Nobody selling</text>`}
@@ -540,82 +565,107 @@
     <p class="muted small dnote">Bars add up from the best price outwards; the number is the amount at that price. ● = includes yours.</p></div>`;
   }
 
-  // ----- Order book replay: the last 4 rounds of one good's book, animated -----
-  // Each auction gives two pictures: the book with everyone's orders in (bids may cross asks), then
-  // what was left after it cleared (with the trade). Then the book as it stands now.
-  // The price scale follows each picture's prices and, like everything else, is blended from one picture
-  // to the next, so the chart zooms and slides smoothly instead of jumping.
+  // ----- Order book replay: the last 4 rounds of one good's book, animated smoothly -----
+  // One bar per price (the amount at that price): asks to the right, bids to the left.
+  // Nothing pops in or out: a new order's bar grows outwards from the centre line, a cancelled one shrinks
+  // back into it, and everything (bars, spread band, price scale) glides from one moment to the next.
+  // At each auction the part of each order that fills slides to the clearing price, the bids and asks
+  // meet at the centre line, turn yellow and fade away; whatever didn't fill stays where it was.
   function depthFrames(id) {
-    const cum = (lv, n = 0) => lv.map(([p, q]) => [p, n += q]); // running totals from the best price outwards
     const frames = [];
+    const seg = (side, p, w, x0 = 0, col = side, op = 1) => ({ side, p, w, x0, col, op });
+    const book = (lv, keyOf = (s, p) => s + p) => { const segs = {}; lv.b.forEach(([p, q]) => segs[keyOf("b", p)] = seg("b", p, q)); lv.a.forEach(([p, q]) => segs[keyOf("a", p)] = seg("a", p, q)); return segs; };
     st.history.filter(h => h.depth).forEach(h => {
       const d = h.depth[id] || { pre: { b: [], a: [] }, post: { b: [], a: [] } }, tr = h.trades[id];
-      frames.push({ label: `Round ${h.round} ${h.phase}: orders in`, b: cum(d.pre.b), a: cum(d.pre.a) });
-      frames.push({ label: `Round ${h.round} ${h.phase}: ${tr ? `traded ${tr.qty} at ${m(tr.price)}` : "nothing traded"}`, b: cum(d.post.b), a: cum(d.post.a), trade: tr ? tr.price : null });
+      const when = `Round ${h.round} ${h.phase}`;
+      if (!tr) {
+        frames.push({ label: `${when}: orders in`, segs: book(d.pre) });
+        frames.push({ label: `${when}: nothing traded`, segs: book(d.post) });
+        return;
+      }
+      // Which part of each price level filled: best prices first, up to the volume traded
+      const filled = (lv, ok) => { let v = tr.qty; const f = {}; lv.filter(([p]) => ok(p)).forEach(([p, q]) => { const n = Math.min(q, v); if (n > 0) { f[p] = n; v -= n; } }); return f; };
+      const fb = filled(d.pre.b, p => p >= tr.price), fa = filled(d.pre.a, p => p <= tr.price);
+      // Orders in: each level is its unfilled part plus (further out) the part about to fill, same colour
+      const pre = {};
+      [["b", d.pre.b, fb], ["a", d.pre.a, fa]].forEach(([s, lv, f]) => lv.forEach(([p, q]) => {
+        const t = f[p] || 0;
+        pre[s + p] = seg(s, p, q - t);
+        if (t) pre["t" + s + p] = seg(s, p, t, q - t);
+      }));
+      // They meet: the filling parts slide to the clearing price and to the centre line, and turn yellow
+      const meet = { ...pre }, gone = { ...pre };
+      Object.keys(pre).filter(k => k[0] === "t").forEach(k => { meet[k] = { ...pre[k], p: tr.price, x0: 0, col: "y" }; gone[k] = { ...meet[k], op: 0 }; });
+      frames.push({ label: `${when}: orders in`, segs: pre });
+      frames.push({ label: `${when}: bids meet asks at ${m(tr.price)}`, segs: meet, trade: tr.price, hold: 500 });
+      frames.push({ label: `${when}: traded ${tr.qty} at ${m(tr.price)}`, segs: gone, trade: tr.price, hold: 200 });
+      frames.push({ label: `${when}: after the auction`, segs: book(d.post) });
     });
-    frames.push({ label: "Now", b: cum(G.depth(st, id, "buy").slice(0, 10).map(x => [x.price, x.qty])), a: cum(G.depth(st, id, "sell").slice(0, 10).map(x => [x.price, x.qty])) });
-    const ps = frames.flatMap(f => [...f.b, ...f.a].map(([p]) => p).concat(f.trade ?? []));
-    const lo = Math.min(...ps), hi = Math.max(...ps), pad = Math.max(1, (hi - lo) * 0.08);
-    const maxCum = Math.max(1, ...frames.flatMap(f => [f.b.at(-1)?.[1] || 0, f.a.at(-1)?.[1] || 0]));
-    const prices = [...new Set(ps)].sort((a, b) => a - b), gap = Math.min(...prices.slice(1).map((p, i) => p - prices[i]), hi - lo || 1);
-    // Each picture's own price range (at least 12 wide), carried forward from the last one if it's empty
-    let prev = null;
+    frames.push({ label: "Now", segs: book({ b: G.depth(st, id, "buy").slice(0, 10).map(x => [x.price, x.qty]), a: G.depth(st, id, "sell").slice(0, 10).map(x => [x.price, x.qty]) }) });
+    // Each moment's own price range (at least 12 wide), carried forward if it's empty
+    let prev = null, maxQ = 1;
     frames.forEach(f => {
-      const v = [...f.b, ...f.a].map(([p]) => p).concat(f.trade ?? []);
-      if (!v.length) { if (prev) [f.lo, f.hi] = prev; return; }
-      let a = Math.min(...v), z = Math.max(...v); const w = Math.max(12, (z - a) * 1.25), m0 = (a + z) / 2;
-      f.lo = m0 - w / 2; f.hi = m0 + w / 2; prev = [f.lo, f.hi];
+      const v = Object.values(f.segs).map(s => s.p).concat(f.trade ?? []);
+      Object.values(f.segs).forEach(s => maxQ = Math.max(maxQ, s.x0 + s.w));
+      if (!v.length) { [f.lo, f.hi] = prev || [0, 12]; return; }
+      const a = Math.min(...v), z = Math.max(...v), w = Math.max(12, (z - a) * 1.3), mid = (a + z) / 2;
+      f.lo = mid - w / 2; f.hi = mid + w / 2; prev = [f.lo, f.hi];
     });
-    return { frames, lo: lo - pad, hi: hi + pad, maxCum, gap, empty: !ps.length };
+    return { frames, maxQ, empty: frames.every(f => !Object.keys(f.segs).length) };
   }
-  // A picture's numbers, keyed so two pictures can be blended: bar widths by side+price, band edges, trade
-  const depthState = (f, D) => ({ lo: f.lo ?? D.lo, hi: f.hi ?? D.hi,
-    bars: Object.fromEntries([...f.b.map(([p, c]) => ["b" + p, c]), ...f.a.map(([p, c]) => ["a" + p, c])]),
-    bid: f.b[0]?.[0] ?? null, ask: f.a[0]?.[0] ?? null, trade: f.trade ?? null, tradeOp: f.trade != null ? 1 : 0,
-  });
+
+  // Colours come from the page's theme (light or dark), so the replay matches the rest of the market
+  const rgb = hex => { const h = hex.trim().replace("#", ""); const n = parseInt(h.length === 3 ? h.replace(/./g, c => c + c) : h, 16); return [n >> 16 & 255, n >> 8 & 255, n & 255]; };
+  const themeColours = () => { const cs = getComputedStyle(document.documentElement); return { b: rgb(cs.getPropertyValue("--raw") || "#5f8f3e"), a: rgb(cs.getPropertyValue("--waste") || "#b8443b"), y: [232, 194, 26] }; };
   const mix = (a, b, t) => a + (b - a) * t;
-  const blend = (s0, s1, t) => {
-    const bars = {};
-    new Set([...Object.keys(s0.bars), ...Object.keys(s1.bars)]).forEach(k => bars[k] = mix(s0.bars[k] || 0, s1.bars[k] || 0, t));
-    const edge = (x, y) => x == null ? y : y == null ? x : mix(x, y, t);
-    return { bars, bid: edge(s0.bid, s1.bid), ask: edge(s0.ask, s1.ask), trade: s1.trade ?? s0.trade, tradeOp: mix(s0.tradeOp, s1.tradeOp, t), lo: mix(s0.lo, s1.lo, t), hi: mix(s0.hi, s1.hi, t) };
-  };
-  function drawDepthAnim(D, s) {
-    const W = 320, H = 250, top = 22, bot = 18, cx = W / 2, half = cx - 40;
-    const Y = p => top + (s.hi - p) / (s.hi - s.lo || 1) * (H - top - bot);
-    const bh = Math.max(6, Math.min(12, (H - top - bot) / (s.hi - s.lo || 1) * 0.8));
-    let g = "";
-    if (s.bid != null && s.ask != null) {
-      const y1 = Y(Math.max(s.bid, s.ask)), y2 = Y(Math.min(s.bid, s.ask)), crossed = s.bid >= s.ask;
-      g += `<rect class="band${crossed ? " cross" : ""}" x="4" y="${y1.toFixed(1)}" width="${W - 8}" height="${Math.max(1, y2 - y1).toFixed(1)}"/>
-        <line class="edge sell" x1="4" x2="${W - 4}" y1="${Y(s.ask).toFixed(1)}" y2="${Y(s.ask).toFixed(1)}"/><line class="edge buy" x1="4" x2="${W - 4}" y1="${Y(s.bid).toFixed(1)}" y2="${Y(s.bid).toFixed(1)}"/>
-        ${y2 - y1 > 14 ? `<text class="sp" x="8" y="${((y1 + y2) / 2 + 4).toFixed(1)}">${crossed ? "crossed" : `spread ${m(Math.round(s.ask - s.bid))}`}</text>` : ""}`;
-    }
-    Object.entries(s.bars).forEach(([k, c]) => {
-      if (c < 0.05) return;
-      const sell = k[0] === "a", p = +k.slice(1), w = c / D.maxCum * half, y = Y(p) - bh / 2;
-      g += `<rect class="bar ${sell ? "sell" : "buy"}" x="${(sell ? cx : cx - w).toFixed(1)}" y="${y.toFixed(1)}" width="${w.toFixed(1)}" height="${bh.toFixed(1)}" rx="2"/>
-        <text class="px" x="${sell ? cx - 5 : cx + 5}" y="${(Y(p) + 3.5).toFixed(1)}" text-anchor="${sell ? "end" : "start"}" opacity="${Math.min(1, c).toFixed(2)}">${m(p)}</text>`;
+  // Blend two moments. A bar only in one of them grows from (or shrinks to) nothing at its own price.
+  const blend = (f0, f1, t, C) => {
+    const segs = {};
+    new Set([...Object.keys(f0.segs), ...Object.keys(f1.segs)]).forEach(k => {
+      const a = f0.segs[k] || { ...f1.segs[k], w: 0 }, b = f1.segs[k] || { ...f0.segs[k], w: 0 };
+      const ca = C[a.col], cb = C[b.col];
+      segs[k] = { side: b.side, p: mix(a.p, b.p, t), w: mix(a.w, b.w, t), x0: mix(a.x0, b.x0, t), op: mix(a.op, b.op, t), rgb: ca.map((x, i) => mix(x, cb[i], t)) };
     });
-    if (s.trade != null && s.tradeOp > 0.02) g += `<g opacity="${s.tradeOp.toFixed(2)}"><line class="tline" x1="4" x2="${W - 4}" y1="${Y(s.trade).toFixed(1)}" y2="${Y(s.trade).toFixed(1)}"/>
-      <text class="tlbl" x="${W - 6}" y="${(Y(s.trade) - 4).toFixed(1)}" text-anchor="end">traded at ${m(s.trade)}</text></g>`;
-    return `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Order book replay"><g class="sell"><text class="lbl" x="${cx + 6}" y="12">Asks</text></g>
-      <text class="lbl" x="${cx - 6}" y="12" text-anchor="end">Bids</text><line class="axis" x1="${cx}" x2="${cx}" y1="${top - 6}" y2="${H - bot + 6}"/>${g}</svg>`;
+    return { segs, lo: mix(f0.lo, f1.lo, t), hi: mix(f0.hi, f1.hi, t), trade: f1.trade ?? f0.trade ?? null, tradeOp: mix(f0.trade != null ? 1 : 0, f1.trade != null ? 1 : 0, t) };
+  };
+  const still = (f, C) => blend(f, f, 1, C);
+  function drawDepthAnim(D, s) {
+    const W = 320, H = 250, top = 22, bot = 14, cx = W / 2, half = cx - 34, bh = 9;
+    const Y = p => top + (s.hi - p) / (s.hi - s.lo || 1) * (H - top - bot), k = half / D.maxQ;
+    const segs = Object.values(s.segs).filter(x => x.w > 0.02 && x.op > 0.02);
+    // Best bid and ask still standing (unfilled parts only): the spread band between them
+    const live = side => segs.filter(x => x.side === side && x.rgb && x.op > 0.5);
+    const bid = Math.max(-Infinity, ...live("b").map(x => x.p)), ask = Math.min(Infinity, ...live("a").map(x => x.p));
+    let g = "";
+    if (isFinite(bid) && isFinite(ask) && ask > bid) g += `<rect class="band" x="4" y="${Y(ask).toFixed(1)}" width="${W - 8}" height="${(Y(bid) - Y(ask)).toFixed(1)}"/>`;
+    if (s.trade != null && s.tradeOp > 0.02) g += `<line class="tline" opacity="${s.tradeOp.toFixed(2)}" x1="4" x2="${W - 4}" y1="${Y(s.trade).toFixed(1)}" y2="${Y(s.trade).toFixed(1)}"/>
+      <text class="tlbl" opacity="${s.tradeOp.toFixed(2)}" x="${W - 6}" y="${(Y(s.trade) - 6).toFixed(1)}" text-anchor="end">${m(s.trade)}</text>`;
+    segs.forEach(x => {
+      const y = Y(x.p) - bh / 2, w = x.w * k, off = x.x0 * k, fill = `rgb(${x.rgb.map(Math.round).join(",")})`;
+      const bx = x.side === "a" ? cx + off : cx - off - w;
+      g += `<rect x="${bx.toFixed(1)}" y="${y.toFixed(1)}" width="${w.toFixed(1)}" height="${bh}" rx="2" fill="${fill}" opacity="${x.op.toFixed(2)}"/>`;
+    });
+    // Price labels for standing levels, faded in with their bars
+    const seen = new Set();
+    segs.filter(x => x.op > 0.5).forEach(x => {
+      const key = x.side + Math.round(x.p); if (seen.has(key)) return; seen.add(key);
+      g += `<text class="px" x="${x.side === "a" ? cx - 5 : cx + 5}" y="${(Y(x.p) + 3.5).toFixed(1)}" text-anchor="${x.side === "a" ? "end" : "start"}" opacity="${Math.min(1, x.w).toFixed(2)}">${m(Math.round(x.p))}</text>`;
+    });
+    return `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Order book replay"><text class="lbl" x="${cx - 6}" y="12" text-anchor="end">Bids</text><text class="lbl" x="${cx + 6}" y="12">Asks</text>
+      <line class="axis" x1="${cx}" x2="${cx}" y1="${top - 6}" y2="${H - bot + 4}"/>${g}</svg>`;
   }
-  // Play it: blend each picture into the next over 0.7s, hold 0.9s. Returns a stop function.
+  // Play: each moment blends into the next over 0.65s, then holds. Returns a stop function.
   function playDepth(box, label, id, done) {
-    const D = depthFrames(id);
+    const D = depthFrames(id), C = themeColours();
     if (D.empty) { label.textContent = "No orders in the last 4 rounds."; done(); return () => {}; }
-    const states = D.frames.map(f => depthState(f, D)), MOVE = 700, HOLD = 900;
+    const MOVE = 650, HOLD = 750, F = D.frames;
     let k = 0, t0 = performance.now(), raf = 0;
     const ease = t => t < .5 ? 2 * t * t : 1 - (-2 * t + 2) ** 2 / 2;
     const tick = now => {
-      const el = now - t0;
-      if (el < MOVE && k > 0) box.innerHTML = drawDepthAnim(D, blend(states[k - 1], states[k], ease(el / MOVE)));
-      else box.innerHTML = drawDepthAnim(D, states[k]);
-      const f = D.frames[k], spr = f.b[0] && f.a[0] ? (f.b[0][0] >= f.a[0][0] ? " · bids cross asks" : ` · spread ${m(f.a[0][0] - f.b[0][0])}`) : "";
-      label.textContent = `${f.label}${spr} (${k + 1}/${D.frames.length})`;
-      if (el >= MOVE + HOLD || (k === 0 && el >= HOLD)) { if (++k >= states.length) return done(); t0 = now; }
+      const el = now - t0, move = k === 0 ? 0 : MOVE, hold = F[k].hold ?? HOLD;
+      box.innerHTML = drawDepthAnim(D, el < move ? blend(F[k - 1], F[k], ease(el / move), C) : still(F[k], C));
+      label.textContent = `${F[k].label} (${k + 1}/${F.length})`;
+      if (el >= move + hold) { if (++k >= F.length) return done(); t0 = now; }
       raf = requestAnimationFrame(tick);
     };
     raf = requestAnimationFrame(tick);
@@ -630,12 +680,13 @@
     const yours = (side, price) => vw.book.filter(o => o.pid === p.id && o.good === id && o.side === side && o.price === price).reduce((s, o) => s + o.qty, 0);
     const myOrders = vw.book.filter(o => o.pid === p.id && o.good === id);
     const isNew = o => !st.book.some(x => x.id === o.id);
-    const suggest = t.side === "buy" ? q.ask ?? q.last?.price ?? q.bid : q.bid ?? q.last?.price ?? q.ask;
+    const cb = G.costBasis(vw, id), basisVal = cb && !cb.missing.length && cb.value ? cb.value : null;
+    const suggest = t.side === "buy" ? q.ask ?? q.last?.price ?? q.bid ?? basisVal : q.bid ?? q.last?.price ?? q.ask ?? basisVal;
     const makers = makersOf(p, id), users = usersOf(p, id);
     const standIn = b => Object.keys(b.inputs).find(x => G.substitutesFor(b, x).some(([y]) => y === id));
     const usedBy = G.BIZ.filter(b => usesGood(b, id)).map(b => `${b.name.toLowerCase()}${b.inputs[id] ? "" : ` <i>instead of ${G.COM[standIn(b)].name.toLowerCase()}</i>`}`);
     return `<div class="gticket">
-      <div class="ghead"><h3>${c.name}</h3><span class="muted">${q.last ? isStart(q) ? `nothing traded yet · starting price ${m(q.last.price)} (the value of its raw materials)` : `last ${m(q.last.price)} · ${q.volume} traded in the last 3 rounds` : "never traded"}${q.spread != null ? ` · spread ${Math.round(q.spread * 100)}%` : ""}</span><span class="gsp"></span><button class="glink" id="gTicketClose" title="Close">✕</button></div>
+      <div class="ghead"><h3>${c.name}</h3><span class="muted">${q.last ? `last ${m(q.last.price)} · ${q.volume} traded in the last 3 rounds` : "nothing traded yet"}${basisText(id) ? ` · today's cost basis ${basisText(id)}${basisNote(id)}` : G.COM[id].type === "raw" && !q.last ? " · raw: the market sets its price" : ""}${q.spread != null ? ` · spread ${Math.round(q.spread * 100)}%` : ""}</span><span class="gsp"></span><button class="glink" id="gTicketClose" title="Close">✕</button></div>
       <div class="tfacts">
         <div><span>You have</span><b>${hold}${spoils(p, id) ? ` <small class="bad">⌛ ${spoils(p, id)} go off tonight</small>` : G.roundsLeft && G.roundsLeft(vw, p, id) != null ? ` <small class="muted">oldest lasts ${G.roundsLeft(vw, p, id)} more round${G.roundsLeft(vw, p, id) === 1 ? "" : "s"}</small>` : ""}</b>${whereIs(p, id).length > 1 || (whereIs(p, id)[0] && whereIs(p, id)[0].label !== "your stockpile") ? `<small>${whereIs(p, id).map(x => `${x.qty} ${x.label === "your stockpile" ? "in" : "at"} ${x.label.toLowerCase()}`).join(", ")}</small>` : ""}</div>
         <div><span>Made by</span><b>${makers.length ? names(makers) : "nobody else"}</b></div>
@@ -644,7 +695,7 @@
       <p class="small muted tused">Used by: ${usedBy.join(" · ") || "no factory"}${S.depreciation?.on ? ` · ${G.lifeOf(id) ? `lasts ${G.lifeOf(id)} rounds` : "never goes off"}` : ""}</p>
       <div class="tcharts">
         <div><h4>Order book</h4><div class="depthbox">${depthChart(q, yours)}</div>
-          ${st.history.some(h => h.depth) ? `<div class="drctl"><button class="gbtn ghost" id="dPlay">▶ Replay last 4 rounds</button><span id="dLabel" class="muted small"></span></div>` : ""}</div>
+          <div class="drctl">${st.history.some(h => h.depth) ? `<button class="gbtn ghost" id="dPlay">▶ Replay last 4 rounds</button><span id="dLabel" class="muted small"></span>` : `<button class="gbtn ghost" disabled>▶ Replay last 4 rounds</button><span class="muted small">Replays build up from here on: each auction from now is recorded.</span>`}</div></div>
         <div><h4>Price history</h4>${priceChart(id)}</div>
       </div>
       <div class="gtwo">

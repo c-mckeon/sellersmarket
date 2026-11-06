@@ -23,10 +23,8 @@ const GAME_SETTINGS = {
   // One sealed auction per phase. Every good clears at a single price set by the players' own bids and asks.
   market: {
     maxPrice: 10000,       // no order may be priced above this
-    // New games start every good with a reference "last price": the value of its raw materials
-    // (a raw good: rawShare × its mine's build cost ÷ what the mine makes a round), × scale. Trades replace it.
-    // scale: 10 gives prices an extra digit (water 20, wood 40, steel 210), so whole numbers are fine-grained. Cash stays 1000: goods are meant to be expensive.
-    startPrices: { on: true, rawShare: 0.2, scale: 10 },
+    // No prices are set by the game: raw goods have none until they trade, and a made good's "cost basis"
+    // (G.costBasis) is just its raw materials at their last traded prices.
   },
 
   // ---------- Contracts (game/contracts.js) ----------

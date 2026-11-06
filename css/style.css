@@ -803,3 +803,9 @@ tr.flash td { animation: tradeflashrow 1.6s ease-out; }
 .depthbox .px { font-size: 10px; font-weight: 700; fill: var(--ink); font-variant-numeric: tabular-nums; }
 .depthbox .lbl { font-size: 10.5px; font-weight: 700; fill: var(--ink); text-transform: uppercase; letter-spacing: .05em; }
 .depthbox .sp { font-size: 11px; font-weight: 700; fill: var(--ink); }
+/* Opportunities: goods others want */
+.opps { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 6px; }
+.opp { all: unset; box-sizing: border-box; cursor: pointer; display: grid; gap: 3px; padding: 8px 10px; border: 1px dashed var(--raw); border-radius: 8px; background: color-mix(in srgb, var(--raw) 6%, var(--surface)); font-size: 13px; }
+.opp:hover { border-style: solid; }
+.opp .up { color: var(--raw); font-weight: 700; } .opp .dn { color: var(--waste); font-weight: 700; }
+.opp small { color: var(--muted); font-size: 12px; }

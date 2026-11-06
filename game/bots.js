@@ -25,7 +25,9 @@
   });
 
   // A bot's private guess of what a good is worth
-  G.guess = (st, id) => st.lastTrade[id]?.price ?? Math.max(0.5, G.rawUnits(id) * B.perRawUnit * (1 + 0.15 * G.tier(id)));
+  // (never traded: its cost basis if all its raw materials have traded, otherwise its own rough estimate:
+  //  raw-material units × perRawUnit, a bit more for each processing step. A private opinion, never shown.)
+  G.guess = (st, id) => st.lastTrade[id]?.price ?? ((cb => cb && !cb.missing.length && cb.value ? cb.value : null)(G.costBasis(st, id)) ?? Math.max(1, G.rawUnits(id) * B.perRawUnit * (1 + 0.15 * G.tier(id))));
 
   // Every good in the making of `id` (including itself)
   const treeMemo = {};
@@ -138,6 +140,8 @@
     const out = b.makes;
     let s = out in links ? 2 + links[out] : 0.3;
     if (G.bestBid(st, out)) s += 1.5;                                                     // someone wants it now
+    { const bid = G.bestBid(st, out), cb = G.costBasis(st, out);                            // …and pays more than it costs to make
+      if (bid && cb && !cb.missing.length && bid.price > cb.value * 1.1) s += 2 * Math.min(2, bid.price / Math.max(1, cb.value) - 1); }
     if (b.kind === "extract") s *= G.richness(b, tid);
     else {
       const mine = new Set(G.myBusinesses(st, p.id).flatMap(x => Object.keys(G.BIZ_BY[x.type].outputs)));
