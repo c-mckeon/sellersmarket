@@ -36,15 +36,17 @@ const GAME_SETTINGS = {
     size: 10,              // how big a contract is, in raw-material units (see G.rawUnits)
     pointsPerUnit: 0.5,    // points per raw-material unit delivered
     distanceBonus: 0.15,   // +15% points for every step the goods' nearest source is away from you
-    // The goods that contracts ask for: a core economy that 4 players can actually run. The rest (gold,
-    // lithium, rare earths, bauxite and what is made from them) can still be made, but no contract asks
-    // for them yet. Waste and raw goods never go in this list (rawShare and raws below cover raw ones).
+    // The goods that contracts ask for: a small core economy that 4 players can actually run (9 made goods
+    // from 6 regional raw materials, plus wheat and water from anywhere). Everything else (copper, oil,
+    // gold, lithium, rare earths, bauxite and what's made from them) can still be made, but no contract
+    // asks for it. Waste and raw goods never go in this list (rawShare and raws below cover raw ones).
+    // Simulations: 13 made + 8 raw → 9 + 6 took players who never deliver from 75% to 42%.
     rawShare: 0.3,         // chance that each good on a contract is a raw one (wood, clay, coal…) instead
     tierBonus: 0.25,        // +this share of points per processing step (raw 0, lumber 1, steel 2…)
-    goods: ["bread", "flour", "lumber", "paper", "glass", "ceramic", "cement", "iron", "steel", "copper",
-            "fuel", "plastic", "wire"],
+    goods: ["flour", "lumber", "glass", "ceramic", "iron",   // level 1
+            "bread", "paper", "cement", "steel"],          // level 2
     // The raw materials contracts can ask for (and that spread-out starts hand out: G.spreadStarts)
-    raws: ["wood", "sand", "clay", "limestone", "coal", "iron_ore", "copper_ore", "crude_oil"],
+    raws: ["wood", "sand", "clay", "limestone", "coal", "iron_ore"],
   },
 
   // ---------- Building (game/map.js) ----------

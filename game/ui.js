@@ -386,6 +386,18 @@
 
   // ================= The market =================
   // Built around three questions: can I sell what I make, can I get what I need, and what's moving?
+  // Goods that matter in this game: what contracts ask for, everything those are made from (and their
+  // by-products), building materials, wheat and water, and anything a player holds or has orders for
+  function goodsInPlay() {
+    const set = new Set([...S.contracts.goods, ...(S.contracts.raws || []), ...G.MATERIALS, "wheat", "water"]), seen = new Set();
+    const add = id => { if (seen.has(id)) return; seen.add(id); set.add(id);
+      const r = RECIPES.find(x => Object.keys(x.out)[0] === id); if (r) { Object.keys(r.in).forEach(add); Object.keys(r.out).forEach(o => set.add(o)); } };
+    S.contracts.goods.forEach(add);
+    vw.players.forEach(x => Object.keys(G.holdings(vw, x)).forEach(c => set.add(c)));
+    vw.book.forEach(o => set.add(o.good));
+    return set;
+  }
+
   function marketPanel(p) {
     const want = wantsOf(p), hold = G.holdings(vw, p), fresh = freshTrades(); // fresh: goods that traded since you last looked (they flash)
     const sel = ui.good && G.COM[ui.good] ? ui.good : null;
@@ -430,7 +442,10 @@
         ${supply}</button>`;
     };
     const movers = Object.entries(moved).sort((a, b) => b[1] - a[1]);
-    const rows = COMMODITIES.filter(c => !ui.search || c.name.toLowerCase().includes(ui.search));
+    // The full list: goods in play by default (contract goods, what they're made from, building materials,
+    // and anything someone holds or has orders for); the other goods behind a toggle
+    const inPlay = goodsInPlay(), hidden = COMMODITIES.length - inPlay.size;
+    const rows = COMMODITIES.filter(c => (ui.allGoods || inPlay.has(c.id)) && (!ui.search || c.name.toLowerCase().includes(ui.search)));
     return `
       <div class="mstats">
         <div><span>Last auction</span><b>${last ? `${Object.keys(last.trades).length} good${Object.keys(last.trades).length === 1 ? "" : "s"}` : "–"}</b><small>${last ? `${Object.values(last.trades).reduce((s, t) => s + t.qty, 0)} units · round ${last.round} ${last.phase}` : "no auctions yet"}</small></div>
@@ -451,8 +466,9 @@
               <td class="n ${chg > 0 ? "up" : chg < 0 ? "dn" : ""}">${chg != null ? pct(chg) : "–"}</td><td class="n">${vol}</td>
               <td class="n">${q.bid != null ? m(q.bid) : "–"} / ${q.ask != null ? m(q.ask) : "–"}</td></tr>`; }).join("")}
         </tbody></table>` : `<p class="muted">Nothing has traded yet. The first trades set the first prices.</p>`}</section>
-      <details class="msec mall" ${ui.allOpen ? "open" : ""}><summary><h3>All 50 goods</h3></summary>
-        <input class="gsearch" id="gSearch" placeholder="Search" value="${esc(ui.search)}">
+      <details class="msec mall" ${ui.allOpen ? "open" : ""}><summary><h3>${ui.allGoods ? `All ${COMMODITIES.length} goods` : `Goods in play (${inPlay.size})`}</h3></summary>
+        <div class="grow"><input class="gsearch" id="gSearch" placeholder="Search" value="${esc(ui.search)}">
+          <button class="glink blink" id="gAllGoods">${ui.allGoods ? "Show only goods in play" : `Show the other ${hidden} goods`}</button></div>
         <table class="gmkt gbook-list"><thead><tr><th>Good</th><th class="n">Bid</th><th class="n">Ask</th><th class="n">Last</th><th class="n">Have</th><th class="n">Want</th><th>Made by</th></tr></thead><tbody>
         ${rows.map(c => { const q = G.quote(vw, c.id), mk = makersOf(p, c.id);
           return `<tr data-good="${c.id}" class="${c.id === sel ? "sel" : ""}"><td>${c.name}</td>
@@ -789,6 +805,7 @@
     }));
     root.querySelector("#gTicketClose")?.addEventListener("click", () => { ui.good = null; render(); });
     root.querySelector(".mall")?.addEventListener("toggle", e => ui.allOpen = e.target.open);
+    root.querySelector("#gAllGoods")?.addEventListener("click", e => { e.preventDefault(); ui.allGoods = !ui.allGoods; ui.allOpen = true; render(); });
     // Order book replay (last 4 rounds): ▶ starts it, ■ stops it; a redraw of the page stops it too
     dStop(); dStop = () => {};
     const dPlay = root.querySelector("#dPlay");
