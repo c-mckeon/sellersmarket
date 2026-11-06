@@ -394,7 +394,7 @@ input[type=number] { font: inherit; font-size: 13px; padding: 3px 5px; border: 1
 @media (max-width: 1000px) { .tgrid { grid-template-columns: 1fr; } }
 #tmap .terr { transition: opacity .15s; }
 #tmap .terr.dim { opacity: .3; }
-#tmap .terr.sel path { stroke: #1d1d1b; stroke-width: 6; }
+/* selected territory: outlined in the map's top layer (mapHighlightSVG) */
 @media (max-width: 800px) { #tmap svg.board { min-width: 760px; } }
 #tpanel h3 { margin: 0 0 6px; font-size: 22px; }
 #tpanel h4 { margin: 16px 0 6px; font-size: 12px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); }
@@ -483,9 +483,9 @@ code { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; fo
 @media (max-width: 1000px) { .glay { grid-template-columns: 1fr; } .gdash { order: -1; } }
 .gmap .board { border-radius: 10px; }
 @media (max-width: 800px) { .gmap svg.board { min-width: 700px; } }
-.gmap .terr.here path { stroke: #1d1d1b; stroke-width: 7; }
+.board .hl { pointer-events: none; }
 .gmap .terr.near { cursor: pointer; }
-.gmap .terr.near path { stroke: #d4682a; stroke-width: 5; }
+.gmap .mk { cursor: default; }
 .gmap .terr.near:hover path { filter: brightness(1.08); }
 .gpanel { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 12px 14px; margin-top: 10px; }
 .ghead { display: flex; align-items: center; gap: 8px 14px; flex-wrap: wrap; margin-bottom: 8px; }

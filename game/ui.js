@@ -477,26 +477,30 @@
 
   // ----- Map -----
   function drawMap(p) {
-    let { svg, below } = europeMapSVG("tOutlineGame");
-    svg = svg.replace(/<\/svg>$/, "");
-    const marks = {};
-    vw.businesses.forEach(b => (marks[b.territory] ||= []).push({ kind: "biz", b }));
-    vw.players.forEach(x => (marks[x.pos] ||= []).push({ kind: "pawn", x }));
-    Object.entries(marks).forEach(([tid, list]) => {
-      const [x] = TERRITORY_LABELS[tid], y = below[tid] + 26, step = 38;
-      const show = list.length > 6 ? [...list.filter(l => l.kind === "pawn"), ...list.filter(l => l.kind === "biz").slice(0, 5)] : list;
-      show.forEach((mk, i) => {
-        const cx = x + (i - (show.length - 1) / 2) * step;
-        if (mk.kind === "biz") { const o = G.player(vw, mk.b.owner), t = G.BIZ_BY[mk.b.type]; svg += `<g><title>${esc(o.name)}: ${t.name}</title><rect x="${cx - 17}" y="${y - 17}" width="34" height="34" rx="8" fill="${o.colour}" stroke="#fff" stroke-width="3"/>${iconSVG(BIZ_ICON[t.id], cx, y, 23)}</g>`; }
-        else svg += `<g><title>${esc(mk.x.name)}${mk.x.id === p.id ? " (you)" : ""}</title>${pawnSVG(cx, y, mk.x.id === p.id ? 44 : 36, mk.x.colour)}</g>`;
-      });
-      if (show.length < list.length) svg += `<text x="${x}" y="${y + 30}" text-anchor="middle" font-size="12" font-weight="700" fill="#4a4232">+${list.length - show.length} more</text>`;
-    });
-    document.getElementById("gMap").innerHTML = `<div class="bd-scroll">${svg}</svg></div>`;
+    const FID = "tOutlineGame";
+    let { svg, below } = europeMapSVG(FID);
     const near = vw.phase === "afternoon" && !p.acted ? G.neighbours(p.pos) : [];
+    // Highlights go in the top layer: where you are, and (afternoon) where you can move
+    svg = svg.replace(`<g class="hl"></g></svg>`, `<g class="hl">${near.map(t => mapHighlightSVG(FID, t, "near")).join("")}${mapHighlightSVG(FID, p.pos, "here")}</g>`);
+    // Markers under each name: pawns first, then businesses; up to 4 a row, kept inside the map
+    const [W] = MAP_SIZE, S = 28, step = 32, perRow = 4;
+    const marks = {};
+    vw.players.forEach(x => (marks[x.pos] ||= []).push({ kind: "pawn", x }));
+    vw.businesses.forEach(b => (marks[b.territory] ||= []).push({ kind: "biz", b }));
+    Object.entries(marks).forEach(([tid, list]) => {
+      const [x] = TERRITORY_LABELS[tid], show = list.slice(0, 8), rows = Math.ceil(show.length / perRow);
+      show.forEach((mk, i) => {
+        const r = Math.floor(i / perRow), inRow = Math.min(perRow, show.length - r * perRow), k = i - r * perRow;
+        const half = (inRow - 1) / 2 * step + S / 2 + 4;
+        const cx = Math.min(W - half, Math.max(half, x)) + (k - (inRow - 1) / 2) * step, cy = below[tid] + 22 + r * (S + 4);
+        if (mk.kind === "biz") { const o = G.player(vw, mk.b.owner), t = G.BIZ_BY[mk.b.type]; svg += `<g class="mk"><title>${esc(o.name)}: ${t.name}</title><rect x="${cx - S / 2}" y="${cy - S / 2}" width="${S}" height="${S}" rx="6" fill="${o.colour}" stroke="#fff" stroke-width="2"/>${iconSVG(BIZ_ICON[t.id], cx, cy, 19)}</g>`; }
+        else svg += `<g class="mk"><title>${esc(mk.x.name)}${mk.x.id === p.id ? " (you)" : ""}</title>${pawnSVG(cx, cy, mk.x.id === p.id ? 36 : 30, mk.x.colour)}</g>`;
+      });
+      if (show.length < list.length) svg += `<text x="${x}" y="${below[tid] + 22 + rows * (S + 4) + 6}" text-anchor="middle" font-size="12" font-weight="700" fill="#4a4232" paint-order="stroke" stroke="#fff" stroke-width="3">+${list.length - show.length} more</text>`;
+    });
+    document.getElementById("gMap").innerHTML = `<div class="bd-scroll">${svg.replace(/<\/svg>$/, "")}</svg></div>`;
     document.querySelectorAll("#gMap .terr").forEach(g => {
       const t = g.dataset.t;
-      if (t === p.pos) g.classList.add("here");
       if (near.includes(t)) { g.classList.add("near"); g.addEventListener("click", () => doAct("move", { to: t })); }
     });
   }

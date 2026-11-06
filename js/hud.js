@@ -31,14 +31,18 @@ function europeMapSVG(fid) {
     colour[t.id] = pal.find(c => !taken.has(c)) || pal[0];
   });
 
-  let s = `<svg class="board" viewBox="0 0 ${W} ${H}" role="img" aria-label="Map of Europe split into ${TERRITORIES.length} territories">
-    <defs><filter id="${fid}" x="-5%" y="-5%" width="110%" height="110%">
-      <feMorphology in="SourceAlpha" operator="erode" radius="2.2" result="in"/>
+  // Borders: each territory gets a thin ring just inside its edge (a filter, so territories made of
+  // several provinces get one outline, with no lines between their provinces). Two neighbours' rings
+  // meet to make one fine border line.
+  // Highlights (mapHighlightSVG) use wider rings in their own colour, drawn on top in the .hl layer.
+  const ring = (id, r, colour, op, keep) => `<filter id="${id}" x="-5%" y="-5%" width="110%" height="110%">
+      <feMorphology in="SourceAlpha" operator="erode" radius="${r}" result="in"/>
       <feComposite in="SourceAlpha" in2="in" operator="out" result="ring"/>
-      <feFlood flood-color="#5d5543" flood-opacity=".75"/>
+      <feFlood flood-color="${colour}" flood-opacity="${op}"/>
       <feComposite in2="ring" operator="in" result="edge"/>
-      <feMerge><feMergeNode in="SourceGraphic"/><feMergeNode in="edge"/></feMerge>
-    </filter></defs>
+      <feMerge>${keep ? `<feMergeNode in="SourceGraphic"/>` : ""}<feMergeNode in="edge"/></feMerge></filter>`;
+  let s = `<svg class="board" viewBox="0 0 ${W} ${H}" role="img" aria-label="Map of Europe split into ${TERRITORIES.length} territories">
+    <defs>${ring(fid, 0.9, "#5d5543", 0.55, true)}${ring(fid + "-here", 3.2, "#1d1d1b", 0.9, false)}${ring(fid + "-near", 2, "#d4682a", 0.85, false)}</defs>
     <rect width="${W}" height="${H}" fill="#cfc8a6"/>`;
   TERRITORIES.forEach(t => {
     const c = colour[t.id];
@@ -59,7 +63,16 @@ function europeMapSVG(fid) {
     });
   });
 
-  return { svg: s + "</svg>", below };
+  return { svg: s + `<g class="hl"></g></svg>`, below };
+}
+
+// An outline (and for "near", a light tint) over one territory, for the map's top .hl layer.
+// kind: "here" (dark ring) or "near" (orange ring and tint). fid: the id passed to europeMapSVG.
+function mapHighlightSVG(fid, tid, kind) {
+  const t = TERRITORIES.find(x => x.id === tid);
+  if (!t) return "";
+  const d = t.provinces.map(p => PROVINCE_PATHS[p]).join(" ");
+  return `${kind === "near" ? `<path d="${d}" fill="#d4682a" fill-opacity=".14"/>` : ""}<g filter="url(#${fid}-${kind})"><path d="${d}" fill="#000"/></g>`;
 }
 
 function drawBoard() {

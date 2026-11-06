@@ -57,6 +57,9 @@ function paintMap() {
     g.classList.toggle("sel", tid === tSel);
     g.querySelectorAll("path").forEach(p => { p.setAttribute("fill", fill); p.setAttribute("stroke", fill); });
   });
+  // The selected territory's outline, drawn on top so neighbours can't cover it
+  const hl = document.querySelector("#tmap .hl");
+  if (hl) hl.innerHTML = tSel ? mapHighlightSVG("tOutlineTerr", tSel, "here") : "";
   const leg = document.getElementById("tlegend");
   leg.innerHTML = !b ? `Click a territory to see what it's like and what you can build there.`
     : b.kind === "extract" ? `<b>${b.name}</b>: ${whereText(b)}. <span class="sw" style="background:${RICH[1]}"></span>small <span class="sw" style="background:${RICH[2]}"></span>good <span class="sw" style="background:${RICH[3]}"></span>world-class deposit. ${BIZ_COUNT(b)} territories.`
