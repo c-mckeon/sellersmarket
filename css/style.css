@@ -768,3 +768,5 @@ svg.spark .spark-none { stroke: var(--line); stroke-width: 1.5; stroke-dasharray
 .qcard.flash *, .mcard.flash * { color: #1d1d1b; }
 .qcard.flash .qc-n small, .qcard.flash .qc-last { color: #4a4232; }
 tr.flash td { animation: tradeflashrow 1.6s ease-out; }
+.matbox { background: var(--bg); border-radius: 8px; padding: 8px 10px; margin-bottom: 8px; display: grid; gap: 3px; font-size: 13.5px; }
+.glink.blink { color: var(--accent); font-size: inherit; font-weight: 700; padding: 0; text-decoration: underline; }

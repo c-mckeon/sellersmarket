@@ -54,7 +54,7 @@ function europeMapSVG(fid) {
   const below = {};
   TERRITORIES.forEach(t => {
     const [x, y, room] = TERRITORY_LABELS[t.id];
-    const fs = Math.max(12, Math.min(t.sea ? 22 : 20, room / 3.2));
+    const fs = 16; // every name the same size (long names wrap onto two lines)
     const words = t.name.split(" ");
     const lines = t.name.length > 11 && words.length > 1 ? [words.slice(0, Math.ceil(words.length / 2)).join(" "), words.slice(Math.ceil(words.length / 2)).join(" ")] : [t.name];
     below[t.id] = y + ((lines.length - 1) / 2) * fs * 1.05 + fs * .35;

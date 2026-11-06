@@ -544,6 +544,22 @@
   }
 
   // ----- Afternoon: move or build (paid in goods) -----
+  // Building materials: what you have to build with, and what's stopping you
+  const cheapestOf = list => list.map(c => ({ c, px: (G.bestAsk(vw, c)?.price ?? st.lastTrade[c]?.price ?? 999) / S.build.materials[c] })).sort((a, b) => a.px - b.px)[0].c;
+  const buyLink = list => { const c = cheapestOf(list), a = G.bestAsk(vw, c); return `<button class="glink blink" data-good="${c}">${G.COM[c].name.toLowerCase()}${a ? ` (ask ${m(a.price)})` : ""}</button>`; };
+  function materialsBox(p) {
+    const M = S.build.materials, hold = G.holdings(vw, p);
+    const mats = G.MATERIALS.filter(c => hold[c]);
+    const total = mats.reduce((s, c) => s + hold[c] * M[c], 0), heavy = S.build.heavy.goods.reduce((s, c) => s + (hold[c] || 0) * M[c], 0);
+    const locked = G.MATERIALS.map(c => [c, onOffer(p, c)]).filter(([, n]) => n);
+    return `<div class="matbox">
+      <div><b>Your building materials: ${m(total)}</b>${heavy ? ` <span class="muted">(${m(heavy)} heavy)</span>` : ""}
+        ${mats.length ? `<span class="muted"> · ${mats.map(c => `${hold[c]} ${G.COM[c].name.toLowerCase()}`).join(", ")}</span>` : ` <span class="bad">none</span>`}</div>
+      ${locked.length ? `<div class="bad small">${locked.map(([c, n]) => `${n} ${G.COM[c].name.toLowerCase()}`).join(", ")} in your sell orders: cancel them to build with it.</div>` : ""}
+      <div class="muted small">A business costs a number of materials. Lumber, iron, ceramic, cement and glass count 1 each, steel and aluminium 2, concrete ½. Big factories need half in heavy ones (steel, glass, concrete, aluminium). Materials your contracts ask for are used last.</div>
+    </div>`;
+  }
+
   function afternoonPanel(p) {
     const here = p.pos, info = TERRITORY_INFO[here];
     const opts = G.buildable(vw, here, p.id).sort((a, b) => G.bizTier(a.b) - G.bizTier(b.b) || a.b.name.localeCompare(b.b.name));
@@ -555,12 +571,12 @@
       <h4 class="gsub">${p.acted ? "Done for this afternoon ✓" : "Move <span class=\"muted\">(or click the map)</span>"}</h4>
       <div class="gmoves">${G.neighbours(here).map(t => `<button data-move="${t}" ${p.acted ? "disabled" : ""}>${G.TERR[t].name}</button>`).join("")}</div>
       <h4 class="gsub">…or build here</h4>
-      <p class="muted small">Paid in crates of building materials from your stockpile: any of ${Object.entries(S.build.materials).map(([c, v]) => `${G.COM[c].name.toLowerCase()}${v !== 1 ? ` (${v} crate${v > 1 ? "s" : ""} each)` : ""}`).join(", ")}. Big factories need half of it in heavy materials (${S.build.heavy.goods.map(c => G.COM[c].name.toLowerCase()).join(", ")}). Materials your contracts ask for are used last.</p>
-      ${opts.length ? `<table class="gmkt"><thead><tr><th>Business</th><th>Each round</th><th class="n">Crates</th><th>You'd use</th><th></th></tr></thead><tbody>
+      ${materialsBox(p)}
+      ${opts.length ? `<table class="gmkt"><thead><tr><th>Business</th><th>Each round</th><th class="n">Materials</th><th>You'd use</th><th></th></tr></thead><tbody>
         ${opts.map(o => { const r = G.payFor(vw, p, o.cost); return `<tr><td>${o.b.name}</td><td class="muted small">${io(o.b)}</td>
           <td class="n">${o.cost.crates}${o.cost.heavy ? `<small> (${o.cost.heavy} heavy)</small>` : ""}</td>
-          <td class="small">${r.short ? `<span class="bad">${r.short} short${r.heavyShort ? `, ${r.heavyShort} of them heavy` : ""}</span>` : G.costText(r.pay)}</td>
-          <td class="acts"><button data-build="${o.b.id}" ${p.acted || r.short ? "disabled" : ""}>Build</button></td></tr>`; }).join("")}
+          <td class="small">${r.short ? `<span class="bad">${r.short} short${r.heavyShort ? `, ${r.heavyShort} of them heavy` : ""}</span> · buy ${buyLink(r.heavyShort ? S.build.heavy.goods : G.MATERIALS)}` : G.costText(r.pay)}</td>
+          <td class="acts"><button data-build="${o.b.id}" ${p.acted || r.short ? "disabled" : ""} title="${p.acted ? "You've already moved or built this afternoon" : r.short ? "Not enough building materials" : "Build it"}">Build</button></td></tr>`; }).join("")}
       </tbody></table>` : `<p class="muted">Nothing can be built here.</p>`}`;
   }
 
