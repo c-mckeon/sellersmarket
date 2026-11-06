@@ -91,9 +91,9 @@
     for (let i = 0; i < k && pool.length; i++) {
       // Each good on the contract is a raw one with chance settings.contracts.rawShare
       const from = raws.length && C.rawShare && G.rand(st) < C.rawShare ? raws : pool;
-      const total = from.reduce((s, x) => s + (1 + x.d) ** 2, 0);
+      const total = from.reduce((s, x) => s + (1 + x.d) ** (C.distancePower ?? 2), 0);
       let r = G.rand(st) * total, pick = from[0];
-      for (const x of from) { r -= (1 + x.d) ** 2; if (r <= 0) { pick = x; break; } }
+      for (const x of from) { r -= (1 + x.d) ** (C.distancePower ?? 2); if (r <= 0) { pick = x; break; } }
       chosen.push(pick); pool = pool.filter(x => x !== pick); raws = raws.filter(x => x !== pick);
     }
     const goods = {};
@@ -110,6 +110,9 @@
 
   const open = st => G.need(st.phase === "morning" || st.phase === "afternoon", "Not right now.");
   G.canDeliver = (st, p, k) => Object.entries(k.goods).every(([c, q]) => G.have(st, p, c) >= q);
+  // Public demand: how many players hold a contract that asks for a good (not who, how many or for what).
+  // except: leave this player out (so you see what others want).
+  G.demand = (st, id, except = null) => st.players.filter(p => p.id !== except && p.contracts.some(k => k.goods[id])).length;
 
   G.actions.deliver = (st, p, { contract }) => {
     open(st);
@@ -119,6 +122,7 @@
     G.need(!short.length, `You're short of ${short.map(([c, q]) => `${q - G.have(st, p, c)} ${G.COM[c].name}`).join(", ")} (goods on offer don't count).`);
     Object.entries(k.goods).forEach(([c, q]) => G.take(st, p, c, q));
     p.points += k.points; p.delivered = (p.delivered || 0) + 1;
+    { const d = (st.stats.deliveredGoods ||= {})[p.id] ||= {}; Object.entries(k.goods).forEach(([c, q]) => d[c] = (d[c] || 0) + q); } // for the simulator
     p.contracts = p.contracts.filter(x => x !== k);
     st.stats.delivered = (st.stats.delivered || 0) + 1;
     return `delivered a contract for ${k.points} points`;

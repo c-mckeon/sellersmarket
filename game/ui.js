@@ -214,6 +214,9 @@
   const usesGood = (b, id) => b.inputs[id] || Object.keys(b.inputs).some(c => G.substitutesFor(b, c).some(([x]) => x === id));
   const makersOf = (p, id) => others(p).filter(x => vw.businesses.some(b => b.owner === x.id && G.BIZ_BY[b.type].outputs[id]));
   const usersOf = (p, id) => others(p).filter(x => vw.businesses.some(b => b.owner === x.id && usesGood(G.BIZ_BY[b.type], id)));
+  // Public demand: how many other players' contracts want a good (never who, how many or for what)
+  const wanted = (p, id) => G.demand(vw, id, p.id);
+  const wantedTag = (p, id) => { const n = wanted(p, id); return n ? `<span class="mtag want" title="Other players holding a contract that asks for it. Contracts stay secret: this is only a count.">wanted by ${n} player${n === 1 ? "'s" : "s'"} contracts</span>` : ""; };
   const contractGood = id => S.contracts.goods.includes(id) || (S.contracts.rawShare > 0 && G.contractRaws().includes(id));
   const names = list => list.map(x => esc(x.name)).join(", ");
 
@@ -293,7 +296,7 @@
       xb: q[0] != null ? X(q[0]) : null, xa: q[1] != null ? X(q[1]) : null, xl: last != null ? X(last) : null };
   };
   const cardHTML = (id, c, flash) => `<button class="qcard${flash ? " flash" : ""}" data-good="${id}">
-      <span class="qc-h"><b>${G.COM[id].name}</b><span class="qc-last">${c.tr ? `traded ${c.tr[1]} at ${m(c.tr[0])}` : c.last != null ? `last ${m(c.last)}` : "no trades"}</span></span>
+      <span class="qc-h"><b>${G.COM[id].name}${(n => n ? ` <small class="qc-want" title="Wanted by ${n} other player${n === 1 ? "'s" : "s'"} contracts">wanted ×${n}</small>` : "")(G.demand(vw, id, ui.seat))}</b><span class="qc-last">${c.tr ? `traded ${c.tr[1]} at ${m(c.tr[0])}` : c.last != null ? `last ${m(c.last)}` : "no trades"}</span></span>
       <span class="qc-bar"><span class="qc-band${c.crossed ? " cross" : ""}" style="${c.xb != null && c.xa != null ? `left:${Math.min(c.xb, c.xa)}%;width:${Math.abs(c.xa - c.xb).toFixed(1)}%` : "display:none"}"></span>
         <i class="qc-bid" style="${c.xb != null ? `left:${c.xb}%` : "display:none"}"></i><i class="qc-ask" style="${c.xa != null ? `left:${c.xa}%` : "display:none"}"></i>
         <i class="qc-tr" style="${c.xl != null ? `left:${c.xl}%` : "display:none"}"></i></span>
@@ -441,11 +444,11 @@
     const sellCard = id => {
       const bid = G.bestBid(vw, id), { s, last, chg } = lastBits(id), users = usersOf(p, id);
       const spare = (hold[id] || 0) - (want[id] || 0), off = onOffer(p, id);
-      const demand = bid ? `<span class="mtag good">Bid ${m(bid.price)} ×${bid.qty}</span>`
+      const demand = wantedTag(p, id) + (bid ? `<span class="mtag good">Bid ${m(bid.price)} ×${bid.qty}</span>`
         : users.length ? `<span class="mtag">No bids · ${names(users)} could use it</span>`
         : G.isMaterial(id) ? `<span class="mtag">No bids · anyone can build with it</span>`
         : contractGood(id) ? `<span class="mtag">No bids · contracts can ask for it</span>`
-        : `<span class="mtag warn">⚠ Nobody else can use it now</span>`;
+        : wanted(p, id) ? "" : `<span class="mtag warn">⚠ Nobody else can use it now</span>`);
       return `<button class="mcard${id === sel ? " sel" : ""}${fresh.has(id) ? " flash" : ""}" data-good="${id}">
         <span class="mc-top"><b>${G.COM[id].name}</b><span class="mc-qty">${spare > 0 ? spare : 0}${off ? ` <small>+${off} on offer</small>` : ""}</span></span>
         <span class="mc-where">${whereIs(p, id).map(x => `${x.qty} ${x.label === "your stockpile" ? "in" : "at"} ${x.label.toLowerCase()}`).join(" · ") || "all on offer"}</span>
@@ -456,9 +459,9 @@
       const ask = G.bestAsk(vw, id), { s, last, chg } = lastBits(id), makers = makersOf(p, id);
       const need = Math.max(0, (want[id] || 0) - (hold[id] || 0)), bidding = myOrders.filter(o => o.side === "buy" && o.good === id).reduce((x, o) => x + o.qty, 0);
       const why = [p.contracts.some(k => k.goods[id]) ? "contract" : "", needsOf(p)[id] ? "factory input" : ""].filter(Boolean).join(" + ");
-      const supply = ask ? `<span class="mtag good">Ask ${m(ask.price)} ×${ask.qty}</span>`
+      const supply = (ask ? `<span class="mtag good">Ask ${m(ask.price)} ×${ask.qty}</span>`
         : makers.length ? `<span class="mtag">Nobody selling · ${names(makers)} make${makers.length === 1 ? "s" : ""} it</span>`
-        : `<span class="mtag warn">⚠ Nobody makes it yet</span>`;
+        : `<span class="mtag warn">⚠ Nobody makes it yet</span>`) + (wanted(p, id) ? `<span class="mtag">${wanted(p, id)} other player${wanted(p, id) === 1 ? " wants" : "s want"} it too</span>` : "");
       return `<button class="mcard${id === sel ? " sel" : ""}${fresh.has(id) ? " flash" : ""}" data-good="${id}">
         <span class="mc-top"><b>${G.COM[id].name}</b><span class="mc-qty">${need ? `need ${need}` : "✓"}${bidding ? ` <small>bidding ${bidding}</small>` : ""}</span></span>
         <span class="mc-where">${why || "you're bidding"}${hold[id] ? ` · have ${hold[id]}` : ""}</span>
@@ -494,11 +497,11 @@
       <details class="msec mall" ${ui.allOpen ? "open" : ""}><summary><h3>${ui.allGoods ? `All ${COMMODITIES.length} goods` : `Goods in play (${inPlay.size})`}</h3></summary>
         <div class="grow"><input class="gsearch" id="gSearch" placeholder="Search" value="${esc(ui.search)}">
           <button class="glink blink" id="gAllGoods">${ui.allGoods ? "Show only goods in play" : `Show the other ${hidden} goods`}</button></div>
-        <table class="gmkt gbook-list"><thead><tr><th>Good</th><th class="n">Bid</th><th class="n">Ask</th><th class="n">Last</th><th class="n" title="Its raw materials at their last traded prices">Cost basis</th><th class="n">Have</th><th class="n">Want</th><th>Made by</th></tr></thead><tbody>
+        <table class="gmkt gbook-list"><thead><tr><th>Good</th><th class="n">Bid</th><th class="n">Ask</th><th class="n">Last</th><th class="n" title="Its raw materials at their last traded prices">Cost basis</th><th class="n">Have</th><th class="n">Want</th><th class="n" title="Other players whose contracts ask for it (a count: contracts stay secret)">Wanted by</th><th>Made by</th></tr></thead><tbody>
         ${rows.map(c => { const q = G.quote(vw, c.id), mk = makersOf(p, c.id);
           return `<tr data-good="${c.id}" class="${c.id === sel ? "sel" : ""}"><td>${c.name}</td>
             <td class="n">${q.bid != null ? `${m(q.bid)} <small>×${q.bids[0].qty}</small>` : "–"}</td><td class="n">${q.ask != null ? `${m(q.ask)} <small>×${q.asks[0].qty}</small>` : "–"}</td>
-            <td class="n">${q.last ? m(q.last.price) : "–"}</td><td class="n muted">${basisText(c.id) || "–"}</td><td class="n">${hold[c.id] || ""}</td><td class="n">${want[c.id] || ""}</td>
+            <td class="n">${q.last ? m(q.last.price) : "–"}</td><td class="n muted">${basisText(c.id) || "–"}</td><td class="n">${hold[c.id] || ""}</td><td class="n">${want[c.id] || ""}</td><td class="n">${wanted(p, c.id) || ""}</td>
             <td class="small muted">${[vw.businesses.some(b => b.owner === p.id && G.BIZ_BY[b.type].outputs[c.id]) ? "you" : "", ...mk.map(x => esc(x.name))].filter(Boolean).join(", ")}</td></tr>`; }).join("")}
         </tbody></table></details>`;
   }
@@ -602,6 +605,11 @@
       frames.push({ label: `${when}: after the auction`, segs: book(d.post) });
     });
     frames.push({ label: "Now", segs: book({ b: G.depth(st, id, "buy").slice(0, 10).map(x => [x.price, x.qty]), a: G.depth(st, id, "sell").slice(0, 10).map(x => [x.price, x.qty]) }) });
+    // Skip moments when this good had no orders at all (they'd just be a blank chart), but keep the
+    // first empty one after some orders so the last bars can shrink away
+    const has = f => Object.keys(f.segs).length || f.trade != null;
+    const kept = frames.filter((f, i) => has(f) || f.label === "Now" || (i > 0 && has(frames[i - 1])));
+    frames.length = 0; frames.push(...kept);
     // Each moment's own price range (at least 12 wide), carried forward if it's empty
     let prev = null, maxQ = 1;
     frames.forEach(f => {
@@ -611,7 +619,7 @@
       const a = Math.min(...v), z = Math.max(...v), w = Math.max(12, (z - a) * 1.3), mid = (a + z) / 2;
       f.lo = mid - w / 2; f.hi = mid + w / 2; prev = [f.lo, f.hi];
     });
-    return { frames, maxQ, empty: frames.every(f => !Object.keys(f.segs).length) };
+    return { frames, maxQ, empty: frames.length < 2 || frames.every(f => !Object.keys(f.segs).length) };
   }
 
   // Colours come from the page's theme (light or dark), so the replay matches the rest of the market
@@ -657,7 +665,8 @@
   // Play: each moment blends into the next over 0.65s, then holds. Returns a stop function.
   function playDepth(box, label, id, done) {
     const D = depthFrames(id), C = themeColours();
-    if (D.empty) { label.textContent = "No orders in the last 4 rounds."; done(); return () => {}; }
+    if (D.empty) { label.textContent = `Nothing to replay: nobody bid for or offered ${G.COM[id].name.toLowerCase()} in the last 4 rounds.`; label.classList.add("dnow"); done(); return () => {}; }
+    label.classList.add("dnow");
     const MOVE = 650, HOLD = 750, F = D.frames;
     let k = 0, t0 = performance.now(), raf = 0;
     const ease = t => t < .5 ? 2 * t * t : 1 - (-2 * t + 2) ** 2 / 2;
@@ -690,7 +699,7 @@
       <div class="tfacts">
         <div><span>You have</span><b>${hold}${spoils(p, id) ? ` <small class="bad">⌛ ${spoils(p, id)} go off tonight</small>` : G.roundsLeft && G.roundsLeft(vw, p, id) != null ? ` <small class="muted">oldest lasts ${G.roundsLeft(vw, p, id)} more round${G.roundsLeft(vw, p, id) === 1 ? "" : "s"}</small>` : ""}</b>${whereIs(p, id).length > 1 || (whereIs(p, id)[0] && whereIs(p, id)[0].label !== "your stockpile") ? `<small>${whereIs(p, id).map(x => `${x.qty} ${x.label === "your stockpile" ? "in" : "at"} ${x.label.toLowerCase()}`).join(", ")}</small>` : ""}</div>
         <div><span>Made by</span><b>${makers.length ? names(makers) : "nobody else"}</b></div>
-        <div><span>Others who could use it</span><b>${users.length ? names(users) : "nobody yet"}</b><small>${[G.isMaterial(id) ? "building material" : "", contractGood(id) ? "contracts can ask for it" : ""].filter(Boolean).join(" · ")}</small></div>
+        <div><span>Others who could use it</span><b>${users.length ? names(users) : "nobody yet"}</b><small>${[wanted(p, id) ? `wanted by ${wanted(p, id)} player${wanted(p, id) === 1 ? "'s" : "s'"} contracts` : "", G.isMaterial(id) ? "building material" : "", contractGood(id) ? "contracts can ask for it" : ""].filter(Boolean).join(" · ")}</small></div>
       </div>
       <p class="small muted tused">Used by: ${usedBy.join(" · ") || "no factory"}${S.depreciation?.on ? ` · ${G.lifeOf(id) ? `lasts ${G.lifeOf(id)} rounds` : "never goes off"}` : ""}</p>
       <div class="tcharts">

@@ -34,6 +34,7 @@ const GAME_SETTINGS = {
     size: 10,              // how big a contract is, in raw-material units (see G.rawUnits)
     pointsPerUnit: 0.5,    // points per raw-material unit delivered
     distanceBonus: 0.15,   // +15% points for every step the goods' nearest source is away from you
+    distancePower: 2,      // how strongly contracts lean to faraway goods: chance ∝ (1 + distance) ^ this
     // The goods that contracts ask for: a small core economy that 4 players can actually run (9 made goods
     // from 6 regional raw materials, plus wheat and water from anywhere). Everything else (copper, oil,
     // gold, lithium, rare earths, bauxite and what's made from them) can still be made, but no contract

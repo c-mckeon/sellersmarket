@@ -809,3 +809,6 @@ tr.flash td { animation: tradeflashrow 1.6s ease-out; }
 .opp:hover { border-style: solid; }
 .opp .up { color: var(--raw); font-weight: 700; } .opp .dn { color: var(--waste); font-weight: 700; }
 .opp small { color: var(--muted); font-size: 12px; }
+.drctl .dnow { color: var(--ink); font-weight: 600; }
+.mtag.want { background: color-mix(in srgb, var(--accent) 16%, transparent); color: var(--ink); }
+.qc-want { font-size: 10.5px; font-weight: 700; color: var(--accent); }

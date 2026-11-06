@@ -227,6 +227,7 @@
         p.cash = cents(p.cash + (o.price - P) * n); // refund what was locked above the clearing price
         G.book(st, p, "Market purchases", -P * n);
         o.qty -= n; bought[p.id] = (bought[p.id] || 0) + n;
+        { const b = (st.stats.bought ||= {})[p.id] ||= {}; b[id] = (b[id] || 0) + n; } // for the simulator: how much was bought
       });
       af.forEach((n, o) => {
         const p = G.player(st, o.pid);

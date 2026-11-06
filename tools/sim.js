@@ -104,6 +104,9 @@ const summary = {
   "players who never delivered": f(100 * flat("delivered").filter(x => !x).length / flat("delivered").length) + "%",
   "round of the first delivery (median; – = none)": (() => { const a = mons.map(m => m.firstDelivery ?? Infinity); const x = q(a, .5); return x === Infinity ? "–" : x; })(),
   "has a possible buyer: mines etc. (not water) / all": `${f(100 * mons.reduce((s, m) => s + m.outRaw, 0) / mons.reduce((s, m) => s + m.nRaw, 0))}% / ${f(100 * mons.reduce((s, m) => s + m.outAll, 0) / mons.reduce((s, m) => s + m.nAll, 0))}%`,
+  // Of the goods delivered on contracts, how many the deliverer could have bought rather than made
+  // (per player and good: min(bought, delivered)); the higher, the more progress depends on trade
+  "delivered goods that were bought (not self-made)": f(100 * (() => { let b = 0, d = 0; res.forEach(r => Object.entries(r.stats.deliveredGoods || {}).forEach(([pid, goods]) => Object.entries(goods).forEach(([g, q]) => { d += q; b += Math.min(q, r.stats.bought?.[pid]?.[g] || 0); }))); return d ? b / d : 0; })()) + "%",
   "stuck rounds: no trade, build or delivery": f(100 * avg(mons.map(m => m.dead / m.rounds))) + "%",
   "cornered (share of goods someone else wants)": f(100 * mons.reduce((s, m) => s + m.cornered, 0) / Math.max(1, mons.reduce((s, m) => s + m.contested, 0))) + "%",
   "most often cornered": Object.entries(corneredGoods).sort((a, b) => b[1] - a[1]).slice(0, 6).map(([id, n]) => `${id} ${n}`).join(", ") || "–",
