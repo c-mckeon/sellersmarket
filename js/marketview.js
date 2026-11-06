@@ -192,4 +192,6 @@ function updateRow(id) {
   renderCurve();
 }
 
-initMarket();
+// The old formula-price calculators: only drawn if their place is still on the page (the Market page now
+// describes the player-driven auction). basePrice above is still used by the other design pages.
+if (document.getElementById("mtable")) initMarket();

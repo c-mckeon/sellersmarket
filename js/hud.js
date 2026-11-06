@@ -206,5 +206,6 @@ function drawHud() {
     </div>`;
 }
 
-drawBoard();
-drawHud();
+// (old design sketches: only drawn if their place is still on the page)
+if (document.getElementById("board")) drawBoard();
+if (document.getElementById("hud")) drawHud();

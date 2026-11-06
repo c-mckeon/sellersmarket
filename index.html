@@ -11,7 +11,7 @@
   <div class="brand">Sellers <span>Market</span></div>
   <nav class="tabs" id="mainTabs">
     <a href="#/game" data-tab="game">Game</a>
-    <a href="#/mechanics/commodities" data-tab="mechanics">Mechanics</a>
+    <a href="#/mechanics/gameplay" data-tab="mechanics">Mechanics</a>
   </nav>
 </header>
 
@@ -20,8 +20,6 @@
   <a href="#/mechanics/commodities" data-sub="commodities">Commodities</a>
   <a href="#/mechanics/territories" data-sub="territories">Territories</a>
   <a href="#/mechanics/market" data-sub="market">Market dynamics</a>
-  <a href="#/mechanics/broker" data-sub="broker">Broker dynamics</a>
-  <a href="#/mechanics/cards" data-sub="cards">Action cards</a>
   <a href="#/mechanics/database" data-sub="database">Database</a>
 </nav>
 
@@ -33,7 +31,7 @@
   <section id="view-gameplay" class="view">
     <div class="intro">
       <h1>Gameplay</h1>
-      <p>Each round is one day with two phases where players act: <b>morning</b> and <b>afternoon</b>. Between them, the game runs things automatically: once at <b>midday</b> and again <b>overnight</b>. Every phase is <b>simultaneous</b>: all players submit their orders in secret, then everything happens at once. If two players try to move into the same territory, neither gets in. <span class="sketch">Design sketch, not built yet</span></p>
+      <p>Sellers Market is a trading game over <b><span data-s="rounds"></span> rounds</b>. You score points by delivering secret <b>contracts</b>; most points wins, and cash only breaks ties. Nothing has a set price: every price comes from what players bid and ask. Raw materials are each found in one region of the map, so to make what your contracts ask for you have to trade with players far away.</p>
     </div>
 
     <div class="cyclegrid">
@@ -47,11 +45,10 @@
           <path class="arc mid" d="M325.8,114.4 A180,180 0 0 1 349.5,385.0" fill="none" stroke="#d9a21b" stroke-width="13" stroke-linecap="round" marker-end="url(#hMid)"/>
           <path class="arc night" d="M114.2,405.6 A180,180 0 0 1 90.5,135.0" fill="none" stroke="#4b55b8" stroke-width="13" stroke-linecap="round" marker-end="url(#hNight)"/>
           <text class="centre" x="220" y="256" text-anchor="middle" fill="#1d1d1b" font-size="19" font-weight="800">One game day</text>
-          <text class="arcsub" x="220" y="276" text-anchor="middle" fill="#6b6860" font-size="12">repeats every round</text>
+          <text class="arcsub" x="220" y="276" text-anchor="middle" fill="#6b6860" font-size="12">one round</text>
           <g class="phase morning" transform="translate(220,80)">
             <rect x="-95" y="-30" width="190" height="60" rx="14" fill="#fff" stroke="#d9a21b" stroke-width="2.5"/>
             <circle cx="-62" cy="0" r="10" class="sun" fill="#d9a21b"/>
-            <g class="rays" stroke="#d9a21b" stroke-width="2.5" stroke-linecap="round"><line x1="-48.0" y1="0.0" x2="-43.0" y2="0.0"/><line x1="-52.1" y1="9.9" x2="-48.6" y2="13.4"/><line x1="-62.0" y1="14.0" x2="-62.0" y2="19.0"/><line x1="-71.9" y1="9.9" x2="-75.4" y2="13.4"/><line x1="-76.0" y1="0.0" x2="-81.0" y2="0.0"/><line x1="-71.9" y1="-9.9" x2="-75.4" y2="-13.4"/><line x1="-62.0" y1="-14.0" x2="-62.0" y2="-19.0"/><line x1="-52.1" y1="-9.9" x2="-48.6" y2="-13.4"/></g>
             <text class="ph" x="-36" y="7" fill="#1d1d1b" font-size="20" font-weight="800">Morning</text>
           </g>
           <g class="phase afternoon" transform="translate(220,440)">
@@ -65,74 +62,110 @@
 
       <div class="cg cg-morning">
         <h3>Morning <span>players trade</span></h3>
-        <p>Players buy and sell on the market to get the inputs their businesses need for the day. Whatever a business holds when morning ends is what it produces with at midday.</p>
+        <p>Place and cancel buy and sell orders, deliver contracts you can fill, and throw away one contract if you want (one a round). Everyone enters their orders in secret; then they all go through at once.</p>
       </div>
 
       <div class="cg cg-mid">
         <h3>Midday <span>automatic</span></h3>
         <ol>
-          <li>Businesses turn their inputs into products</li>
-          <li>Markets reprice, now that stockpiles have changed</li>
-          <li class="tbc">Something else? <em>not decided</em></li>
+          <li>The morning's sealed auction: each good trades at one price (see <a href="#/mechanics/market">Market dynamics</a>)</li>
+          <li>Every business produces: mines dig, factories turn inputs into products</li>
         </ol>
       </div>
 
       <div class="cg cg-aft">
         <h3>Afternoon <span>players act</span></h3>
-        <p>Players play action cards that decide how the market moves overnight, for example triggering a pandemic.</p>
-        <ul>
-          <li class="tbc">Set up new businesses <em>not decided</em></li>
-          <li class="tbc">Move around the map <em>not decided</em></li>
-        </ul>
+        <p>Trade again, and do <b>one</b> of these: move your pawn to a neighbouring territory, or build a business in the territory you're in. If two players move into the same territory at once, neither gets in.</p>
       </div>
 
       <div class="cg cg-night">
         <h3>Overnight <span>automatic</span></h3>
         <ol>
-          <li>Markets reprice, based on the action cards played this afternoon</li>
-          <li>Loan repayments are charged</li>
-          <li>Bond yields are paid out</li>
-          <li>Futures expire and settle</li>
-          <li>Workers are paid</li>
-          <li class="tbc">Some open orders get filled <em>not decided</em></li>
+          <li>The afternoon's sealed auction</li>
+          <li>Goods at the end of their life go off</li>
+          <li>Delivered and thrown-away contracts are replaced</li>
         </ol>
       </div>
     </div>
 
-    <h2 class="listhead">The board <span class="sketch">Sketch</span></h2>
-    <div class="boardwrap">
-      <div id="board"></div>
-      <div class="boardnotes">
-        <p>A map of Europe split into <b>60 territories</b>: 46 on land and 14 seas. Hover over a territory to see its name.</p>
+    <div class="rules">
+      <section>
+        <h2>Starting out</h2>
         <ul>
-          <li>Businesses are built in land territories. Each player starts with a few.</li>
-          <li>Players move their pawn between neighbouring territories in the afternoon.</li>
-          <li class="tbc">Territories could be better for some businesses, e.g. Ukraine for flour mills or the Ruhr for steel <em>not decided</em></li>
-          <li class="tbc">Seas could be shipping routes: moving goods across them costs money or takes time <em>not decided</em></li>
-          <li class="tbc">Cards could target a territory, e.g. a drought in Spain <em>not decided</em></li>
+          <li><b><span data-s="startCash"></span> cash</b>. It's the only money there will ever be: it's used for trading and nothing else.</li>
+          <li><b>Two free businesses</b> where you start: a mine (or farm, or well) and the factory that uses its output, e.g. an iron mine and a blast furnace.</li>
+          <li><b>Some building materials</b> (<span data-s="startGoods"></span>) and <b><span data-s="contracts.hand"></span> secret contracts</b>.</li>
+          <li>An unlimited stockpile for what you buy. The setup screen spreads players out, each with a different region's mine.</li>
         </ul>
-      </div>
+      </section>
+
+      <section>
+        <h2>Contracts and points</h2>
+        <ul>
+          <li>A contract asks for 2 or 3 goods in set amounts, about <span data-s="contracts.size"></span> raw materials' worth in all. Deliver it whole, any time you trade, from anything you own (your stockpile or your businesses' stock; goods in sell orders don't count).</li>
+          <li>Contracts ask for these made goods: <span data-s="contractGoods"></span>. Each item has a <span data-s="contracts.rawShare" data-f="pct"></span> chance of being a raw material instead: <span data-s="contractRaws"></span>.</li>
+          <li>They lean towards goods made far from where you started, so you'll need other players.</li>
+          <li><b>Points</b> = raw materials in it × <span data-s="contracts.pointsPerUnit"></span> × (1 + <span data-s="contracts.distanceBonus" data-f="pct"></span> for each step its goods come from) × (1 + <span data-s="contracts.tierBonus" data-f="pct"></span> for each processing step). Made goods pay more than raw ones.</li>
+          <li>You can throw one contract away a round; new ones arrive overnight.</li>
+          <li>Each good shows how many other players' contracts want it: a count only, never who or how many.</li>
+        </ul>
+      </section>
+
+      <section>
+        <h2>Businesses and production</h2>
+        <ul>
+          <li>Once a round, at midday, each business runs. Mines, farms and wells make their output (more where the deposit is richer). Factories need every input; they take them from anything you own, your businesses first.</li>
+          <li><b>Stand-ins:</b> a factory short of an input can use another good instead, e.g. <span data-s="substitutes"></span>. Goods a contract of yours asks for are never used as stand-ins.</li>
+          <li>What a business makes stays in <b>its own stock</b>, up to <span data-s="businessSpace"></span> units, until you sell, deliver or use it. When it's full it makes only what fits. Waste nothing can use (tailings, chemical waste) isn't kept.</li>
+        </ul>
+      </section>
+
+      <section>
+        <h2>Goods go off</h2>
+        <ul>
+          <li>Every unit remembers when it was made and goes off at the end of its life: <span data-s="lifetimes"></span>.</li>
+          <li>Goods are used, sold and delivered oldest first, and keep their age in sell orders and when bought, so holding goods back has a cost.</li>
+        </ul>
+      </section>
+
+      <section>
+        <h2>Building</h2>
+        <ul>
+          <li>In the afternoon, in the territory you're in. A business costs a number of <b>building materials</b>: base cost × the territory's cost level × (1 + 25% for each business already there) × (1 + <span data-s="build.ownedCostStep" data-f="pct"></span> for each business you own) ÷ <span data-s="build.valuePerCrate"></span>.</li>
+          <li>Any building material will do: <span data-s="materials"></span>. Big factories need half of it in heavy materials (<span data-s="heavy"></span>). Materials your contracts ask for are used last.</li>
+        </ul>
+      </section>
+
+      <section>
+        <h2>The map</h2>
+        <ul>
+          <li>60 territories: 46 on land and 14 seas. Move one step a turn, over land or sea.</li>
+          <li>Each raw material is found in one region: <span data-s="regions"></span>. Farms and water works can go on any land.</li>
+          <li>Click a territory in the game to see what can be mined, grown or drilled there. The <a href="#/mechanics/territories">Territories</a> page shows the whole map.</li>
+        </ul>
+      </section>
+
+      <section>
+        <h2>Switched off for now</h2>
+        <p class="muted">Action cards, the broker (loans, bonds, futures, ETFs), wages and inflation are designed but not in the game while we test the market. Their pages and code are kept for later.</p>
+      </section>
     </div>
-
-    <h2 class="listhead">Player dashboard <span class="sketch">Sketch with example data</span></h2>
-    <p class="muted">What a player sees during the game: their money, their stockpile, what their businesses need today, and live market and broker prices. No leverage for now.</p>
-    <div class="hud" id="hud"></div>
   </section>
-
   <section id="view-territories" class="view">
     <div class="intro">
       <h1>Territories</h1>
-      <p>Each of the 60 territories has its own character, based on real geography: what's in the ground, whether it's on the coast, and how expensive it is to build there. Mines and farms can only go where their resource is; most factories can go anywhere.</p>
+      <p>Each of the 60 territories has its own character: what's in the ground, whether it's on the coast, and how expensive it is to build there. Each raw material is found in one region, so players have to trade across the map. Mines and wells can only go where their resource is; farms, water works and most factories can go on any land.</p>
     </div>
 
     <div class="eqcard">
-      <div class="big">Build cost = base cost × territory cost level × (1 + 25% × businesses already there)</div>
+      <div class="big">Building materials = base cost × territory cost level × (1 + 25% × businesses already there) × (1 + <span data-s="build.ownedCostStep" data-f="pct"></span> × businesses you own) ÷ <span data-s="build.valuePerCrate"></span></div>
       <dl>
         <div><dt>Base cost</dt><dd>Set for each kind of business. A farm is 100, a gold mine 260, an offshore oil rig 450. A factory costs 150, 250, 400 or 700, depending on how advanced its product is.</dd></div>
         <div><dt>Cost level</dt><dd>Land and wages differ. London is ×2.0 and Paris ×1.8; Ukraine is ×0.7 and North Africa ×0.6.</dd></div>
         <div><dt>Crowding</dt><dd>Every business already in a territory, anyone's, makes the next one 25% dearer. The first is ×1, the fifth is ×2. Popular spots fill up and get expensive, which spreads players out.</dd></div>
-        <div><dt>Richness</dt><dd>Mines, farms and wells produce more where the deposit is richer: ★ ×1, ★★ ×1.5, ★★★ ×2. Swedish iron mines out-produce Scottish ones.</dd></div>
-        <div><dt>Where</dt><dd>Extraction only where the resource is. Oil refineries and plastics plants need the coast or a local oil field. Every other factory can go on any land. At sea you can only build oil rigs, where there's offshore oil.</dd></div>
+        <div><dt>Richness</dt><dd>Mines, farms and wells produce more where the deposit is richer: ★ ×1, ★★ ×1.5, ★★★ ×2. Northern England's iron mines out-produce Brittany's.</dd></div>
+        <div><dt>Where</dt><dd>Mines and wells only where the resource is; farms and water works anywhere on land. Oil refineries and plastics plants need the coast or a local oil field. Every other factory can go on any land. At sea you can only build oil rigs, where there's offshore oil.</dd></div>
+        <div><dt>Paid in</dt><dd>Building materials, not cash: <span data-s="materials"></span>. Big factories need half in heavy materials.</dd></div>
       </dl>
       <p class="muted small">In the game, more settings apply (tuned by simulation): every cost is ×1.5, each business you already own makes your next one 30% dearer, every business pays wages overnight of 3% of its cost, and mines, farms and wells make 20% more than listed here.</p>
       <p class="example"><b>Example:</b> a coal mine (base 140) in the Ruhr (×1.2) with 2 businesses already there: 140 × 1.2 × 1.5 = <b>252</b>. It makes 4 × 2 = 8 coal a round, since the Ruhr's coal is ★★★.</p>
@@ -158,107 +191,56 @@
   <section id="view-market" class="view">
     <div class="intro">
       <h1>Market dynamics</h1>
-      <p>Every commodity's price moves with how much of it players are holding. When stockpiles are full the price falls; when the stuff is scarce it climbs.</p>
+      <p>There is no price list. Every price comes from what players bid and ask, matched in one <b>sealed auction</b> at the end of each morning and each afternoon. Only players trade: there are no outside buyers or sellers.</p>
     </div>
 
-    <div class="eqcard">
-      <div class="big">Price = Base × Scarcity × Demand × Inflation</div>
-      <dl>
-        <div><dt>Scarcity</dt><dd>(s₀ ÷ s)<sup>e</sup>. <b>s</b> is the share of all players' combined stockpile space holding this commodity. <b>s₀</b> is its balanced share, where the price equals the base price. <b>e</b> sets how sharply the price reacts. Shares are held between s₀ ÷ 10 and s₀ × 10, so prices can't run away.</dd></div>
-        <div><dt>Demand</dt><dd>Units all factories need ÷ units they normally need. 1.0 is normal. This will come from the factories in play; for now you can set it by hand.</dd></div>
-        <div><dt>Inflation</dt><dd>(1 + rate)<sup>round</sup>. Everything creeps up over time.</dd></div>
-        <div><dt>Base</dt><dd>Set by hand for raw resources and wastes. Every made good gets its base from its recipe: the base cost of its inputs, minus any by-products it can sell, plus any disposal fees, plus 20% of the factory's base build cost as value added, ÷ the units it makes.</dd></div>
-        <div><dt>Waste</dt><dd>Wastes with no use have a negative price: a disposal fee. Their fee grows as more piles up, so their scarcity term flips to (s ÷ s₀)<sup>e</sup>.</dd></div>
-      </dl>
-      <p class="example"><b>Example: wheat</b>, base 6, s₀ = 4.09%, e = 1. When wheat is 4.09% of all stock: 6 × (4.09 ÷ 4.09) = <b>6</b>. When it's down to 0.82%: 6 × (4.09 ÷ 0.82) = <b>30</b>. (Wheat's balanced share used to be 50%; simulations showed that made farms unbeatable, so every good's share is now set so a balanced stockpile holds about equal value of each.)</p>
-    </div>
+    <div class="rules">
+      <section>
+        <h2>Orders</h2>
+        <ul>
+          <li>A <b>buy order</b> (bid) or <b>sell order</b> (ask): a good, a price and a quantity. Prices are whole numbers from 1 to <span data-s="market.maxPrice"></span>.</li>
+          <li>A bid locks price × quantity of your cash. An ask takes the goods from your businesses first, then your stockpile; they keep ageing while on offer. Nothing can be promised twice.</li>
+          <li>Orders stay on the book until they fill or you cancel them. You can't place an order that would trade with one of your own.</li>
+          <li>Everyone's new orders are secret until the auction; the book you see is what's left from earlier auctions.</li>
+        </ul>
+      </section>
 
-    <details class="explainer">
-      <summary>What each number means</summary>
-      <div class="xgrid">
-        <div class="x">
-          <h4>Price</h4>
-          <p>What one unit sells for on the market right now. Every player buys and sells at this price.</p>
+      <section>
+        <h2>The auction</h2>
+        <p>Each good on its own. Of all the whole-number prices, it picks:</p>
+        <ol>
+          <li>the one at which the <b>most units</b> change hands;</li>
+          <li>if several tie, the one that leaves the <b>fewest units unmatched</b>;</li>
+          <li>if buyers are still left over at all of them, the <b>highest</b> (sellers left over: the lowest);</li>
+          <li>otherwise the one <b>nearest the last traded price</b> (never traded: the middle).</li>
+        </ol>
+        <p>Everyone who trades gets that one price: a buyer who bid more gets the difference back. Better prices fill first; orders at exactly the clearing price share what's left in proportion to their size.</p>
+        <div class="eqcard">
+          <p class="example"><b>Example.</b> You bid 5 for 1 water, someone else bids 2 for 1, and a seller asks 1 for 1. Any price from 3 to 5 sells that one unit to you and not to them, so you get it, at <b>3</b>: just enough to beat the other bid. If the seller had 3 to sell, you'd both get one, at 1.</p>
+          <p class="example">Rule 4 is why bidding the maximum "to be sure" is safe: one very high bid can't drag the price up on its own.</p>
         </div>
-        <div class="x">
-          <h4>Base</h4>
-          <p>The price when everything is normal: stockpiles balanced, demand normal, no inflation yet. Think of it as the commodity's "fair value".</p>
-          <p>Raw resources and wastes have a base set by hand (wheat is 6). Made goods work theirs out from their recipe, so a smartphone's base comes from the bases of its circuit board, battery and glass.</p>
-        </div>
-        <div class="x">
-          <h4>Value added <span>20%</span></h4>
-          <p>What a factory adds on top of its inputs. Each run adds value worth 20% of the factory's base build cost, so a flour mill (base cost 150) adds 30 to the value of its flour. This means every kind of business earns roughly the same share of its cost at base prices, and differences come from location, competition and cards.</p>
-        </div>
-        <div class="x">
-          <h4>Share, s</h4>
-          <p>How much of all players' stockpile space, added together, is filled with this commodity right now.</p>
-          <p class="eg">If all players together have room for 1,000 crates and 100 of them hold wheat, wheat's share is 10%.</p>
-        </div>
-        <div class="x">
-          <h4>Balanced share, s₀</h4>
-          <p>The share at which the price equals the base: the "healthy" amount of this commodity to have in the economy. Cheap bulk goods like water and sand have a large balanced share; rare, high-end goods like wind turbines have a tiny one.</p>
-          <p>The balanced shares of all 50 commodities add up to 100%, so a perfectly balanced market has every stockpile full.</p>
-        </div>
-        <div class="x">
-          <h4>Scarcity</h4>
-          <p>How much the price is pushed up or down by supply: (s₀ ÷ s)<sup>e</sup>. Above 1 means scarce, so the price is higher; below 1 means plentiful, so it's lower.</p>
-          <p class="eg">Wheat with s₀ 4.09% and s 0.82%: 4.09 ÷ 0.82 = 5, so wheat costs 5 times its base.</p>
-        </div>
-        <div class="x">
-          <h4>Elasticity, e</h4>
-          <p>How strongly the price reacts when stock runs short or piles up. Higher means wilder swings.</p>
-          <p class="eg">At half the balanced share: e = 1 doubles the price (×2.0), e = 1.4 gives ×2.6, and e = 1.6 gives ×3.0.</p>
-          <p>Staples like wheat and water use 1.0. Specialised goods with no substitute, like chips or motors, use up to 1.6, because when you need one there's nothing else you can buy.</p>
-        </div>
-        <div class="x">
-          <h4>Price limits <span>×10</span></h4>
-          <p>For the price, a share never counts as more than 10 times below or above balance. This stops a commodity that runs out completely from costing infinity, or a flooded one from becoming free.</p>
-          <p class="eg">Wheat (s₀ 4.09%) at 0.1% is priced as if it were at 0.41%: 6 × 10 = 60, not 245.</p>
-        </div>
-        <div class="x">
-          <h4>Demand</h4>
-          <p>How badly factories need this commodity compared with normal. 1.0 is normal, 1.5 means they want 50% more, and 0.5 means half as much. It multiplies the price directly.</p>
-          <p>It will be worked out from how many factories are running and what their recipes use. For now you can type it in.</p>
-        </div>
-        <div class="x">
-          <h4>Inflation</h4>
-          <p>Prices creep up over time, the same for everything: (1 + rate)<sup>round</sup>.</p>
-          <p class="eg">At 2% a round: ×1.02 after round 1, ×1.22 after round 10, and ×2.69 after round 50.</p>
-        </div>
-        <div class="x">
-          <h4>Round</h4>
-          <p>One game day (morning, midday, afternoon and overnight). Inflation is applied once per round.</p>
-        </div>
-        <div class="x">
-          <h4>Waste fees</h4>
-          <p>Tailings and chemical waste have no use, so their price is negative: you pay to get rid of them. Their scarcity term is flipped, (s ÷ s₀)<sup>e</sup>, so the more that piles up across all players, the higher the fee gets. Demand doesn't apply, since nobody wants them.</p>
-          <p>Slag, fly ash and sawdust can be recycled, so they're priced like any other good.</p>
-        </div>
-        <div class="x">
-          <h4>vs base</h4>
-          <p>How far the current price is from the base, in percent. Orange means above base and blue means below.</p>
-        </div>
-        <div class="x">
-          <h4>Stockpile space used</h4>
-          <p>All 50 current shares added together. It can't go over 100%, because players can't hold more than their space allows. It shows red if your edits push it past 100%.</p>
-        </div>
-      </div>
-    </details>
+      </section>
 
-    <div class="mctl">
-      <label>Round <input type="range" id="roundSlider" min="0" max="50" value="0"> <b id="mround">0</b></label>
-      <label>Inflation per round <input type="number" id="rateInput" step="0.5" min="-20" max="50">%</label>
-      <span>Inflation now <b id="minfl">×1.00</b></span>
-      <span>Stockpile space used <b id="mused">100%</b></span>
-      <button id="shuffleBtn">Shuffle stockpiles</button>
-      <button id="resetBtn" class="ghost">Reset</button>
-    </div>
+      <section>
+        <h2>What you can see</h2>
+        <ul>
+          <li><b>The book</b>, anonymous: price levels and quantities, never who. Each good's page draws it as a depth chart, asks above and bids below, with the spread between them.</li>
+          <li><b>Trades</b>: the last price and volume, a price history, and a <b>quote board</b> of every active good that flashes yellow when one trades. You can replay how the book moved over the last few rounds, auction by auction.</li>
+          <li><b>Cost basis</b> of a made good: its raw materials at their last traded prices. Raw materials have no price until they first trade; the market has to find it.</li>
+          <li><b>Demand</b>: how many other players' contracts want each good (a count only), and <b>Opportunities</b>: goods others are bidding for that nobody sells, with the margin over cost basis.</li>
+          <li>Who owns which businesses, and so who makes and who could use each good. Contracts and stockpiles stay private.</li>
+        </ul>
+      </section>
 
-    <div class="mgrid">
-      <div class="tablewrap"><table id="mtable" class="mtable"></table></div>
-      <aside class="panel curvepanel" id="mcurve"></aside>
+      <section>
+        <h2>Why it works this way</h2>
+        <ul>
+          <li><b>Sealed and simultaneous</b>, like every other move: nobody can wait to see your order and jump in front of it.</li>
+          <li><b>One price for everyone</b>: you can bid what a good is really worth to you and still pay only what it takes to win it.</li>
+          <li><b>Prices only from players</b>, and contracts that need goods from other regions, so the way to progress is to make what others need and trade for what you need.</li>
+        </ul>
+      </section>
     </div>
-    <p class="muted small">Edit any current share or demand to see its price move. Click a row to plot its price curve.</p>
   </section>
 
   <section id="view-broker" class="view">
@@ -520,6 +502,7 @@
 <script src="game/pipeline.js?v=__V__"></script>
 <script src="game/icons.js?v=__V__"></script>
 <script src="game/ui.js?v=__V__"></script>
+<script src="js/rulesview.js?v=__V__"></script>
 <script src="js/cardsview.js?v=__V__"></script>
 </body>
 </html>
