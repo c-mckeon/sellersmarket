@@ -20,7 +20,7 @@ const BUILD = {
 //         "land"  = any land territory
 //         "sea"   = sea territories with that resource
 const EXTRACTORS = [
-  ["Farm",              "wheat",          3, 100, "res"],
+  ["Farm",              "wheat",          3, 100, "land"], // anywhere; better where the land is fertile
   ["Water works",       "water",          8,  80, "land"],
   ["Logging camp",      "wood",           5, 100, "res"],
   ["Sand pit",          "sand",           8,  80, "res"],

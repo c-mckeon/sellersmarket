@@ -151,6 +151,7 @@
       <div class="glay">
         <div class="gmain ${st.phase}">
           <div class="gmap" id="gMap"></div>
+          ${terrCard(p, ui.terr || p.pos)}
           <div class="gpanel">
             <div class="gorders"><b>Your orders</b> <span class="muted small">Nothing happens until everyone has submitted; then all orders go through at once.</span>
               <div>${ui.orders.map((o, i) => `<span class="gorder">${orderText(o)}<button data-undo="${i}" title="Remove">✕</button></span>`).join("") || `<span class="muted">None yet.</span>`}</div>
@@ -588,7 +589,7 @@
     const io = b => b.kind === "extract" ? `makes ${Math.floor(b.outputs[b.makes] * G.richness(b, here) * S.extractOutput)} ${G.COM[b.makes].name}`
       : `${Object.entries(b.inputs).map(([c, q]) => `${q} ${G.COM[c].name}`).join(" + ")} → ${Object.entries(b.outputs).map(([c, q]) => `${q} ${G.COM[c].name}`).join(" + ")}`;
     return `
-      <div class="ghead"><h3>${G.TERR[here].name}</h3><span class="muted">${G.isSea(here) ? "Sea" : G.coastal(here) ? "Coastal" : "Inland"} · cost level ×${info.cost ?? 1}${res.length ? " · " + res.map(([c, r]) => `${G.COM[c].name} ${"★".repeat(r)}`).join(", ") : ""}</span></div>
+      <div class="ghead"><h3>${G.TERR[here].name}</h3><span class="muted">${G.isSea(here) ? "Sea" : G.coastal(here) ? "Coastal" : "Inland"} · cost level ×${info.cost ?? 1} · what you can produce here is listed under the map</span></div>
       <h4 class="gsub">${p.acted ? "Done for this afternoon ✓" : "Move <span class=\"muted\">(or click the map)</span>"}</h4>
       <div class="gmoves">${G.neighbours(here).map(t => `<button data-move="${t}" ${p.acted ? "disabled" : ""}>${G.TERR[t].name}</button>`).join("")}</div>
       <h4 class="gsub">…or build here</h4>
@@ -601,13 +602,50 @@
       </tbody></table>` : `<p class="muted">Nothing can be built here.</p>`}`;
   }
 
+  // ----- The territory you clicked (or where you are): what you can mine, grow or drill there -----
+  const RICH = { 1: "", 2: "good", 3: "rich" };
+  function terrCard(p, tid) {
+    const T = G.TERR[tid], info = TERRITORY_INFO[tid], sea = G.isSea(tid);
+    const dist = G.distances(p.pos)[tid] ?? null;
+    const where = tid === p.pos ? "You're here" : dist === 1 ? "Next to you" : dist != null ? `${dist} moves away` : "";
+    // Mines, wells and rigs that can go here, regional ones first; farms and water works go anywhere
+    const ext = G.BIZ.filter(b => b.kind === "extract" && G.canBuildAt(b, tid));
+    const anywhere = b => b.where === "land";
+    const others = b => TERRITORIES.filter(t => t.id !== tid && G.canBuildAt(b, t.id)).map(t => t.name);
+    const row = b => {
+      const n = Math.floor(b.outputs[b.makes] * G.richness(b, tid) * S.extractOutput), r = RICH[(info.res || {})[b.makes] || 1];
+      const also = anywhere(b) ? "anywhere on land" : others(b).length ? `also in ${others(b).join(", ")}` : "only here";
+      return `<li><span class="bicon tc-icon"><svg viewBox="0 0 24 24">${iconSVG(BIZ_ICON[b.id], 12, 12, 18)}</svg></span>
+        <span><b>${b.name}</b>: ${n} ${G.COM[b.makes].name.toLowerCase()} a round${r ? ` <span class="tc-rich">${r}</span>` : ""}<small>${also}</small></span></li>`;
+    };
+    const special = ext.filter(b => !anywhere(b)), common = ext.filter(anywhere);
+    const here = vw.businesses.filter(b => b.territory === tid);
+    const canMove = vw.phase === "afternoon" && !p.acted && G.neighbours(p.pos).includes(tid);
+    return `<div class="gterr">
+      <div class="tc-head"><h3>${T.name}</h3><span class="muted">${sea ? "Sea" : G.coastal(tid) ? "Coastal" : "Inland"}${sea ? "" : ` · building costs ×${info.cost ?? 1}`}${where ? ` · ${where}` : ""}</span>
+        <span class="gsp"></span>
+        ${canMove ? `<button class="gbtn" data-move="${tid}">Move here</button>` : ""}
+        ${tid === p.pos && vw.phase === "afternoon" && !p.acted ? `<button class="gbtn ghost" data-tab="build">Build here →</button>` : ""}
+        ${ui.terr ? `<button class="glink" id="gTerrClose" title="Back to where you are">✕</button>` : ""}</div>
+      ${info.note ? `<p class="muted small tc-note">${esc(info.note)}</p>` : ""}
+      <div class="tc-cols">
+        <div><h4>${sea ? "Can be drilled here" : "Can be mined or drilled here"}</h4>
+          ${special.length ? `<ul class="tc-list">${special.map(row).join("")}</ul>` : `<p class="muted small">${sea ? "Nothing: open water." : "No mines here. Only farms and water works."}</p>`}</div>
+        ${sea ? "" : `<div><h4>Grown or pumped anywhere</h4><ul class="tc-list">${common.map(row).join("")}</ul>
+          <p class="muted small">Factories can go on any land${G.coastal(tid) || (info.res || {}).crude_oil ? "" : " (except oil refineries and plastics plants: they need the coast or an oil field)"}.</p></div>`}
+      </div>
+      ${here.length ? `<p class="small tc-here"><b>Businesses here:</b> ${here.map(b => `${b.owner === p.id ? "your" : esc(G.player(vw, b.owner).name) + "'s"} ${G.BIZ_BY[b.type].name.toLowerCase()}`).join(", ")}</p>` : ""}
+    </div>`;
+  }
+
   // ----- Map -----
   function drawMap(p) {
     const FID = "tOutlineGame";
     let { svg, below } = europeMapSVG(FID);
     const near = vw.phase === "afternoon" && !p.acted ? G.neighbours(p.pos) : [];
     // Highlights go in the top layer: where you are, and (afternoon) where you can move
-    svg = svg.replace(`<g class="hl"></g></svg>`, `<g class="hl">${near.map(t => mapHighlightSVG(FID, t, "near")).join("")}${mapHighlightSVG(FID, p.pos, "here")}</g>`);
+    const sel = ui.terr && ui.terr !== p.pos ? mapHighlightSVG(FID, ui.terr, "sel") : "";
+    svg = svg.replace(`<g class="hl"></g></svg>`, `<g class="hl">${near.map(t => mapHighlightSVG(FID, t, "near")).join("")}${mapHighlightSVG(FID, p.pos, "here")}${sel}</g>`);
     // Markers under each name: pawns first, then businesses; up to 4 a row, kept inside the map
     const [W] = MAP_SIZE, S = 28, step = 32, perRow = 4;
     const marks = {};
@@ -627,7 +665,9 @@
     document.getElementById("gMap").innerHTML = `<div class="bd-scroll">${svg.replace(/<\/svg>$/, "")}</svg></div>`;
     document.querySelectorAll("#gMap .terr").forEach(g => {
       const t = g.dataset.t;
-      if (near.includes(t)) { g.classList.add("near"); g.addEventListener("click", () => doAct("move", { to: t })); }
+      if (near.includes(t)) g.classList.add("near");
+      // Clicking a territory shows what's there (and, if it's next door, a button to move)
+      g.addEventListener("click", () => { ui.terr = ui.terr === t ? null : t; render(); });
     });
   }
 
@@ -726,7 +766,8 @@
     root.querySelectorAll("[data-deliver]").forEach(b => b.addEventListener("click", () => doAct("deliver", { contract: +b.dataset.deliver })));
     root.querySelectorAll("[data-discard]").forEach(b => b.addEventListener("click", () => { if (confirm("Throw this contract away? A new one comes overnight.")) doAct("discardContract", { contract: +b.dataset.discard }); }));
     // Afternoon
-    root.querySelectorAll("[data-move]").forEach(b => b.addEventListener("click", () => doAct("move", { to: b.dataset.move })));
+    root.querySelectorAll("[data-move]").forEach(b => b.addEventListener("click", () => { ui.terr = null; doAct("move", { to: b.dataset.move }); }));
+    root.querySelector("#gTerrClose")?.addEventListener("click", () => { ui.terr = null; render(); });
     root.querySelectorAll("[data-build]").forEach(b => b.addEventListener("click", () => doAct("build", { type: b.dataset.build })));
   }
 

@@ -773,3 +773,19 @@ tr.flash td { animation: tradeflashrow 1.6s ease-out; }
 .offb { color: var(--waste); font-weight: 700; font-size: 11px; margin-left: 2px; }
 .qc-band.cross { background: color-mix(in srgb, #e0b800 55%, transparent); }
 .qctl .gseg button { padding: 5px 10px; }
+/* Territory card under the map: what you can produce there */
+.gterr { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 10px 14px; margin-top: 10px; }
+.tc-head { display: flex; align-items: center; gap: 6px 12px; flex-wrap: wrap; }
+.tc-head h3 { margin: 0; font-size: 18px; }
+.tc-head .gbtn { padding: 5px 12px; font-size: 13px; }
+.tc-note { margin: 4px 0 6px; }
+.tc-cols { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 14px; }
+.tc-cols h4 { margin: 6px 0 4px; font-size: 11px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); }
+.tc-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+.tc-list li { display: grid; grid-template-columns: auto 1fr; gap: 8px; align-items: start; font-size: 13.5px; }
+.tc-list small { display: block; color: var(--muted); font-size: 12px; }
+.tc-icon { background: var(--mid); }
+.tc-rich { font-size: 11px; font-weight: 700; color: var(--raw); text-transform: uppercase; letter-spacing: .04em; }
+.tc-here { margin: 8px 0 0; }
+@media (max-width: 700px) { .tc-cols { grid-template-columns: 1fr; } }
+.tc-list .tc-icon { grid-row: auto; }
