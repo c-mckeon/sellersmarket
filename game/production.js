@@ -22,14 +22,19 @@
       if (mult === 0) { st.stats.idle++; say(`${b.name} in ${G.TERR[biz.territory].name} was shut`); return; }
       const missing = Object.entries(b.inputs).filter(([c, q]) => (p.stock[c] || 0) < q);
       if (missing.length) { st.stats.idle++; say(`${b.name} idle: needs ${missing.map(([c, q]) => `${q - (p.stock[c] || 0)} more ${G.COM[c].name}`).join(", ")}`); return; }
-      Object.entries(b.inputs).forEach(([c, q]) => { G.add(p, c, -q); biz.spent = (biz.spent || 0) + q * st.prices[c]; });
-      const made = [];
-      Object.entries(b.outputs).forEach(([c, q]) => {
-        const n = Math.floor(q * mult * (b.kind === "extract" ? G.richness(b, biz.territory) * S.extractOutput : 1) + 1e-9);
-        if (n > 0) { G.add(p, c, n); made.push(`${n} ${G.COM[c].name}`); biz.earned = (biz.earned || 0) + n * st.prices[c]; }
-      });
-      biz.runs = (biz.runs || 0) + 1;
-      say(`${b.name} made ${made.join(" + ")}`);
+      // A factory runs again while it has the inputs, up to settings.factoryRuns times a round
+      const made = {};
+      let runs = 0;
+      do {
+        Object.entries(b.inputs).forEach(([c, q]) => { G.add(p, c, -q); biz.spent = (biz.spent || 0) + q * st.prices[c]; });
+        Object.entries(b.outputs).forEach(([c, q]) => {
+          const n = Math.floor(q * mult * (b.kind === "extract" ? G.richness(b, biz.territory) * S.extractOutput : 1) + 1e-9);
+          if (n > 0) { G.add(p, c, n); made[c] = (made[c] || 0) + n; biz.earned = (biz.earned || 0) + n * st.prices[c]; }
+        });
+        runs++;
+      } while (b.kind === "factory" && runs < (S.factoryRuns || 1) && Object.entries(b.inputs).every(([c, q]) => (p.stock[c] || 0) >= q));
+      biz.runs = (biz.runs || 0) + runs;
+      say(`${b.name} made ${Object.entries(made).map(([c, n]) => `${n} ${G.COM[c].name}`).join(" + ")}${runs > 1 ? ` (ran ${runs} times)` : ""}`);
     });
     // Over the limit? Throw things away, in the order each player chose
     st.players.forEach(p => {

@@ -211,14 +211,15 @@
     st.stats.trades = (st.stats.trades || 0) + n;
   };
 
-  // ---------- Stockpile space (any phase), paid in lumber ----------
-  G.spaceUpgradeCost = p => S.spaceUpgrade.lumber + S.spaceUpgrade.lumberStep * p.upgrades;
+  // ---------- Stockpile space (any phase), paid in building materials ----------
+  G.spaceUpgradeCost = p => ({ crates: S.spaceUpgrade.cost + S.spaceUpgrade.costStep * p.upgrades, heavy: 0 });
   G.actions.upgradeSpace = (st, p) => {
     G.need(st.phase === "morning" || st.phase === "afternoon", "Not right now.");
-    const n = G.spaceUpgradeCost(p);
-    G.need((p.stock.lumber || 0) >= n, `More space costs ${n} lumber; you have ${p.stock.lumber || 0}.`);
-    G.add(p, "lumber", -n); p.space += S.spaceUpgrade.crates; p.upgrades++;
-    return `built ${S.spaceUpgrade.crates} more crates of space`;
+    const need = G.spaceUpgradeCost(p), { pay, short } = G.payFor(st, p, need);
+    G.need(!short, `More space costs ${G.needText(need)}; you're ${short} short.`);
+    Object.entries(pay).forEach(([c, q]) => G.add(p, c, -q));
+    p.space += S.spaceUpgrade.crates; p.upgrades++;
+    return `built ${S.spaceUpgrade.crates} more crates of space from ${G.costText(pay)}`;
   };
 
   // Throw goods away (any phase): for waste and anything else you don't want

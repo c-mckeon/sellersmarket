@@ -21,7 +21,7 @@
     askStep: 0.1,          // …−10% for every phase it goes unsold…
     askMin: 0.4,           // …down to 40%
     cashPerPhase: 0.6,     // spend at most this share of cash in one auction
-    reserve: { lumber: 4, iron: 2 }, // building materials a bot always keeps
+    reserve: 6,            // crates of building materials a bot always keeps
   });
 
   // A bot's private guess of what a good is worth
@@ -37,6 +37,17 @@
 
   const addTo = (m, c, q) => { if (q > 0) m[c] = (m[c] || 0) + q; };
 
+  // The goods a bot would use to pay for a build (or a reserve): what it holds, and for the rest the
+  // cheapest material per crate on offer (nothing on offer: its own cheapest guess)
+  const materialsFor = (st, p, need) => {
+    const M = S.build.materials, { pay, short, heavyShort } = G.payFor(st, p, need);
+    const cheapest = list => list.map(c => ({ c, px: (G.bestAsk(st, c)?.price ?? G.guess(st, c) * 1.5) / M[c] })).sort((a, b) => a.px - b.px)[0].c;
+    const goods = { ...pay };
+    if (heavyShort) { const c = cheapest(S.build.heavy.goods); addTo(goods, c, Math.ceil(heavyShort / M[c])); }
+    if (short - heavyShort > 0) { const c = cheapest(G.MATERIALS); addTo(goods, c, Math.ceil((short - heavyShort) / M[c])); }
+    return goods;
+  };
+
   // What a bot wants to have in its stockpile right now
   const wantsOf = (st, p) => {
     const want = {};
@@ -49,7 +60,7 @@
     G.myBusinesses(st, p.id).forEach(b => Object.entries(G.BIZ_BY[b.type].inputs).forEach(([c, q]) => addTo(want, c, q)));
     // The next build, or at least a small reserve of building materials
     if (p.plan) Object.entries(p.plan.cost).forEach(([c, q]) => addTo(want, c, q));
-    Object.entries(B.reserve).forEach(([c, q]) => { if ((want[c] || 0) < q) want[c] = q; });
+    if (!p.plan) Object.entries(materialsFor(st, p, { crates: B.reserve, heavy: 0 })).forEach(([c, q]) => addTo(want, c, q));
     return want;
   };
 
@@ -113,7 +124,7 @@
     };
     [...p.contracts].sort((a, b) => b.points - a.points).slice(0, 2).forEach(k => Object.keys(k.goods).forEach(c => walk(c, 0)));
     // Building materials we're short of are missing links too
-    Object.entries(p.plan?.cost || B.reserve).forEach(([c, q]) => { if ((p.stock[c] || 0) < q) walk(c, 1); });
+    Object.entries(p.plan?.cost || materialsFor(st, p, { crates: B.reserve, heavy: 0 })).forEach(([c, q]) => { if ((p.stock[c] || 0) < q) walk(c, 1); });
     return links;
   };
 
@@ -131,20 +142,20 @@
     return s * Math.pow(0.5, same);
   };
   const bestHere = (st, p, tid, links = missingLinks(st, p)) => G.buildable(st, tid, p.id)
-    .map(o => ({ ...o, s: usefulness(st, p, o.b, tid, links) / (1 + Object.values(o.cost).reduce((a, b) => a + b, 0) / 10) }))
+    .map(o => ({ ...o, s: usefulness(st, p, o.b, tid, links) / (1 + o.cost.crates / 10) }))
     .sort((a, b) => b.s - a.s)[0];
 
   const afternoon = (st, p) => {
     const links = missingLinks(st, p);
     const here = bestHere(st, p, p.pos, links);
-    if (here && here.s > 0.5 && G.canAfford(p, here.cost)) { G.act(st, p.id, "build", { type: here.b.id }); p.plan = null; return; }
+    if (here && here.s > 0.5 && G.canPay(st, p, here.cost)) { G.act(st, p.id, "build", { type: here.b.id }); p.plan = null; return; }
     // Somewhere within reach with something better? Head there; meanwhile save up materials for it.
     const d = G.distances(p.pos);
     let target = { tid: p.pos, o: here, s: here ? here.s : 0 };
     Object.entries(d).filter(([t, n]) => n > 0 && n <= 4 && !G.isSea(t)).forEach(([t, n]) => {
       const o = bestHere(st, p, t, links); if (o && o.s / (1 + 0.25 * n) > target.s) target = { tid: t, o, s: o.s / (1 + 0.25 * n) };
     });
-    p.plan = target.o ? { type: target.o.b.id, tid: target.tid, cost: target.o.cost } : null;
+    p.plan = target.o ? { type: target.o.b.id, tid: target.tid, cost: materialsFor(st, p, target.o.cost) } : null;
     if (target.tid !== p.pos) {
       // One step along a shortest path
       const dt = G.distances(target.tid);
@@ -153,6 +164,7 @@
     }
   };
 
+  G.botWants = wantsOf; // what a bot is keeping for itself (used by tools/sim.js)
   G.bots.morning = (st, p) => trade(st, p);
   G.bots.afternoon = (st, p) => { afternoon(st, p); trade(st, p); };
 })();

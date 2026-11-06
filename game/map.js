@@ -6,7 +6,9 @@
 // Building is paid in goods, not cash (settings.build):
 //   crates = base cost × territory cost level × (1 + 25% × businesses already there)
 //            × (1 + 15% × businesses you own) ÷ value per crate
-//   split between materials by the business's tier: mines need lumber; big factories need steel, glass, concrete.
+//   paid in any building materials (settings.build.materials: lumber, iron, ceramic, cement, glass…);
+//   big factories need half of it in heavy ones (steel, glass, concrete, aluminium).
+//   The game picks which of your materials to use: see G.payFor.
 
 (() => {
   const G = SMG, S = GAME_SETTINGS;
@@ -32,21 +34,45 @@
     countMemo.set(list, c);
     return c;
   };
+  // What a business costs: { crates, heavy } — crates of any building material, of which at least
+  // `heavy` must be heavy materials (big factories only)
   G.buildCost = (st, b, tid, pid) => {
     const list = st.costBasis || st.businesses; // while orders resolve, costs are as at the start of the afternoon
     const { here, owns } = counts(list);
     const n = here[tid] || 0;
     const owned = pid ? owns[pid] || 0 : 0;
     const crates = Math.max(1, Math.round(b.base * (TERRITORY_INFO[tid].cost ?? 1) * (1 + BUILD.crowding * n) * (1 + S.build.ownedCostStep * owned) / S.build.valuePerCrate));
-    const mix = S.build.materials[Math.min(4, G.bizTier(b))];
-    const cost = {};
-    let left = crates;
-    const entries = Object.entries(mix);
-    entries.forEach(([c, share], i) => { const q = i === entries.length - 1 ? left : Math.min(left, Math.round(crates * share)); if (q > 0) cost[c] = q; left -= q; });
-    return cost;
+    const H = S.build.heavy;
+    return { crates, heavy: G.bizTier(b) >= H.fromTier ? Math.ceil(crates * H.share) : 0 };
   };
+  G.MATERIALS = Object.keys(S.build.materials);
+  G.isMaterial = c => c in S.build.materials;
+  G.needText = need => `${need.crates} crate${need.crates === 1 ? "" : "s"} of building materials${need.heavy ? ` (${need.heavy} heavy)` : ""}`;
   G.costText = cost => Object.entries(cost).map(([c, q]) => `${q} ${G.COM[c].name}`).join(" + ");
-  G.canAfford = (p, cost) => Object.entries(cost).every(([c, q]) => (p.stock[c] || 0) >= q);
+
+  // Which of the player's materials would pay for `need`. Uses up, in this order: materials none of their
+  // contracts ask for, then the cheapest per crate at the last traded price (never traded counts as free),
+  // then whatever they hold most of. Heavy crates are covered first, from heavy materials.
+  // Returns { pay: { good: qty }, short, heavyShort } (short: crates still uncovered).
+  G.payFor = (st, p, need) => {
+    const M = S.build.materials, inContract = new Set(p.contracts.flatMap(k => Object.keys(k.goods)));
+    const left = { ...p.stock }, pay = {};
+    const order = list => list.filter(c => left[c] > 0).sort((a, b) => inContract.has(a) - inContract.has(b)
+      || (st.prices[a] || 0) / M[a] - (st.prices[b] || 0) / M[b] || left[b] - left[a]);
+    const take = (list, crates) => {
+      for (const c of order(list)) {
+        if (crates <= 1e-9) break;
+        const n = Math.min(left[c], Math.ceil(crates / M[c] - 1e-9));
+        left[c] -= n; pay[c] = (pay[c] || 0) + n; crates -= n * M[c];
+      }
+      return Math.max(0, crates);
+    };
+    const heavyShort = take(S.build.heavy.goods, need.heavy);
+    const paid = Object.entries(pay).reduce((s, [c, q]) => s + q * M[c], 0);
+    const rest = take(G.MATERIALS, Math.max(0, need.crates - paid - heavyShort)); // heavy shortfall can't be covered by others
+    return { pay, short: Math.ceil(rest + heavyShort - 1e-9), heavyShort: Math.ceil(heavyShort - 1e-9) };
+  };
+  G.canPay = (st, p, need) => G.payFor(st, p, need).short === 0;
   G.buildable = (st, tid, pid) => G.BIZ.filter(b => G.canBuildAt(b, tid)).map(b => ({ b, cost: G.buildCost(st, b, tid, pid) }));
 
   const afternoon = (st, p) => {
@@ -66,12 +92,11 @@
     const b = G.BIZ_BY[type];
     G.need(b, "Unknown business.");
     G.need(G.canBuildAt(b, p.pos), `A ${b.name.toLowerCase()} can't be built in ${G.TERR[p.pos].name}.`);
-    const cost = G.buildCost(st, b, p.pos, p.id);
-    const short = Object.entries(cost).filter(([c, q]) => (p.stock[c] || 0) < q);
-    G.need(!short.length, `It takes ${G.costText(cost)}. You're short of ${short.map(([c, q]) => `${q - (p.stock[c] || 0)} ${G.COM[c].name}`).join(", ")} (goods on offer don't count).`);
-    Object.entries(cost).forEach(([c, q]) => G.add(p, c, -q));
+    const need = G.buildCost(st, b, p.pos, p.id), { pay, short, heavyShort } = G.payFor(st, p, need);
+    G.need(!short, `It takes ${G.needText(need)}. You're ${short} crate${short === 1 ? "" : "s"} short${heavyShort ? `, ${heavyShort} of them heavy (${S.build.heavy.goods.map(c => G.COM[c].name.toLowerCase()).join(", ")})` : ""} (goods on offer don't count).`);
+    Object.entries(pay).forEach(([c, q]) => G.add(p, c, -q));
     p.acted = true;
-    st.businesses.push({ id: st.nextBizId++, owner: p.id, type: b.id, territory: p.pos, built: st.round, cost });
-    return `built a ${b.name.toLowerCase()} in ${G.TERR[p.pos].name} from ${G.costText(cost)}`;
+    st.businesses.push({ id: st.nextBizId++, owner: p.id, type: b.id, territory: p.pos, built: st.round, cost: pay });
+    return `built a ${b.name.toLowerCase()} in ${G.TERR[p.pos].name} from ${G.costText(pay)}`;
   };
 })();

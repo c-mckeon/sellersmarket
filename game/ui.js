@@ -325,11 +325,13 @@
       <div class="ghead"><h3>${G.TERR[here].name}</h3><span class="muted">${G.isSea(here) ? "Sea" : G.coastal(here) ? "Coastal" : "Inland"} · cost level ×${info.cost ?? 1}${res.length ? " · " + res.map(([c, r]) => `${G.COM[c].name} ${"★".repeat(r)}`).join(", ") : ""}</span></div>
       <h4 class="gsub">${p.acted ? "Done for this afternoon ✓" : "Move <span class=\"muted\">(or click the map)</span>"}</h4>
       <div class="gmoves">${G.neighbours(here).map(t => `<button data-move="${t}" ${p.acted ? "disabled" : ""}>${G.TERR[t].name}</button>`).join("")}</div>
-      <h4 class="gsub">…or build here <span class="muted">(paid in goods from your stockpile)</span></h4>
-      ${opts.length ? `<table class="gmkt"><thead><tr><th>Business</th><th>Each round</th><th>Costs</th><th></th></tr></thead><tbody>
-        ${opts.map(o => { const ok = G.canAfford(p, o.cost); return `<tr><td>${o.b.name}</td><td class="muted small">${io(o.b)}</td>
-          <td>${Object.entries(o.cost).map(([c, q]) => `<span class="${(p.stock[c] || 0) >= q ? "" : "bad"}">${q} ${G.COM[c].name}</span>`).join(" + ")}</td>
-          <td class="acts"><button data-build="${o.b.id}" ${p.acted || !ok ? "disabled" : ""}>Build</button></td></tr>`; }).join("")}
+      <h4 class="gsub">…or build here</h4>
+      <p class="muted small">Paid in crates of building materials from your stockpile: any of ${Object.entries(S.build.materials).map(([c, v]) => `${G.COM[c].name.toLowerCase()}${v !== 1 ? ` (${v} crate${v > 1 ? "s" : ""} each)` : ""}`).join(", ")}. Big factories need half of it in heavy materials (${S.build.heavy.goods.map(c => G.COM[c].name.toLowerCase()).join(", ")}). Materials your contracts ask for are used last.</p>
+      ${opts.length ? `<table class="gmkt"><thead><tr><th>Business</th><th>Each round</th><th class="n">Crates</th><th>You'd use</th><th></th></tr></thead><tbody>
+        ${opts.map(o => { const r = G.payFor(vw, p, o.cost); return `<tr><td>${o.b.name}</td><td class="muted small">${io(o.b)}</td>
+          <td class="n">${o.cost.crates}${o.cost.heavy ? `<small> (${o.cost.heavy} heavy)</small>` : ""}</td>
+          <td class="small">${r.short ? `<span class="bad">${r.short} short${r.heavyShort ? `, ${r.heavyShort} of them heavy` : ""}</span>` : G.costText(r.pay)}</td>
+          <td class="acts"><button data-build="${o.b.id}" ${p.acted || r.short ? "disabled" : ""}>Build</button></td></tr>`; }).join("")}
       </tbody></table>` : `<p class="muted">Nothing can be built here.</p>`}`;
   }
 

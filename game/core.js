@@ -106,7 +106,7 @@ const SMG = (() => {
       if (!b || !G.canBuildAt(b, c.start)) return;
       const partner = S.startBusinesses > 1 ? G.starterPartner(b.id, c.start) : null;
       [b, partner].filter(Boolean).forEach(x =>
-        st.businesses.push({ id: st.nextBizId++, owner: i + 1, type: x.id, territory: c.start, built: 0, cost: G.buildCost(st, x, c.start, i + 1) }));
+        st.businesses.push({ id: st.nextBizId++, owner: i + 1, type: x.id, territory: c.start, built: 0, cost: {} }));
       // A head start: one round's output of the mine, farm or well (a factory on its own: one run's inputs)
       const p = st.players[i];
       if (b.kind === "extract") Object.entries(b.outputs).forEach(([cid, q]) => G.add(p, cid, Math.floor(q * G.richness(b, c.start) * S.extractOutput)));

@@ -10,8 +10,8 @@ const GAME_SETTINGS = {
   // Starting goods, on top of one round's output of your free business
   startGoods: { lumber: 6, iron: 4 },
 
-  // Buying more stockpile space (any phase): paid in lumber
-  spaceUpgrade: { crates: 10, lumber: 4, lumberStep: 2 }, // 4 lumber, then 6, then 8…
+  // Buying more stockpile space (any phase): paid in building materials, like a business
+  spaceUpgrade: { crates: 10, cost: 4, costStep: 2 }, // 4 crates of materials, then 6, then 8…
 
   // Afternoon: each player may move to one neighbouring territory OR build one business
   afternoonActions: 1,
@@ -35,22 +35,20 @@ const GAME_SETTINGS = {
   },
 
   // ---------- Building (game/map.js) ----------
-  // Businesses are paid for in goods, not cash. Each crate of material covers this much of the
-  // business's base cost (js/businesses.js), after the territory's cost level and crowding.
+  // Businesses are paid for in goods, not cash: a number of crates of building materials, where each
+  // crate covers valuePerCrate of the business's base cost (js/businesses.js), after the territory's
+  // cost level and crowding. Any building material will do, so no single good can block building.
   build: {
     valuePerCrate: 40,
     ownedCostStep: 0.15,   // each business you already own makes your next one 15% dearer
-    // What each tier of business is built from (shares of the total crates)
-    materials: {
-      0: { lumber: 1 },                                  // mines, farms, wells
-      1: { lumber: 0.5, iron: 0.5 },                     // factories making simple materials
-      2: { lumber: 0.3, iron: 0.4, glass: 0.3 },
-      3: { steel: 0.5, glass: 0.3, lumber: 0.2 },        // (no concrete: the concrete plant is tier 3)
-      4: { steel: 0.4, glass: 0.2, concrete: 0.4 },
-    },
+    // Building materials, and how many crates one unit counts for
+    materials: { lumber: 1, iron: 1, ceramic: 1, cement: 1, glass: 1, concrete: 0.5, steel: 2, aluminium: 2 },
+    // Big factories (tier 3 and up) need at least this share of their crates in heavy materials
+    heavy: { fromTier: 3, share: 0.5, goods: ["steel", "glass", "concrete", "aluminium"] },
   },
 
   // Production
+  factoryRuns: 1,          // a factory runs up to this many times a round, while it has the inputs
   extractOutput: 1.2,      // multiplies what every mine, farm and well makes (1 = as listed on the Territories tab)
 
   // ---------- Switched off for now ----------

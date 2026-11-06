@@ -6,7 +6,9 @@
 // Besides the totals it checks every night for:
 //   stuck     a round where nobody traded, built or delivered anything
 //   cornered  one player holds at least 80% of a good (stock + on offer) while someone else bids for it,
-//             and that player either isn't selling or asks more than twice the best bid
+//             and holds more than it needs itself, but doesn't offer that surplus at up to twice the best bid
+//             (bots never do this on purpose, so this mainly checks the measure; people might)
+//   short     someone bids for a good but no other player has any to spare beyond their own needs
 const engine = require("./engine");
 
 const arg = (k, d) => { const i = process.argv.indexOf("--" + k); return i > 0 ? process.argv[i + 1] : d; };
@@ -17,7 +19,7 @@ const land = E.run("TERRITORIES").filter(t => !t.sea).map(t => t.id);
 
 // The nightly check, run after the afternoon auction
 const watch = st => {
-  const m = st.mon ||= { dead: 0, rounds: 0, firstDelivery: null, cornered: 0, contested: 0, corneredGoods: {}, lastDelivered: 0, lastBiz: st.businesses.length };
+  const m = st.mon ||= { short: 0, shortGoods: {}, dead: 0, rounds: 0, firstDelivery: null, cornered: 0, contested: 0, corneredGoods: {}, lastDelivered: 0, lastBiz: st.businesses.length };
   m.rounds++;
   const traded = st.history.slice(-2).some(h => Object.keys(h.trades).length);
   const delivered = (st.stats.delivered || 0) > m.lastDelivered, built = st.businesses.length > m.lastBiz;
@@ -32,10 +34,12 @@ const watch = st => {
     const bids = st.book.filter(o => o.good === c.id && o.side === "buy" && o.pid !== holder.id);
     if (!bids.length) return;
     m.contested++;
+    const spare = st.players.filter(p => bids.some(o => o.pid !== p.id)).some(p => (p.stock[c.id] || 0) + st.book.filter(o => o.pid === p.id && o.good === c.id && o.side === "sell").reduce((s, o) => s + o.qty, 0) > (G.botWants(st, p)[c.id] || 0));
+    if (!spare) { m.short++; m.shortGoods[c.id] = (m.shortGoods[c.id] || 0) + 1; }
     const bid = Math.max(...bids.map(o => o.price));
-    const asks = st.book.filter(o => o.good === c.id && o.side === "sell" && o.pid === holder.id);
-    const ask = asks.length ? Math.min(...asks.map(o => o.price)) : Infinity;
-    if (held[top] / total >= 0.8 && ask > 2 * bid) { m.cornered++; m.corneredGoods[c.id] = (m.corneredGoods[c.id] || 0) + 1; }
+    const surplus = held[top] - (G.botWants(st, holder)[c.id] || 0);
+    const offeredNear = st.book.filter(o => o.good === c.id && o.side === "sell" && o.pid === holder.id && o.price <= 2 * bid).reduce((s, o) => s + o.qty, 0);
+    if (held[top] / total >= 0.8 && surplus > 0 && offeredNear < surplus) { m.cornered++; m.corneredGoods[c.id] = (m.corneredGoods[c.id] || 0) + 1; }
   });
 };
 G.steps.overnight.push(watch);
@@ -70,11 +74,12 @@ const flat = k => res.flatMap(r => r[k]);
 const avg = a => a.length ? a.reduce((s, x) => s + x, 0) / a.length : 0;
 const q = (a, p) => { const s = [...a].sort((x, y) => x - y); return s.length ? s[Math.min(s.length - 1, Math.floor(p * s.length))] : 0; };
 const f = (x, d = 0) => x.toLocaleString(undefined, { maximumFractionDigits: d, minimumFractionDigits: d });
-const goodsTraded = {}, lastPx = {}, corneredGoods = {};
+const goodsTraded = {}, lastPx = {}, corneredGoods = {}, shortGoods = {};
 res.forEach(r => {
   Object.entries(r.traded).forEach(([id, n]) => goodsTraded[id] = (goodsTraded[id] || 0) + n / r.auctions);
   Object.entries(r.last).forEach(([id, p]) => (lastPx[id] ||= []).push(p));
   Object.entries(r.mon.corneredGoods).forEach(([id, n]) => corneredGoods[id] = (corneredGoods[id] || 0) + n);
+  Object.entries(r.mon.shortGoods).forEach(([id, n]) => shortGoods[id] = (shortGoods[id] || 0) + n);
 });
 const liquid = Object.entries(goodsTraded).map(([id, x]) => [id, x / res.length]).sort((a, b) => b[1] - a[1]);
 const mons = res.map(r => r.mon);
@@ -88,6 +93,8 @@ const summary = {
   "stuck rounds: no trade, build or delivery": f(100 * avg(mons.map(m => m.dead / m.rounds))) + "%",
   "cornered (share of goods someone else wants)": f(100 * mons.reduce((s, m) => s + m.cornered, 0) / Math.max(1, mons.reduce((s, m) => s + m.contested, 0))) + "%",
   "most often cornered": Object.entries(corneredGoods).sort((a, b) => b[1] - a[1]).slice(0, 6).map(([id, n]) => `${id} ${n}`).join(", ") || "–",
+  "short supply (share of goods someone else wants)": f(100 * mons.reduce((s, m) => s + m.short, 0) / Math.max(1, mons.reduce((s, m) => s + m.contested, 0))) + "%",
+  "most often short": Object.entries(shortGoods).sort((a, b) => b[1] - a[1]).slice(0, 6).map(([id, n]) => `${id} ${n}`).join(", ") || "–",
   "cash at end (10th / median / 90th pct)": `${f(q(flat("cash"), .1))} / ${f(q(flat("cash"), .5))} / ${f(q(flat("cash"), .9))}`,
   "businesses per player (median / max)": `${q(flat("biz"), .5)} / ${Math.max(...flat("biz"))}`,
   "businesses idle (share of runs)": f(100 * avg(res.map(r => r.stats.idle / Math.max(1, r.stats.runs)))) + "%",

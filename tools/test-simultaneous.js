@@ -25,7 +25,7 @@ const r = vm.runInContext(`(() => {
   G.submit(st, 2, [{ name: "build", args: { type: "water_works" } }]);
   G.submit(st, 3, [{ name: "build", args: { type: "water_works" } }]);
   const built = st.businesses.filter(b => b.territory === "warsaw").map(b => b.cost);
-  out.push("price at start of afternoon " + cost + " (B) ; paid " + built.join(", "));
+  out.push("price at start of afternoon " + JSON.stringify(cost) + " (B) ; paid " + built.map(c => JSON.stringify(c)).join(", "));
   // Orders are checked when submitted
   [1, 2, 3].forEach(id => G.submit(st, id, []));
   out.push("bad order: " + JSON.stringify(G.submit(st, 1, [{ name: "move", args: { to: "spain" } }])));
