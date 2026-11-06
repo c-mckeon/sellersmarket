@@ -743,3 +743,28 @@ svg.spark .spark-none { stroke: var(--line); stroke-width: 1.5; stroke-dasharray
 .depth .sp { font-size: 11px; font-weight: 700; fill: var(--ink); }
 .depth .dnote { margin: 4px 0 0; }
 @media (max-width: 760px) { .tcharts { grid-template-columns: 1fr; } }
+/* Quote board: bid ↔ ask per good, with a replay */
+.qctl { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 8px; }
+.qctl input[type=range] { flex: 1; min-width: 140px; accent-color: var(--accent); }
+.qctl .gbtn { padding: 5px 12px; min-width: 96px; }
+.qgrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 6px; }
+.qcard { all: unset; box-sizing: border-box; cursor: pointer; display: grid; gap: 5px; padding: 7px 9px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); }
+.qcard:hover { border-color: var(--ink); }
+.qcard:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.qc-h { display: flex; justify-content: space-between; align-items: baseline; gap: 6px; font-size: 13px; }
+.qc-last { font-size: 11.5px; color: var(--muted); white-space: nowrap; }
+.qc-bar { position: relative; height: 12px; background: var(--bg); border-radius: 6px; }
+.qc-band { position: absolute; top: 3px; height: 6px; background: color-mix(in srgb, var(--fin) 30%, transparent); border-radius: 3px; transition: left .45s ease, width .45s ease; }
+.qc-bar i { position: absolute; top: 0; width: 3px; height: 12px; margin-left: -1.5px; border-radius: 2px; transition: left .45s ease; }
+.qc-bid { background: var(--raw); } .qc-ask { background: var(--waste); }
+.qc-bar i.qc-tr { top: 3px; width: 7px; height: 7px; margin-left: -3.5px; border-radius: 50%; background: var(--ink); box-shadow: 0 0 0 1.5px var(--surface); }
+.qc-n { display: flex; justify-content: space-between; gap: 4px; font-size: 12px; font-variant-numeric: tabular-nums; }
+.qc-n small { color: var(--muted); }
+.qc-n .sp { color: var(--muted); }
+/* A good that just traded flashes yellow */
+@keyframes tradeflash { 0%, 30% { background: #ffe14d; border-color: #e0b800; } 100% { background: var(--surface); } }
+@keyframes tradeflashrow { 0%, 30% { background: #ffe14d; } 100% { background: transparent; } }
+.qcard.flash, .mcard.flash { animation: tradeflash 1.6s ease-out; }
+.qcard.flash *, .mcard.flash * { color: #1d1d1b; }
+.qcard.flash .qc-n small, .qcard.flash .qc-last { color: #4a4232; }
+tr.flash td { animation: tradeflashrow 1.6s ease-out; }

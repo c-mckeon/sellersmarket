@@ -6,10 +6,13 @@
   const KEY = "sellersmarket-game-v1";
   const root = document.getElementById("game");
   if (!root) return;
-  let st = null, ui = { filter: "mine", search: "", card: null, good: null, ticket: {}, tab: "market" };
+  // A trade flash ends by removing its class (so flashed text goes back to normal colours)
+  root.addEventListener("animationend", e => { if (/tradeflash/.test(e.animationName)) e.target.closest(".flash")?.classList.remove("flash"); });
+  let st = null, ui = { filter: "mine", search: "", card: null, good: null, ticket: {}, tab: "market", seenN: {} };
 
   const esc = s => String(s).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
-  const m = n => (Math.abs(n) >= 100 ? Math.round(n).toLocaleString() : (Math.round(n * 100) / 100).toFixed(2)).replace(/^-/, "−");
+  // Money and prices: whole numbers (older saved games may still have cents)
+  const m = n => (Number.isInteger(+n) || Math.abs(n) >= 100 ? Math.round(n).toLocaleString() : (+n).toFixed(2)).replace(/^-/, "−");
   const save = () => { try { localStorage.setItem(KEY, JSON.stringify(st)); } catch (e) {} };
   const load = () => { try { return JSON.parse(localStorage.getItem(KEY)); } catch (e) { return null; } };
   const LAND = TERRITORIES.filter(t => !t.sea);
@@ -120,7 +123,7 @@
     if (o.name === "sellEtf") return `Sell ${a.units} ${BROKER.etfs.tickers[a.sector]}`;
     return o.name;
   };
-  let flashMsg = "";
+  let flashMsg = "", qTimer = null; // qTimer: the quote board replay
   const flash = msg => { flashMsg = msg; };
 
   function render() {
@@ -223,6 +226,91 @@
     return { s, last: a?.price ?? null, chg: a && b ? a.price / b.price - 1 : null };
   };
 
+  // ================= Quote board and replay =================
+  // A card per active good: best bid and ask, the spread between them drawn on a price line, and the
+  // last trade. "Play" replays every auction so far, one frame per auction, with the bars sliding as
+  // the book moved; a card flashes yellow whenever its good trades (live, too, after each auction).
+
+  // Goods that traded since this player last looked (each auction has a running number, n)
+  const freshTrades = () => {
+    const last = st.history.at(-1)?.n ?? -1, seen = ui.seenN[ui.seat];
+    ui.seenN[ui.seat] = last;
+    if (seen == null) return new Set(); // first look: nothing is "new"
+    return new Set(st.history.filter(h => h.n > seen).flatMap(h => Object.keys(h.trades)));
+  };
+
+  // Frames for the replay: one per auction (book left afterwards + what traded), then "now" (the public book)
+  function boardData() {
+    const ids = new Set(st.book.map(o => o.good));
+    st.history.forEach(h => { Object.keys(h.trades).forEach(i => ids.add(i)); Object.keys(h.quotes || {}).forEach(i => ids.add(i)); });
+    const busy = id => st.history.reduce((s, h) => s + (h.trades[id] ? 2 : 0) + (h.quotes?.[id] ? 1 : 0), 0) + (st.book.some(o => o.good === id) ? 1 : 0);
+    const goods = [...ids].sort((a, b) => busy(b) - busy(a) || G.COM[a].name.localeCompare(G.COM[b].name)).slice(0, 24);
+    const frames = st.history.map(h => ({
+      label: `Round ${h.round} · ${h.phase} auction`,
+      q: Object.fromEntries(goods.filter(id => h.quotes?.[id]).map(id => { const x = h.quotes[id]; return [id, [x.bid, x.ask, x.bq || 0, x.aq || 0]]; })),
+      t: Object.fromEntries(goods.filter(id => h.trades[id]).map(id => [id, [h.trades[id].price, h.trades[id].qty]])),
+    }));
+    frames.push({ label: "Now: the book as it stands", now: true, t: {},
+      q: Object.fromEntries(goods.map(id => { const b = G.bestBid(st, id), a = G.bestAsk(st, id); return b || a ? [id, [b?.price ?? null, a?.price ?? null, b?.qty || 0, a?.qty || 0]] : null; }).filter(Boolean)) });
+    // Each good's price scale, fixed for the whole replay so the bars move rather than the axis
+    const scale = {};
+    goods.forEach(id => {
+      const v = frames.flatMap(f => [f.q[id]?.[0], f.q[id]?.[1], f.t[id]?.[0]]).filter(x => x != null);
+      const lo = Math.min(...v), hi = Math.max(...v), pad = Math.max(1, (hi - lo) * 0.15);
+      scale[id] = [Math.max(0, lo - pad), hi + pad];
+    });
+    return { goods, frames, scale };
+  }
+
+  // One card's contents for a frame. last: the last trade up to that frame, or null.
+  const cardState = (d, id, f, last) => {
+    const [lo, hi] = d.scale[id], X = v => ((v - lo) / (hi - lo || 1) * 100).toFixed(1);
+    const q = f.q[id] || [null, null, 0, 0], tr = f.t[id];
+    return { bid: q[0], ask: q[1], bq: q[2], aq: q[3], last, traded: !!tr, tr, xb: q[0] != null ? X(q[0]) : null, xa: q[1] != null ? X(q[1]) : null, xl: last != null ? X(last) : null };
+  };
+  const cardHTML = (id, c, flash) => `<button class="qcard${flash ? " flash" : ""}" data-good="${id}">
+      <span class="qc-h"><b>${G.COM[id].name}</b><span class="qc-last">${c.tr ? `traded ${c.tr[1]} at ${m(c.tr[0])}` : c.last != null ? `last ${m(c.last)}` : "no trades"}</span></span>
+      <span class="qc-bar"><span class="qc-band" style="${c.xb != null && c.xa != null ? `left:${c.xb}%;width:${(c.xa - c.xb).toFixed(1)}%` : "display:none"}"></span>
+        <i class="qc-bid" style="${c.xb != null ? `left:${c.xb}%` : "display:none"}"></i><i class="qc-ask" style="${c.xa != null ? `left:${c.xa}%` : "display:none"}"></i>
+        <i class="qc-tr" style="${c.xl != null ? `left:${c.xl}%` : "display:none"}"></i></span>
+      <span class="qc-n"><span class="b">${c.bid != null ? `bid ${m(c.bid)} <small>×${c.bq}</small>` : "no bids"}</span><span class="sp">${c.bid != null && c.ask != null ? `spread ${m(c.ask - c.bid)}` : ""}</span><span class="a">${c.ask != null ? `ask ${m(c.ask)} <small>×${c.aq}</small>` : "no asks"}</span></span>
+    </button>`;
+
+  function quoteBoard(fresh) {
+    const d = boardData();
+    if (!d.goods.length) return `<section class="msec"><h3>Quote board</h3><p class="muted">No orders or trades yet. Cards appear here as goods get bids and asks.</p></section>`;
+    const lastTrade = id => st.lastTrade[id]?.price ?? null, f = d.frames.at(-1);
+    ui.board = d; // the replay reads this
+    return `<section class="msec qboard">
+      <h3>Quote board <span class="muted small">bid ↔ ask for each good; the dot is the last trade</span></h3>
+      <div class="qctl"><button class="gbtn ghost" id="qPlay">▶ Replay</button><input type="range" id="qSlide" min="0" max="${d.frames.length - 1}" value="${d.frames.length - 1}" aria-label="Auction">
+        <span id="qLabel" class="muted small">${f.label}</span></div>
+      <div class="qgrid" id="qGrid">${d.goods.map(id => cardHTML(id, cardState(d, id, f, lastTrade(id)), fresh.has(id))).join("")}</div>
+    </section>`;
+  }
+
+  // Show frame k of the replay: update each card in place, so the bars slide (CSS transitions)
+  function showFrame(k) {
+    const d = ui.board, grid = root.querySelector("#qGrid");
+    if (!d || !grid) return;
+    const f = d.frames[k];
+    root.querySelector("#qLabel").textContent = f.label;
+    root.querySelector("#qSlide").value = k;
+    d.goods.forEach(id => {
+      let last = null;
+      for (let i = k; i >= 0 && last == null; i--) last = d.frames[i].t[id]?.[0] ?? null;
+      const el = grid.querySelector(`.qcard[data-good="${id}"]`), c = cardState(d, id, f, last);
+      const tmp = document.createElement("div"); tmp.innerHTML = cardHTML(id, c, false);
+      const fresh = tmp.firstElementChild;
+      // Keep the element (so transitions run); swap its insides
+      el.querySelector(".qc-h").innerHTML = fresh.querySelector(".qc-h").innerHTML;
+      el.querySelector(".qc-n").innerHTML = fresh.querySelector(".qc-n").innerHTML;
+      ["qc-band", "qc-bid", "qc-ask", "qc-tr"].forEach(cl => el.querySelector("." + cl).setAttribute("style", fresh.querySelector("." + cl).getAttribute("style")));
+      el.classList.remove("flash");
+      if (c.traded) { void el.offsetWidth; el.classList.add("flash"); } // restart the flash
+    });
+  }
+
   // ================= Sidebar =================
   function dashboard(p) {
     const locked = G.lockedCash(vw, p);
@@ -275,7 +363,7 @@
   // ================= The market =================
   // Built around three questions: can I sell what I make, can I get what I need, and what's moving?
   function marketPanel(p) {
-    const want = wantsOf(p), hold = G.holdings(vw, p);
+    const want = wantsOf(p), hold = G.holdings(vw, p), fresh = freshTrades(); // fresh: goods that traded since you last looked (they flash)
     const sel = ui.good && G.COM[ui.good] ? ui.good : null;
     const last = st.history.at(-1);
     const live = COMMODITIES.filter(c => G.bestBid(vw, c.id) || G.bestAsk(vw, c.id)).length;
@@ -298,7 +386,7 @@
         : G.isMaterial(id) ? `<span class="mtag">No bids · anyone can build with it</span>`
         : contractGood(id) ? `<span class="mtag">No bids · contracts can ask for it</span>`
         : `<span class="mtag warn">⚠ Nobody else can use it now</span>`;
-      return `<button class="mcard${id === sel ? " sel" : ""}" data-good="${id}">
+      return `<button class="mcard${id === sel ? " sel" : ""}${fresh.has(id) ? " flash" : ""}" data-good="${id}">
         <span class="mc-top"><b>${G.COM[id].name}</b><span class="mc-qty">${spare > 0 ? spare : 0}${off ? ` <small>+${off} on offer</small>` : ""}</span></span>
         <span class="mc-where">${whereIs(p, id).map(x => `${x.qty} ${x.label === "your stockpile" ? "in" : "at"} ${x.label.toLowerCase()}`).join(" · ") || "all on offer"}</span>
         <span class="mc-mid">${spark(s)}<span class="mc-px">${last != null ? `<b>${m(last)}</b>${chg != null ? ` <small class="${chg > 0 ? "up" : chg < 0 ? "dn" : ""}">${pct(chg)}</small>` : ""}` : `<small class="muted">never traded</small>`}</span></span>
@@ -311,7 +399,7 @@
       const supply = ask ? `<span class="mtag good">Ask ${m(ask.price)} ×${ask.qty}</span>`
         : makers.length ? `<span class="mtag">Nobody selling · ${names(makers)} make${makers.length === 1 ? "s" : ""} it</span>`
         : `<span class="mtag warn">⚠ Nobody makes it yet</span>`;
-      return `<button class="mcard${id === sel ? " sel" : ""}" data-good="${id}">
+      return `<button class="mcard${id === sel ? " sel" : ""}${fresh.has(id) ? " flash" : ""}" data-good="${id}">
         <span class="mc-top"><b>${G.COM[id].name}</b><span class="mc-qty">${need ? `need ${need}` : "✓"}${bidding ? ` <small>bidding ${bidding}</small>` : ""}</span></span>
         <span class="mc-where">${why || "you're bidding"}${hold[id] ? ` · have ${hold[id]}` : ""}</span>
         <span class="mc-mid">${spark(s)}<span class="mc-px">${last != null ? `<b>${m(last)}</b>${chg != null ? ` <small class="${chg > 0 ? "up" : chg < 0 ? "dn" : ""}">${pct(chg)}</small>` : ""}` : `<small class="muted">never traded</small>`}</span></span>
@@ -327,6 +415,7 @@
       </div>
       <p class="muted small">One sealed auction at the end of this phase: each good trades at a single price, where the most units change hands. Orders stay until they fill or you cancel.</p>
       ${sel ? ticket(p, sel, want) : ""}
+      ${quoteBoard(fresh)}
       <section class="msec"><h3>Sell what you make</h3>
         ${sellIds.length ? `<div class="mgrid">${sellIds.map(sellCard).join("")}</div>` : `<p class="muted">Nothing spare right now.</p>`}</section>
       <section class="msec"><h3>Buy what you need <span class="muted small">for your contracts and factories</span></h3>
@@ -334,7 +423,7 @@
       <section class="msec"><h3>What's trading <span class="muted small">last ${recent.length || 6} auctions</span></h3>
         ${movers.length ? `<table class="gmkt mmovers"><thead><tr><th>Good</th><th>Price</th><th class="n">Last</th><th class="n">Change</th><th class="n">Units</th><th class="n">Bid / ask now</th></tr></thead><tbody>
           ${movers.map(([id, vol]) => { const { s, last, chg } = lastBits(id), q = G.quote(vw, id);
-            return `<tr data-good="${id}"><td>${G.COM[id].name}</td><td>${spark(s.slice(-12), 80, 20)}</td><td class="n"><b>${m(last)}</b></td>
+            return `<tr data-good="${id}" class="${fresh.has(id) ? "flash" : ""}"><td>${G.COM[id].name}</td><td>${spark(s.slice(-12), 80, 20)}</td><td class="n"><b>${m(last)}</b></td>
               <td class="n ${chg > 0 ? "up" : chg < 0 ? "dn" : ""}">${chg != null ? pct(chg) : "–"}</td><td class="n">${vol}</td>
               <td class="n">${q.bid != null ? m(q.bid) : "–"} / ${q.ask != null ? m(q.ask) : "–"}</td></tr>`; }).join("")}
         </tbody></table>` : `<p class="muted">Nothing has traded yet. The first trades set the first prices.</p>`}</section>
@@ -440,7 +529,7 @@
           <h4>New order</h4>
           <div class="gseg"><button data-side="buy" class="${t.side === "buy" ? "on" : ""}">Buy</button><button data-side="sell" class="${t.side === "sell" ? "on" : ""}">Sell</button></div>
           <div class="gform">
-            <label>Price each <input type="number" id="gPrice" min="0.01" step="0.01" value="${t.price || (suggest != null ? suggest : "")}" placeholder="price"></label>
+            <label>Price each <input type="number" id="gPrice" min="1" step="1" value="${t.price || (suggest != null ? suggest : "")}" placeholder="price"></label>
             <label>Quantity <input type="number" id="gQty" min="1" step="1" value="${t.qty || (t.side === "sell" ? hold : Math.max(1, (want[id] || 0) - hold)) || 1}"></label>
             <button class="gbtn" id="gPlace">${t.side === "buy" ? "Place buy order" : "Place sell order"}</button>
           </div>
@@ -535,6 +624,18 @@
     }));
     root.querySelector("#gTicketClose")?.addEventListener("click", () => { ui.good = null; render(); });
     root.querySelector(".mall")?.addEventListener("toggle", e => ui.allOpen = e.target.open);
+    // Quote board replay: ▶ steps through the auctions, one every 0.7s; the slider jumps to any of them
+    clearInterval(qTimer); qTimer = null;
+    const qPlay = root.querySelector("#qPlay"), qSlide = root.querySelector("#qSlide");
+    const stopReplay = () => { clearInterval(qTimer); qTimer = null; if (qPlay) qPlay.textContent = "▶ Replay"; };
+    qSlide?.addEventListener("input", () => { stopReplay(); showFrame(+qSlide.value); });
+    qPlay?.addEventListener("click", () => {
+      if (qTimer) return stopReplay();
+      const end = ui.board.frames.length - 1;
+      let k = +qSlide.value >= end ? 0 : +qSlide.value;
+      showFrame(k); qPlay.textContent = "❚❚ Pause";
+      qTimer = setInterval(() => { if (++k > end) return stopReplay(); showFrame(k); }, 700);
+    });
     // Price chart: crosshair and tooltip on the nearest trade
     root.querySelectorAll(".pchart").forEach(box => {
       const pts = JSON.parse(box.dataset.pts), svg = box.querySelector("svg"), tip = box.querySelector(".ptip"), xh = svg.querySelector(".xhair");

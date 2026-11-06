@@ -24,12 +24,14 @@ eq("one side empty", G.clearingPrice([o(3, 10)], []), null);
 eq("most volume wins", G.clearingPrice([o(8, 5), o(5, 10)], [o(5, 8)]), 5);
 // A buyer who bids the maximum to be sure of filling shouldn't drag the price there
 eq("extreme bid, with a last price: stays at the last price", G.clearingPrice([o(10000, 1)], [o(5, 1)], 6), 6);
-eq("extreme ask, with a last price: stays at the last price", G.clearingPrice([o(7, 1)], [o(0.01, 1)], 6), 6);
+eq("extreme ask, with a last price: stays at the last price", G.clearingPrice([o(7, 1)], [o(1, 1)], 6), 6);
 eq("last price outside the range: nearest edge", G.clearingPrice([o(5, 10)], [o(3, 10)], 9), 5);
 eq("last price outside the range: nearest edge (low)", G.clearingPrice([o(5, 10)], [o(3, 10)], 1), 3);
 // Leftover demand pushes the price up, leftover supply pushes it down
-eq("more buyers than sellers: top of the range", G.clearingPrice([o(6, 12)], [o(5, 10)], 5.5), 6);
-eq("more sellers than buyers: bottom of the range", G.clearingPrice([o(6, 10)], [o(5, 12)], 5.5), 5);
+eq("more buyers than sellers: top of the range", G.clearingPrice([o(6, 12)], [o(5, 10)], 5), 6);
+eq("more sellers than buyers: bottom of the range", G.clearingPrice([o(6, 10)], [o(5, 12)], 6), 5);
+
+eq("middle of an odd gap rounds to a whole number", G.clearingPrice([o(6, 10)], [o(3, 10)]), 5);
 
 // ---------- Fills, through the real game ----------
 {
@@ -65,6 +67,7 @@ eq("more sellers than buyers: bottom of the range", G.clearingPrice([o(6, 10)], 
   check("sell locks goods", G.act(st, 2, "placeOrder", { id: "wood", side: "sell", price: 20, qty: 5 }).ok && !G.player(st, 2).stock.wood);
   check("can't promise goods twice", !G.act(st, 2, "placeOrder", { id: "wood", side: "sell", price: 20, qty: 1 }).ok);
   check("can't trade with yourself", !buy(st, 2, "wood", 25, 1).ok);
+  check("prices must be whole numbers", !buy(st, 3, "wood", 2.5, 1).ok && !buy(st, 3, "wood", 0, 1).ok);
   G.act(st, 1, "cancelAll", {}); G.act(st, 2, "cancelAll", {});
   eq("cancel gives everything back", [G.player(st, 1).cash, G.player(st, 2).stock.wood, st.book.length], [100, 5, 0]);
   clear(st);
@@ -82,10 +85,10 @@ eq("more sellers than buyers: bottom of the range", G.clearingPrice([o(6, 10)], 
   for (let n = 0; n < 3000; n++) {
     const st = fresh(500);
     // Sometimes give a good a last price, so the reference rule gets used
-    goods.forEach(g => { if (rnd() < 0.5) { const p = 1 + Math.round(rnd() * 2000) / 100; st.lastTrade[g] = { price: p }; st.prices[g] = p; } });
+    goods.forEach(g => { if (rnd() < 0.5) { const p = 1 + Math.round(rnd() * 20); st.lastTrade[g] = { price: p }; st.prices[g] = p; } });
     const k = 1 + Math.floor(rnd() * 12);
     for (let i = 0; i < k; i++) {
-      const pid = 1 + Math.floor(rnd() * 4), g = goods[Math.floor(rnd() * 3)], price = Math.max(0.01, Math.round((rnd() < 0.05 ? rnd() * 10000 : 2 + rnd() * 18) * 100) / 100), qty = 1 + Math.floor(rnd() * 15);
+      const pid = 1 + Math.floor(rnd() * 4), g = goods[Math.floor(rnd() * 3)], price = Math.max(1, Math.round(rnd() < 0.05 ? rnd() * 10000 : 2 + rnd() * 18)), qty = 1 + Math.floor(rnd() * 15);
       if (rnd() < 0.5) buy(st, pid, g, price, qty); else sell(st, pid, g, price, qty);
     }
     const orders = JSON.parse(JSON.stringify(st.book));

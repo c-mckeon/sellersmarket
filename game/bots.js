@@ -95,7 +95,7 @@
       if (G.COM[c].type === "waste" && !RECIPES.some(r => r.in[c])) { G.act(st, p.id, "dump", { id: c, qty: spare }); return; }
       const age = p.mem.ask[c] = (p.mem.ask[c] ?? -1) + 1;
       const price = G.guess(st, c) * Math.max(end ? 0.1 : B.askMin, B.askStart - B.askStep * age);
-      G.act(st, p.id, "placeOrder", { id: c, side: "sell", price: Math.max(0.01, price), qty: spare });
+      G.act(st, p.id, "placeOrder", { id: c, side: "sell", price: Math.max(1, Math.round(price)), qty: spare });
     });
     // Short of space? Dump waste
     if (G.spaceLeft(st, p) < 3) Object.keys(p.stock).filter(c => G.COM[c].type === "waste").forEach(c => G.act(st, p.id, "dump", { id: c, qty: p.stock[c] }));
@@ -105,7 +105,7 @@
       .sort((a, b) => G.rawUnits(b[0]) - G.rawUnits(a[0]))
       .forEach(([c, n]) => {
         const age = p.mem.bid[c] = (p.mem.bid[c] ?? -1) + 1;
-        const price = Math.round(G.guess(st, c) * Math.min(B.bidMax, B.bidStart + B.bidStep * age) * 100) / 100;
+        const price = Math.max(1, Math.round(G.guess(st, c) * Math.min(B.bidMax, B.bidStart + B.bidStep * age)));
         n = Math.min(n, Math.max(0, G.spaceLeft(st, p)), Math.floor(budget / price));
         if (n > 0 && G.act(st, p.id, "placeOrder", { id: c, side: "buy", price, qty: n }).ok) budget -= price * n;
       });

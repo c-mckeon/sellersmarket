@@ -77,9 +77,9 @@
     G.need(st.phase === "morning" || st.phase === "afternoon", "The market is closed right now.");
     G.need(G.COM[id], "Unknown good.");
     G.need(side === "buy" || side === "sell", "Buy or sell?");
-    qty = Math.floor(+qty); price = cents(+price);
+    qty = Math.floor(+qty); price = +price;
     G.need(qty > 0, "Order at least 1.");
-    G.need(price > 0 && price <= MS.maxPrice, `Pick a price between 0.01 and ${MS.maxPrice}.`);
+    G.need(Number.isInteger(price) && price >= 1 && price <= MS.maxPrice, `Prices are whole numbers: pick one from 1 to ${MS.maxPrice}.`);
     const name = G.COM[id].name;
     const mine = st.book.filter(o => o.pid === p.id && o.good === id);
     if (side === "buy") {
@@ -123,6 +123,7 @@
   //   2. then the fewest units left unmatched at that price
   //   3. then, if the leftover is all on one side: buyers left over → the top of the range, sellers → the bottom
   //   4. then the last traded price (`ref`), kept inside the range; never traded → the middle of the range
+//      (rounded: every price in the game is a whole number)
   // Step 4 matters: without it, one bid at the price limit "to be sure of filling" would drag the
   // price halfway to the limit.
   G.clearingPrice = (bids, asks, ref) => {
@@ -142,7 +143,7 @@
     const lo = best[0].P, hi = best.at(-1).P;
     if (best.every(x => x.surplus > 0)) return hi;
     if (best.every(x => x.surplus < 0)) return lo;
-    return cents(ref ? Math.min(hi, Math.max(lo, ref)) : (lo + hi) / 2);
+    return Math.round(ref ? Math.min(hi, Math.max(lo, ref)) : (lo + hi) / 2); // whole numbers only (orders are whole, so this stays in the range)
   };
 
   // Share `vol` units among orders, best price first, pro rata within a price level.
@@ -167,7 +168,7 @@
 
   G.auction = st => {
     const ph = st.phase === "midday" ? "morning" : st.phase === "overnight" ? "afternoon" : st.phase;
-    const record = { round: st.round, phase: ph, trades: {} };
+    const record = { n: st.stats.auctions || 0, round: st.round, phase: ph, trades: {} }; // n: auctions before this one (history keeps the last 120)
     const mine = {}; // pid → messages
     const say = (pid, msg) => (mine[pid] ||= []).push(msg);
     COMMODITIES.forEach(c => {
@@ -200,9 +201,10 @@
       st.lastTrade[id] = { price: P, qty: vol, round: st.round, phase: ph };
       record.trades[id] = { price: P, qty: vol };
     });
-    // What was left on the book afterwards: best bid and ask for every good with orders
+    // What was left on the book afterwards: best bid and ask (and how many at each) for every good with orders
     record.quotes = {};
-    new Set(st.book.map(o => o.good)).forEach(id => record.quotes[id] = { bid: G.bestBid(st, id)?.price ?? null, ask: G.bestAsk(st, id)?.price ?? null });
+    new Set(st.book.map(o => o.good)).forEach(id => { const b = G.bestBid(st, id), a = G.bestAsk(st, id);
+      record.quotes[id] = { bid: b?.price ?? null, ask: a?.price ?? null, bq: b?.qty || 0, aq: a?.qty || 0 }; });
     st.history.push(record);
     if (st.history.length > 120) st.history.shift();
     const n = Object.keys(record.trades).length;

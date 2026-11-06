@@ -55,8 +55,8 @@ function run(strategy, seed) {
         const ref = last ?? (x.side === "buy" ? x.v * 0.8 : x.v * 1.2);
         price = x.side === "buy" ? Math.min(x.v, ref * 1.02) : Math.max(x.v, ref * 0.98);
       }
-      if (x.side === "sell") G.act(st, x.p.id, "placeOrder", { id: GOOD, side: "sell", price: Math.max(0.01, price), qty: x.p.stock[GOOD] || 0 });
-      else G.act(st, x.p.id, "placeOrder", { id: GOOD, side: "buy", price: Math.max(0.01, price), qty: x.q });
+      if (x.side === "sell") G.act(st, x.p.id, "placeOrder", { id: GOOD, side: "sell", price: Math.max(1, Math.round(price)), qty: x.p.stock[GOOD] || 0 });
+      else G.act(st, x.p.id, "placeOrder", { id: GOOD, side: "buy", price: Math.max(1, Math.round(price)), qty: x.q });
     });
     G.auction(st);
     const tr = st.history.at(-1).trades[GOOD];
