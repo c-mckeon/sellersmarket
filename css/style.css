@@ -652,3 +652,4 @@ code { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; fo
 .dcon-h .glink:disabled { opacity: .35; cursor: default; }
 .dcon .ok { color: var(--raw); font-weight: 600; }
 @media (max-width: 700px) { .gticket .gtwo { grid-template-columns: 1fr; } }
+.gused { margin: 0 0 6px; color: var(--ink); } .gused b { font-weight: 700; }

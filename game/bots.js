@@ -56,8 +56,8 @@
       / Object.entries(k.goods).reduce((s, [c, q]) => s + q * G.rawUnits(c), 0);
     [...p.contracts].sort((a, b) => progress(b) + b.points / 50 - progress(a) - a.points / 50).slice(0, 2)
       .forEach(k => Object.entries(k.goods).forEach(([c, q]) => addTo(want, c, q)));
-    // One run of every factory
-    G.myBusinesses(st, p.id).forEach(b => Object.entries(G.BIZ_BY[b.type].inputs).forEach(([c, q]) => addTo(want, c, q)));
+    // Enough for every factory to run as many times as it can in a round
+    G.myBusinesses(st, p.id).forEach(b => Object.entries(G.BIZ_BY[b.type].inputs).forEach(([c, q]) => addTo(want, c, q * (S.factoryRuns || 1))));
     // The next build, or at least a small reserve of building materials
     if (p.plan) Object.entries(p.plan.cost).forEach(([c, q]) => addTo(want, c, q));
     if (!p.plan) Object.entries(materialsFor(st, p, { crates: B.reserve, heavy: 0 })).forEach(([c, q]) => addTo(want, c, q));

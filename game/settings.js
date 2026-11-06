@@ -49,7 +49,7 @@ const GAME_SETTINGS = {
 
   // Production
   factoryRuns: 1,          // a factory runs up to this many times a round, while it has the inputs
-  extractOutput: 1.2,      // multiplies what every mine, farm and well makes (1 = as listed on the Territories tab)
+  extractOutput: 0.6,      // multiplies what every mine, farm and well makes (1 = as listed on the Territories tab)
 
   // ---------- Switched off for now ----------
   // Cards, wages, inflation and the broker (loans, bonds, futures, ETFs) are kept in the code but not

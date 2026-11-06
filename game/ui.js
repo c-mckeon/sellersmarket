@@ -284,8 +284,14 @@
     const isNew = o => !st.book.some(x => x.id === o.id);
     const suggest = t.side === "buy" ? q.ask ?? q.last?.price ?? q.bid : q.bid ?? q.last?.price ?? q.ask;
     const have = p.stock[id] || 0;
+    // Who could want it: the factories that use it, and who owns one (public: they're on the map)
+    const users = G.BIZ.filter(b => b.inputs[id]).map(b => {
+      const owners = [...new Set(vw.businesses.filter(x => x.type === b.id).map(x => x.owner))].map(o => o === p.id ? "you" : esc(G.player(vw, o).name));
+      return `${b.name.toLowerCase()} <span class="muted">(${owners.length ? owners.join(", ") : "nobody has one"})</span>`;
+    });
     return `<div class="gticket">
       <div class="ghead"><h3>${c.name}</h3><span class="muted">${q.last ? `last ${m(q.last.price)} (${q.last.qty} traded, round ${q.last.round} ${q.last.phase})` : "never traded"}${q.spread != null ? ` · spread ${Math.round(q.spread * 100)}%` : ""}</span><span class="gsp"></span><button class="glink" id="gTicketClose" title="Close">✕</button></div>
+      <p class="small gused"><b>Used by:</b> ${users.join(" · ") || "no factory"}${G.isMaterial(id) ? " · <b>building</b> (any business)" : ""}${S.contracts.goods.includes(id) ? " · <b>contracts</b> (they're secret)" : ""}</p>
       <div class="gtwo">
         <div>
           <h4>Book</h4>
