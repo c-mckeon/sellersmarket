@@ -6,7 +6,7 @@
   const KEY = "sellersmarket-game-v1";
   const root = document.getElementById("game");
   if (!root) return;
-  let st = null, ui = { filter: "mine", search: "", card: null };
+  let st = null, ui = { filter: "mine", search: "", card: null, good: null, ticket: {}, tab: "market" };
 
   const esc = s => String(s).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
   const m = n => (Math.abs(n) >= 100 ? Math.round(n).toLocaleString() : (Math.round(n * 100) / 100).toFixed(2)).replace(/^-/, "−");
@@ -30,8 +30,8 @@
     root.innerHTML = `
       <div class="gsetup">
         <h1>New game</h1>
-        <p class="muted">Pick who's playing. Each player starts with ${S.startCash} cash, ${S.startSpace} crates of stockpile space, ${S.cardsPerRound} cards and one free business where they start. Highest net worth after the last round wins.</p>
-        ${saved && saved.version === 5 && !saved.over ? `<div class="gresume">A game in round ${saved.round} is saved in this browser. <button class="gbtn" id="gResume">Continue it</button></div>` : ""}
+        <p class="muted">Pick who's playing. Each player starts with ${S.startCash} cash, ${S.startSpace} crates of stockpile space, one free business where they start, and ${S.contracts.hand} secret contracts. Deliver contracts to score points; most points after the last round wins, and cash breaks ties. There's no price list: every price comes from what players bid and ask.</p>
+        ${saved && saved.version === 6 && !saved.over ? `<div class="gresume">A game in round ${saved.round} is saved in this browser. <button class="gbtn" id="gResume">Continue it</button></div>` : ""}
         <table class="gplayers"><thead><tr><th></th><th>Name</th><th>Who</th><th>Starts in</th><th>Free business</th><th></th></tr></thead><tbody>
         ${setup.players.map((p, i) => {
           const opts = G.BIZ.filter(b => G.canBuildAt(b, p.start));
@@ -99,8 +99,11 @@
   const doAct = (name, args) => { flash(tryOrder(name, args)); render(); };
   const orderText = o => {
     const a = o.args || {};
-    if (o.name === "buy") return `Buy ${a.qty} ${G.COM[a.id].name} <em>${m(a.qty * st.prices[a.id])}</em>`;
-    if (o.name === "sell") return `${st.prices[a.id] < 0 ? "Dump" : "Sell"} ${a.qty} ${G.COM[a.id].name} <em>${m(a.qty * st.prices[a.id])}</em>`;
+    if (o.name === "placeOrder") return `${a.side === "buy" ? "Bid for" : "Offer"} ${a.qty} ${G.COM[a.id].name} at ${m(+a.price)} <em>${m(a.qty * a.price)}</em>`;
+    if (o.name === "cancelOrder") { const x = st.book.find(y => y.id === a.order); return x ? `Cancel ${x.side === "buy" ? "bid for" : "offer of"} ${x.qty} ${G.COM[x.good].name} at ${m(x.price)}` : "Cancel an order"; }
+    if (o.name === "deliver") return `Deliver a contract`;
+    if (o.name === "discardContract") return `Throw away a contract`;
+    if (o.name === "dump") return `Throw away ${a.qty} ${G.COM[a.id].name}`;
     if (o.name === "upgradeSpace") return `+${S.spaceUpgrade.crates} crates of space`;
     if (o.name === "move") return `Move to ${G.TERR[a.to].name}`;
     if (o.name === "build") return `Build a ${G.BIZ_BY[a.type].name.toLowerCase()}`;
@@ -132,7 +135,7 @@
     const who = l => { if (!l.pid) return ""; const x = G.player(st, l.pid); return `<i class="ndot" style="background:${x.colour}"></i><b>${l.pid === p.id ? "You" : esc(x.name)}</b> `; };
     root.innerHTML = `
       <div class="gbar">
-        <span class="gphase ${st.phase}">Round ${st.round} of ${st.rounds} · ${st.phase === "morning" ? "Morning: trade" : "Afternoon: move or build, and play a card"}</span>
+        <span class="gphase ${st.phase}">Round ${st.round} of ${st.rounds} · ${st.phase === "morning" ? "Morning: trade" : "Afternoon: trade, and move or build"}</span>
         <span class="gturn"><i style="background:${p.colour}"></i>${p.name === "You" ? "Your" : esc(p.name) + "'s"} orders</span>
         <span class="gready">${st.players.map(x => `<i title="${esc(x.name)}${st.orders[x.id] ? " is ready" : " is deciding"}" style="background:${x.colour};opacity:${st.orders[x.id] ? 1 : .25}"></i>`).join("")}</span>
         <span class="gsp"></span>
@@ -148,8 +151,8 @@
             <div class="gorders"><b>Your orders</b> <span class="muted small">Nothing happens until everyone has submitted; then all orders go through at once.</span>
               <div>${ui.orders.map((o, i) => `<span class="gorder">${orderText(o)}<button data-undo="${i}" title="Remove">✕</button></span>`).join("") || `<span class="muted">None yet.</span>`}</div>
             </div>
-            <div class="gtabs2"><button data-tab="main" class="${ui.tab !== "broker" ? "on" : ""}">${st.phase === "morning" ? "Market" : "Move, build &amp; cards"}</button><button data-tab="broker" class="${ui.tab === "broker" ? "on" : ""}">Broker <span>loans · bonds · futures · ETFs</span></button></div>
-            ${ui.tab === "broker" ? brokerPanel(p) : st.phase === "morning" ? marketPanel(p) : afternoonPanel(p)}
+            ${st.phase === "afternoon" ? `<div class="gtabs2"><button data-tab="market" class="${ui.tab !== "build" ? "on" : ""}">Market</button><button data-tab="build" class="${ui.tab === "build" ? "on" : ""}">Move or build</button></div>` : ""}
+            ${st.phase === "afternoon" && ui.tab === "build" ? afternoonPanel(p) : marketPanel(p)}
           </div>
         </div>
         <aside class="gdash">${dashboard(p)}</aside>
@@ -172,7 +175,7 @@
   // What midday will do to this player's stockpile, given their orders so far
   function middayPreview(p) {
     if (vw.phase !== "morning") return null;
-    const c = JSON.parse(JSON.stringify(vw)); c.log = [];
+    const c = JSON.parse(JSON.stringify(vw)); c.log = []; c.drafting = false; // keep its log: it says what gets thrown away
     const before = { ...G.player(c, p.id).stock };
     c.phase = "midday"; G.produce(c);
     const after = G.player(c, p.id).stock, delta = {};
@@ -181,64 +184,48 @@
     return { delta, lost, used: G.used(G.player(c, p.id)) };
   }
 
-  // Balance sheet now vs last night, and where the cash went last round
-  function moneySection(p) {
-    const now = G.balanceSheet(vw, p), prev = (p.sheets || []).at(-1);
-    const rows = [["Cash", "cash"], ["Stockpile", "stock"], ["Businesses", "businesses"], ["Bonds", "bonds"], ["ETFs", "etfs"], ["Futures", "futures"], ["Loan", "loan", -1]];
-    const line = ([label, k, sign = 1]) => {
-      const v = now[k] * sign, d = prev ? (now[k] - prev[k]) * sign : 0;
-      if (!now[k] && !(prev && prev[k])) return "";
-      return `<tr><td>${label}</td><td class="n">${v < 0 ? "−" : ""}${m(Math.abs(v))}</td><td class="n ${d > 0.5 ? "up" : d < -0.5 ? "dn" : ""}">${prev && Math.abs(d) > 0.5 ? (d > 0 ? "+" : "−") + m(Math.abs(d)) : ""}</td></tr>`;
-    };
-    const lastR = st.round - 1, book = (p.book || {})[lastR] || {}, today = (p.book || {})[st.round] || {};
-    const flow = b => Object.entries(b).filter(([, v]) => Math.abs(v) > 0.005).sort((x, y) => y[1] - x[1]);
-    const net = b => Object.values(b).reduce((x, y) => x + y, 0);
-    return `<div class="dsec dmoney">
-      <h4>Money <em>${prev ? `since last night ${now.worth >= prev.worth ? "+" : "−"}${m(Math.abs(now.worth - prev.worth))}` : ""}</em></h4>
-      <table class="dbal"><tbody>${rows.map(line).join("")}<tr class="tot"><td>Net worth</td><td class="n">${m(now.worth)}</td><td class="n ${prev ? (now.worth >= prev.worth ? "up" : "dn") : ""}">${prev ? (now.worth >= prev.worth ? "+" : "−") + m(Math.abs(now.worth - prev.worth)) : ""}</td></tr></tbody></table>
-      ${lastR >= 1 && flow(book).length ? `<details class="dflow"><summary>Round ${lastR} cash: ${net(book) >= 0 ? "+" : "−"}${m(Math.abs(net(book)))}</summary>
-        <table class="dbal"><tbody>${flow(book).map(([k, v]) => `<tr><td>${k}</td><td class="n ${v >= 0 ? "up" : "dn"}">${v >= 0 ? "+" : "−"}${m(Math.abs(v))}</td></tr>`).join("")}</tbody></table></details>` : ""}
-      ${flow(today).length ? `<details class="dflow"><summary>This round so far: ${net(today) >= 0 ? "+" : "−"}${m(Math.abs(net(today)))}</summary>
-        <table class="dbal"><tbody>${flow(today).map(([k, v]) => `<tr><td>${k}</td><td class="n ${v >= 0 ? "up" : "dn"}">${v >= 0 ? "+" : "−"}${m(Math.abs(v))}</td></tr>`).join("")}</tbody></table></details>` : ""}
-      ${p.loan || p.bonds.length || p.futures.length ? `<p class="dhint">Tonight: ${[
-        p.loan ? `loan payment ${m(p.loan * G.loanRate(vw, p) + p.loan * BROKER.loans.repayShare)}` : "",
-        p.bonds.length ? `bond interest +${m(p.bonds.reduce((x, b) => x + b.count * BROKER.bonds.face * b.rate, 0))}` : "",
-        p.futures.filter(f => f.settle <= st.round + 1).length ? `${p.futures.filter(f => f.settle <= st.round + 1).length} futures contract(s) settle` : "",
-      ].filter(Boolean).join(" · ")}</p>` : ""}
-    </div>`;
-  }
+  // Goods this player is after: their contracts and one run of each factory
+  const wantsOf = p => {
+    const w = {};
+    p.contracts.forEach(k => Object.entries(k.goods).forEach(([c, q]) => w[c] = Math.max(w[c] || 0, q)));
+    Object.entries(needsOf(p)).forEach(([c, q]) => w[c] = (w[c] || 0) + q);
+    return w;
+  };
+  const onOffer = (p, id) => vw.book.filter(o => o.pid === p.id && o.side === "sell" && o.good === id).reduce((s, o) => s + o.qty, 0);
 
   function dashboard(p) {
-    const used = G.used(p), worth = G.netWorth(vw, p);
+    const used = G.used(p), locked = G.lockedCash(vw, p), offered = G.offered(vw, p);
     const biz = G.myBusinesses(vw, p.id);
-    const stock = Object.entries(p.stock).sort((a, b) => b[1] * vw.prices[b[0]] - a[1] * vw.prices[a[0]]);
+    const stock = Object.entries(p.stock).sort((a, b) => b[1] - a[1]);
     const pv = middayPreview(p);
-    const discard = p.discard || [];
-    const bondV = p.bonds.reduce((s, b) => s + b.count * G.bondValue(vw, b), 0);
-    const etfV = Object.entries(p.etf).reduce((s, [k, u]) => s + u * G.etfPrice(vw, k), 0);
-    const futV = p.futures.reduce((s, f) => s + G.futureValue(vw, f), 0);
-    const effects = {};
-    G.activeEffects(st).forEach(e => { const k = e.card + "-" + e.by + "-" + e.from; (effects[k] ||= { e, list: [] }).list.push(e); });
-    const others = [...st.players].sort((a, b) => G.netWorth(st, b) - G.netWorth(st, a));
+    const canDiscard = p.discardRound !== st.round;
     return `
       <div class="dtop">
-        <div><span>Cash</span><b>${m(p.cash)}</b></div>
-        <div><span>Net worth</span><b>${m(worth)}</b></div>
+        <div><span>Points</span><b>${p.points}</b></div>
+        <div><span>Cash</span><b>${m(p.cash)}</b>${locked ? `<small class="muted">+${m(locked)} in buy orders</small>` : ""}</div>
       </div>
-      ${moneySection(p)}
       <div class="dsec">
-        <h4>Stockpile <em>${used}/${p.space}</em></h4>
-        <div class="dspace"><span style="width:${Math.min(100, used / p.space * 100)}%"></span></div>
-        ${stock.length ? `<div class="dchips">${stock.map(([c, q]) => `<span title="${m(q * vw.prices[c])}">${q} ${G.COM[c].name}</span>`).join("")}</div>` : `<p class="dnone">Empty</p>`}
+        <h4>Contracts <em>${p.delivered || 0} delivered</em></h4>
+        ${p.contracts.map(k => {
+          const ok = G.canDeliver(p, k);
+          return `<div class="dcon${ok ? " ready" : ""}">
+            <div class="dcon-h"><b>${k.points} pts</b>
+              <span><button class="glink" data-deliver="${k.id}" ${ok ? "" : "disabled"} title="${ok ? "Hand the goods over now" : "You don't have all of it yet (goods on offer don't count)"}">Deliver</button>
+              <button class="glink" data-discard="${k.id}" ${canDiscard ? "" : "disabled"} title="${canDiscard ? "Throw it away; a new one comes overnight (one a round)" : "You've already thrown one away this round"}">✕</button></span></div>
+            ${Object.entries(k.goods).map(([c, q]) => { const h = p.stock[c] || 0; return `<span class="${h >= q ? "ok" : ""}">${Math.min(h, q)}/${q} ${G.COM[c].name}</span>`; }).join("")}
+          </div>`;
+        }).join("") || `<p class="dnone">None. New ones come overnight.</p>`}
+      </div>
+      <div class="dsec">
+        <h4>Stockpile <em>${used + offered}/${p.space}</em></h4>
+        <div class="dspace"><span style="width:${Math.min(100, (used + offered) / p.space * 100)}%"></span></div>
+        ${stock.length ? `<div class="dchips">${stock.map(([c, q]) => `<span>${q} ${G.COM[c].name}</span>`).join("")}</div>` : `<p class="dnone">Empty</p>`}
+        ${offered ? `<p class="dhint">${offered} more on offer in sell orders (still in your stockpile).</p>` : ""}
         ${pv ? `<div class="dprev"><b>At midday:</b> ${Object.entries(pv.delta).map(([c, d]) => `<span class="${d > 0 ? "up" : "dn"}">${d > 0 ? "+" : "−"}${Math.abs(d)} ${G.COM[c].name}</span>`).join(" ") || "nothing changes"}
           ${pv.lost.length ? `<div class="dlost">⚠ Full: you'll throw away ${esc(pv.lost.join("; "))}</div>` : ""}</div>` : ""}
-        <div class="ddisc"><span>If full, throw away first:</span>
-          ${discard.map((c, i) => `<span class="dtag">${G.COM[c].name}<button data-disc-del="${i}" title="Remove">✕</button></span>`).join("")}
-          <select id="gDiscAdd"><option value="">${discard.length ? "+ add" : "cheapest first (choose…)"}</option>${COMMODITIES.filter(c => !discard.includes(c.id)).map(c => `<option value="${c.id}">${c.name}</option>`).join("")}</select>
-        </div>
       </div>
       <div class="dsec">
-        <h4>Businesses <em>${biz.length}${S.wageRate ? ` · wages ${m(biz.reduce((s, b) => s + G.wage(vw, b), 0))}/night` : ""}</em></h4>
+        <h4>Businesses <em>${biz.length}</em></h4>
         ${biz.map(b => {
           const t = G.BIZ_BY[b.type];
           const miss = Object.entries(t.inputs).filter(([c, q]) => (p.stock[c] || 0) < q);
@@ -247,119 +234,102 @@
         }).join("") || `<p class="dnone">None</p>`}
       </div>
       <div class="dsec">
-        <h4>Cards in play <em>${Object.keys(effects).length}</em></h4>
-        ${Object.values(effects).map(({ e, list }) => { const c = G.CARD[e.card], by = G.player(st, e.by);
-          return `<div class="deff"><b>${c.name}</b> <span class="muted">by ${by.id === p.id ? "you" : esc(by.name)} · ${e.until === Infinity ? "until repealed" : `${e.until - st.round + 1} round${e.until - st.round ? "s" : ""} left`}</span>
-            <span>${list.map(x => { const f = G.fxText([x.hook, x.target, x.op, x.v, null]); const t = x.target === "chosen commodity" && G.COM[x.targets[0]] ? G.COM[x.targets[0]].name : x.hook === "yield" || x.hook === "premium" ? x.target : f.on; return `${f.hook} ${esc(t)} ${f.amount}`; }).join(" · ")}</span></div>`; }).join("") || `<p class="dnone">None right now.</p>`}
-      </div>
-      <div class="dsec">
         <h4>Players</h4>
-        ${others.map(x => `<div class="dplayer${x.id === p.id ? " me" : ""}"><span><i style="background:${x.colour}"></i>${x.id === p.id ? "You" : esc(x.name)}</span>
-          <span class="muted">${G.TERR[x.pos].name} · ${G.myBusinesses(st, x.id).length} business${G.myBusinesses(st, x.id).length === 1 ? "" : "es"}</span><b>${m(G.netWorth(st, x))}</b></div>`).join("")}
+        ${G.ranking(st).map(x => `<div class="dplayer${x.id === p.id ? " me" : ""}"><span><i style="background:${x.colour}"></i>${x.id === p.id ? "You" : esc(x.name)}</span>
+          <span class="muted">${G.TERR[x.pos].name} · ${G.myBusinesses(st, x.id).length} business${G.myBusinesses(st, x.id).length === 1 ? "" : "es"} · ${m(G.totalCash(st, x))} cash</span><b>${x.points} pts</b></div>`).join("")}
       </div>`;
   }
 
-  // ----- Morning: the market -----
+  // ----- The market: one sealed auction at the end of every phase -----
+  // The list shows every good's book at a glance; clicking one opens its book and an order ticket.
+  // The book shown is the public one plus your own new orders (everyone else's new orders stay secret
+  // until the auction).
   function marketPanel(p) {
-    const need = needsOf(p);
-    const missing = Object.entries(need).filter(([c, q]) => (p.stock[c] || 0) < q);
-    const missCost = missing.reduce((s, [c, q]) => s + (q - (p.stock[c] || 0)) * vw.prices[c], 0);
-    const anyMine = COMMODITIES.some(c => p.stock[c.id] || need[c.id]);
+    const want = wantsOf(p);
+    const mine = c => p.stock[c.id] || want[c.id] || onOffer(p, c.id) || vw.book.some(o => o.pid === p.id && o.good === c.id);
+    const anyMine = COMMODITIES.some(mine);
     const filter = anyMine ? ui.filter : "all";
-    const rows = COMMODITIES.filter(c => {
-      if (ui.search) return c.name.toLowerCase().includes(ui.search);
-      return filter === "all" || p.stock[c.id] || need[c.id];
-    });
-    const chg = c => { const a = vw.lastPrices[c] ?? vw.prices[c], b = vw.prices[c]; return a ? b / a - 1 : 0; };
+    const rows = COMMODITIES.filter(c => ui.search ? c.name.toLowerCase().includes(ui.search) : filter === "all" || mine(c));
+    const sel = ui.good && G.COM[ui.good] ? ui.good : null;
     return `
       <div class="ghead">
         <h3>Market</h3>
-        <div class="gseg"><button data-f="mine" class="${filter === "mine" ? "on" : ""}" ${anyMine ? "" : "disabled"}>Mine &amp; needed</button><button data-f="all" class="${filter === "all" ? "on" : ""}">All 50</button></div>
+        <div class="gseg"><button data-f="mine" class="${filter === "mine" ? "on" : ""}" ${anyMine ? "" : "disabled"}>Mine &amp; wanted</button><button data-f="all" class="${filter === "all" ? "on" : ""}">All 50</button></div>
         <input class="gsearch" id="gSearch" placeholder="Search" value="${esc(ui.search)}">
       </div>
-      <div class="gquick">
-        ${missing.length ? `<button class="gbtn" id="gBuyMissing">Buy everything my businesses need (${m(missCost)})</button>` : `<span class="ok">✓ All your businesses have their inputs.</span>`}
-        <button class="gbtn ghost" id="gSpace">+${S.spaceUpgrade.crates} crates for ${G.spaceUpgradeCost(p)}</button>
-      </div>
-      <table class="gmkt"><thead><tr><th>Commodity</th><th class="n">Price</th><th class="n">Change</th><th class="n">Have</th><th class="n">Need</th><th></th></tr></thead><tbody>
+      <p class="muted small">At the end of this phase every good trades at a single price: the one where the most units change hands. Everyone who trades gets that price; if you bid more, you pay less. Orders stay on the book until they fill or you cancel them.</p>
+      ${sel ? ticket(p, sel, want) : ""}
+      <table class="gmkt gbook-list"><thead><tr><th>Good</th><th class="n">Bid</th><th class="n">Ask</th><th class="n">Last</th><th class="n" title="Units traded in the last 3 rounds">Vol</th><th class="n">Have</th><th class="n">Want</th></tr></thead><tbody>
       ${rows.map(c => {
-        const pr = vw.prices[c.id], ch = chg(c.id), have = p.stock[c.id] || 0;
-        return `<tr><td>${c.name}</td><td class="n"><b>${m(pr)}</b></td>
-          <td class="n ${ch > 0.005 ? "up" : ch < -0.005 ? "dn" : ""}">${Math.abs(ch) < 0.005 ? "—" : (ch > 0 ? "▲" : "▼") + Math.abs(ch * 100).toFixed(0) + "%"}</td>
-          <td class="n">${have || ""}</td><td class="n">${need[c.id] || ""}</td>
-          <td class="acts">
-            ${have ? `<button data-sell="${c.id}" data-q="${have}" title="Sell all">${pr >= 0 ? "Sell all" : "Dump all"}</button><button data-sell="${c.id}" data-q="1">−1</button>` : ""}
-            ${pr > 0 ? `<button data-buy="${c.id}" data-q="1">+1</button><button data-buy="${c.id}" data-q="5">+5</button>` : ""}
-          </td></tr>`;
-      }).join("") || `<tr><td colspan="6" class="muted">Nothing here yet. Try "All 50".</td></tr>`}
-      </tbody></table>
-      <p class="muted small">Prices are fixed until midday, then move with what everyone holds and needs.</p>`;
+        const q = G.quote(vw, c.id, 6), have = p.stock[c.id] || 0, mineHere = vw.book.some(o => o.pid === p.id && o.good === c.id);
+        return `<tr data-good="${c.id}" class="${c.id === sel ? "sel" : ""}"><td>${c.name}${mineHere ? ` <span class="gmine" title="You have orders here">●</span>` : ""}</td>
+          <td class="n">${q.bid != null ? `${m(q.bid)} <small>×${q.bids[0].qty}</small>` : "–"}</td>
+          <td class="n">${q.ask != null ? `${m(q.ask)} <small>×${q.asks[0].qty}</small>` : "–"}</td>
+          <td class="n">${q.last ? m(q.last.price) : "–"}</td><td class="n">${q.volume || ""}</td>
+          <td class="n">${have || ""}${onOffer(p, c.id) ? `<small> +${onOffer(p, c.id)}</small>` : ""}</td><td class="n">${want[c.id] || ""}</td></tr>`;
+      }).join("") || `<tr><td colspan="7" class="muted">Nothing here yet. Try "All 50".</td></tr>`}
+      </tbody></table>`;
   }
 
-  // ----- Morning: the broker -----
-  function brokerPanel(p) {
-    const BK = BROKER, limit = G.borrowLimit(vw, p), room = Math.max(0, limit - p.loan);
-    const nextReview = Math.ceil((st.round + 0.5) / BK.centralBank.reviewEvery) * BK.centralBank.reviewEvery;
-    const fc = ui.fut || (ui.fut = { cid: "wheat", side: "long", qty: 10, rounds: 3 });
-    const fPrice = G.futuresPrice(vw, fc.cid, fc.rounds), fDep = fPrice * fc.qty * BK.futures.deposit * ((G.financeMods(vw).futMargin) || 1);
-    return `
-      <div class="gcb">Central bank base rate <b>${(vw.baseRate * 100).toFixed(2)}%</b> · next review end of round ${nextReview} · the government lets you borrow <b>${Math.round(G.borrowLimitShare(vw) * 100)}%</b> of what you own</div>
-      <div class="gbk">
-        <section><h4>Loan</h4>
-          <div class="gkv"><span>Owed</span><b>${m(p.loan)}</b><span>Rate</span><b>${(G.loanRate(vw, p) * 100).toFixed(2)}%/round</b><span>Limit</span><b>${m(limit)}</b><span>Can borrow</span><b>${m(room)}</b></div>
-          <div class="grow2"><input type="number" id="gLoanAmt" min="1" step="10" value="${Math.min(100, Math.floor(room)) || 100}"><button data-fin="borrow">Borrow</button><button data-fin="repay" ${p.loan ? "" : "disabled"}>Repay</button></div>
-          <p class="muted small">Each night you pay the interest plus 5% of the loan. If it ends up over your limit, the bank sells your things 20% under market.</p>
-        </section>
-        <section><h4>Government bonds <span class="muted">new ones pay ${(G.bondRateNow(vw) * 100).toFixed(2)}%/round</span></h4>
-          <div class="grow2"><select id="gBondLen">${BK.bonds.lengths.map(l => `<option value="${l}">${l} rounds</option>`).join("")}</select><input type="number" id="gBondN" min="1" value="1"><button data-fin="buyBond">Buy (100 each)</button></div>
-          ${p.bonds.map(b => `<div class="gpos">${b.count} × ${b.length}-round at ${(b.rate * 100).toFixed(2)}% · ${b.left} left · worth ${m(b.count * G.bondValue(vw, b))}<button data-sellbond="${b.id}">Sell</button></div>`).join("")}
-        </section>
-        <section><h4>Futures</h4>
-          <div class="grow2"><select id="gFutC">${COMMODITIES.filter(c => c.type !== "waste").map(c => `<option value="${c.id}"${c.id === fc.cid ? " selected" : ""}>${c.name}</option>`).join("")}</select>
-            <select id="gFutSide"><option value="long"${fc.side === "long" ? " selected" : ""}>Long (buy)</option><option value="short"${fc.side === "short" ? " selected" : ""}>Short (sell)</option></select></div>
-          <div class="grow2"><label>Units <input type="number" id="gFutQ" min="1" value="${fc.qty}"></label><label>Rounds <input type="number" id="gFutR" min="1" max="${BK.futures.maxRounds}" value="${fc.rounds}"></label><button data-fin="openFuture">Open</button></div>
-          <p class="muted small">Price ${m(fPrice)} each (today ${m(vw.prices[fc.cid])}) · deposit ${m(fDep)}. On the day you get (price then − ${m(fPrice)}) × units${fc.side === "short" ? ", the other way round" : ""}.</p>
-          ${p.futures.map(f => `<div class="gpos">${f.side === "long" ? "Long" : "Short"} ${f.qty} ${G.COM[f.cid].name} at ${m(f.price)} · settles round ${f.settle} · worth ${m(G.futureValue(vw, f))}<button data-closefut="${f.id}">Close</button></div>`).join("")}
-        </section>
-        <section><h4>Sector ETFs <span class="muted">no stockpile space needed</span></h4>
-          <table class="gmkt"><tbody>${Object.keys(SECTORS).map(k => `<tr><td><b>${BK.etfs.tickers[k]}</b> <span class="muted">${SECTORS[k].name}</span></td><td class="n">${m(G.etfPrice(vw, k))}</td><td class="n">${p.etf[k] || ""}</td>
-            <td class="acts">${p.etf[k] ? `<button data-etf-sell="${k}">−1</button>` : ""}<button data-etf-buy="${k}" data-q="1">+1</button><button data-etf-buy="${k}" data-q="5">+5</button></td></tr>`).join("")}</tbody></table>
-        </section>
-      </div>`;
-  }
-
-  // ----- Afternoon: move or build, and cards -----
-  function afternoonPanel(p) {
-    const here = p.pos, info = TERRITORY_INFO[here];
-    const opts = G.buildable(vw, here, p.id).map(o => ({ ...o, profit: G.bizProfit(vw, o.b, here) })).sort((a, b) => b.profit / b.cost - a.profit / a.cost);
-    const res = Object.entries(info.res).sort((a, b) => b[1] - a[1]);
-    const card = ui.card && p.hand.includes(ui.card) ? G.CARD[ui.card] : null;
-    const needs = card ? G.cardNeeds(card) : {};
-    return `
-      <div class="ghead"><h3>${G.TERR[here].name}</h3><span class="muted">${G.isSea(here) ? "Sea" : G.coastal(here) ? "Coastal" : "Inland"} · cost level ×${info.cost ?? 1}${res.length ? " · " + res.map(([c, r]) => `${G.COM[c].name} ${"★".repeat(r)}`).join(", ") : ""}</span></div>
+  // One good: its book, recent trades, your orders and the order form
+  function ticket(p, id, want) {
+    const q = G.quote(vw, id, 6), c = G.COM[id];
+    const t = ui.ticket[id] ||= { side: (p.stock[id] || 0) > (want[id] || 0) ? "sell" : "buy", price: "", qty: "" };
+    const yours = (side, price) => vw.book.filter(o => o.pid === p.id && o.good === id && o.side === side && o.price === price).reduce((s, o) => s + o.qty, 0);
+    const lv = (x, side) => { const y = yours(side, x.price); return `<tr class="${side}"><td class="n">${side === "sell" ? m(x.price) : ""}</td><td class="n">${x.qty - y || ""}${y ? ` <b class="gmine">+${y} yours</b>` : ""}</td><td class="n">${side === "buy" ? m(x.price) : ""}</td></tr>`; };
+    const asks = q.asks.slice(0, 6).reverse(), bids = q.bids.slice(0, 6);
+    const trades = st.history.filter(h => h.trades[id]).slice(-6).reverse();
+    const myOrders = vw.book.filter(o => o.pid === p.id && o.good === id);
+    const isNew = o => !st.book.some(x => x.id === o.id);
+    const suggest = t.side === "buy" ? q.ask ?? q.last?.price ?? q.bid : q.bid ?? q.last?.price ?? q.ask;
+    const have = p.stock[id] || 0;
+    return `<div class="gticket">
+      <div class="ghead"><h3>${c.name}</h3><span class="muted">${q.last ? `last ${m(q.last.price)} (${q.last.qty} traded, round ${q.last.round} ${q.last.phase})` : "never traded"}${q.spread != null ? ` · spread ${Math.round(q.spread * 100)}%` : ""}</span><span class="gsp"></span><button class="glink" id="gTicketClose" title="Close">✕</button></div>
       <div class="gtwo">
         <div>
-          <h4>${p.acted ? "Done for this afternoon ✓" : "Move <span class=\"muted\">(or click the map)</span>"}</h4>
-          <div class="gmoves">${G.neighbours(here).map(t => `<button data-move="${t}" ${p.acted ? "disabled" : ""}>${G.TERR[t].name}</button>`).join("")}</div>
-          <h4>…or build here</h4>
-          ${opts.length ? `<table class="gmkt"><thead><tr><th>Business</th><th class="n">Crates*</th><th class="n">Earns/round*</th><th class="n">Cost</th><th></th></tr></thead><tbody>
-            ${opts.map(o => { const crates = Object.values(o.b.inputs).reduce((x, y) => x + y, 0); return `<tr><td>${o.b.name}</td><td class="n ${crates > p.space ? "bad" : ""}">${crates || "—"}</td><td class="n ${o.profit > 0 ? "up" : "dn"}">${m(o.profit)}</td><td class="n">${m(o.cost)}</td>
-              <td class="acts"><button data-build="${o.b.id}" ${p.acted || o.cost > p.cash ? "disabled" : ""}>Build</button></td></tr>`; }).join("")}
-          </tbody></table><p class="muted small">* Crates: stockpile space its inputs take each round (you have ${p.space}). Earns: outputs minus inputs and wages, at today's prices.</p>` : `<p class="muted">Nothing can be built here.</p>`}
+          <h4>Book</h4>
+          <table class="gmkt gladder"><thead><tr><th class="n">Ask</th><th class="n">Qty</th><th class="n">Bid</th></tr></thead><tbody>
+            ${asks.map(x => lv(x, "sell")).join("") || `<tr><td colspan="3" class="muted">No one selling</td></tr>`}
+            <tr class="mid"><td colspan="3">${q.spread != null ? `spread ${m(q.ask - q.bid)}` : q.last ? `last ${m(q.last.price)}` : ""}</td></tr>
+            ${bids.map(x => lv(x, "buy")).join("") || `<tr><td colspan="3" class="muted">No one buying</td></tr>`}
+          </tbody></table>
+          ${q.asks.length > 6 || q.bids.length > 6 ? `<p class="muted small">Showing the best 6 prices each side.</p>` : ""}
+          <h4>Recent trades</h4>
+          ${trades.length ? `<div class="dchips">${trades.map(h => `<span>R${h.round} ${h.phase.slice(0, 3)}: ${h.trades[id].qty} at ${m(h.trades[id].price)}</span>`).join("")}</div>` : `<p class="muted small">None yet.</p>`}
         </div>
         <div>
-          <h4>Your cards <em>${p.hand.length}/${S.handMax}</em> ${p.cardsPlayed ? "· played one ✓" : ""}</h4>
-          <div class="ghand">${p.hand.map((id, i) => { const c = G.CARD[id]; return `<button class="gcard ${c.cat}${ui.card === id ? " sel" : ""}" data-card="${id}" ${p.cardsPlayed >= S.cardsPerAfternoon ? "disabled" : ""}><b>${c.name}</b><span>${esc(c.text)}</span><ul>${c.fx.map(f => { const t = G.fxText(f); return `<li><b>${t.hook}</b> ${esc(t.on)} <em>${t.amount}</em> · ${t.dur}</li>`; }).join("")}</ul></button>`; }).join("") || `<p class="muted">No cards.</p>`}</div>
-          ${card ? `<div class="gplay">
-            <b>Play ${card.name}?</b> It takes effect overnight.
-            ${needs.commodity ? `<label>Commodity <select id="gcCom">${COMMODITIES.map(c => `<option value="${c.id}">${c.name}</option>`).join("")}</select></label>` : ""}
-            ${needs.ownBusiness ? `<label>Your business <select id="gcOwn">${G.myBusinesses(vw, p.id).map(b => `<option value="${b.id}">${G.BIZ_BY[b.type].name}, ${G.TERR[b.territory].name}</option>`).join("")}</select></label>` : ""}
-            ${needs.targetBusiness ? `<label>Target <select id="gcTgt">${vw.businesses.filter(b => b.owner !== p.id).map(b => `<option value="${b.id}">${esc(G.player(vw, b.owner).name)}'s ${G.BIZ_BY[b.type].name}, ${G.TERR[b.territory].name}</option>`).join("")}</select></label>` : ""}
-            ${needs.targetPlayer ? `<label>Player <select id="gcPl">${vw.players.filter(x => x.id !== p.id).map(x => `<option value="${x.id}">${esc(x.name)}</option>`).join("")}</select></label>` : ""}
-            <button class="gbtn" id="gPlay">Play it</button> <button class="gbtn ghost" id="gCancel">Cancel</button>
-          </div>` : ""}
+          <h4>New order</h4>
+          <div class="gseg"><button data-side="buy" class="${t.side === "buy" ? "on" : ""}">Buy</button><button data-side="sell" class="${t.side === "sell" ? "on" : ""}">Sell</button></div>
+          <div class="gform">
+            <label>Price each <input type="number" id="gPrice" min="0.01" step="0.01" value="${t.price || (suggest != null ? suggest : "")}" placeholder="price"></label>
+            <label>Quantity <input type="number" id="gQty" min="1" step="1" value="${t.qty || (t.side === "sell" ? have : Math.max(1, (want[id] || 0) - have)) || 1}"></label>
+            <button class="gbtn" id="gPlace">${t.side === "buy" ? "Place buy order" : "Place sell order"}</button>
+          </div>
+          <p class="muted small">${t.side === "buy" ? `Locks price × quantity of your cash (${m(p.cash)} free) until it fills or you cancel.` : `Locks the goods: you have ${have} not already on offer.`}</p>
+          <h4>Your orders</h4>
+          ${myOrders.map(o => `<div class="gpos">${o.side === "buy" ? "Buy" : "Sell"} ${o.qty} at ${m(o.price)}${isNew(o) ? ` <em>new</em>` : ""}<button data-cancel="${o.id}" data-new="${isNew(o) ? 1 : ""}">Cancel</button></div>`).join("") || `<p class="muted small">None.</p>`}
         </div>
-      </div>`;
+      </div>
+    </div>`;
+  }
+
+  // ----- Afternoon: move or build (paid in goods) -----
+  function afternoonPanel(p) {
+    const here = p.pos, info = TERRITORY_INFO[here];
+    const opts = G.buildable(vw, here, p.id).sort((a, b) => G.bizTier(a.b) - G.bizTier(b.b) || a.b.name.localeCompare(b.b.name));
+    const res = Object.entries(info.res).sort((a, b) => b[1] - a[1]);
+    const io = b => b.kind === "extract" ? `makes ${Math.floor(b.outputs[b.makes] * G.richness(b, here) * S.extractOutput)} ${G.COM[b.makes].name}`
+      : `${Object.entries(b.inputs).map(([c, q]) => `${q} ${G.COM[c].name}`).join(" + ")} → ${Object.entries(b.outputs).map(([c, q]) => `${q} ${G.COM[c].name}`).join(" + ")}`;
+    return `
+      <div class="ghead"><h3>${G.TERR[here].name}</h3><span class="muted">${G.isSea(here) ? "Sea" : G.coastal(here) ? "Coastal" : "Inland"} · cost level ×${info.cost ?? 1}${res.length ? " · " + res.map(([c, r]) => `${G.COM[c].name} ${"★".repeat(r)}`).join(", ") : ""}</span></div>
+      <h4 class="gsub">${p.acted ? "Done for this afternoon ✓" : "Move <span class=\"muted\">(or click the map)</span>"}</h4>
+      <div class="gmoves">${G.neighbours(here).map(t => `<button data-move="${t}" ${p.acted ? "disabled" : ""}>${G.TERR[t].name}</button>`).join("")}</div>
+      <h4 class="gsub">…or build here <span class="muted">(paid in goods from your stockpile)</span></h4>
+      ${opts.length ? `<table class="gmkt"><thead><tr><th>Business</th><th>Each round</th><th>Costs</th><th></th></tr></thead><tbody>
+        ${opts.map(o => { const ok = G.canAfford(p, o.cost); return `<tr><td>${o.b.name}</td><td class="muted small">${io(o.b)}</td>
+          <td>${Object.entries(o.cost).map(([c, q]) => `<span class="${(p.stock[c] || 0) >= q ? "" : "bad"}">${q} ${G.COM[c].name}</span>`).join(" + ")}</td>
+          <td class="acts"><button data-build="${o.b.id}" ${p.acted || !ok ? "disabled" : ""}>Build</button></td></tr>`; }).join("")}
+      </tbody></table>` : `<p class="muted">Nothing can be built here.</p>`}`;
   }
 
   // ----- Map -----
@@ -409,55 +379,48 @@
     root.querySelectorAll("[data-f]").forEach(b => b.addEventListener("click", () => { ui.filter = b.dataset.f; ui.search = ""; render(); }));
     const s = root.querySelector("#gSearch");
     if (s) s.addEventListener("input", () => { ui.search = s.value.toLowerCase(); const pos = s.selectionStart; render(); const n = root.querySelector("#gSearch"); n.focus(); n.setSelectionRange(pos, pos); });
-    root.querySelectorAll("[data-buy]").forEach(b => b.addEventListener("click", () => doAct("buy", { id: b.dataset.buy, qty: +b.dataset.q })));
-    root.querySelectorAll("[data-sell]").forEach(b => b.addEventListener("click", () => doAct("sell", { id: b.dataset.sell, qty: +b.dataset.q })));
-    root.querySelector("#gSpace")?.addEventListener("click", () => doAct("upgradeSpace"));
-    root.querySelector("#gBuyMissing")?.addEventListener("click", () => {
-      const need = needsOf(p); let msg = "";
-      for (const [c, q] of Object.entries(need)) {
-        const miss = q - (p.stock[c] || 0);
-        if (miss > 0) { msg = tryOrder("buy", { id: c, qty: miss }); if (msg) break; }
-      }
+    root.querySelectorAll("[data-tab]").forEach(b => b.addEventListener("click", () => { ui.tab = b.dataset.tab; render(); }));
+    // Market: pick a good, then the order ticket
+    root.querySelectorAll("tr[data-good]").forEach(tr => tr.addEventListener("click", () => { ui.good = ui.good === tr.dataset.good ? null : tr.dataset.good; render(); }));
+    root.querySelector("#gTicketClose")?.addEventListener("click", () => { ui.good = null; render(); });
+    const t = ui.good && ui.ticket[ui.good];
+    const keep = () => { if (!t) return; t.price = root.querySelector("#gPrice")?.value || ""; t.qty = root.querySelector("#gQty")?.value || ""; };
+    root.querySelectorAll("[data-side]").forEach(b => b.addEventListener("click", () => { t.side = b.dataset.side; t.price = t.qty = ""; render(); }));
+    ["#gPrice", "#gQty"].forEach(id => root.querySelector(id)?.addEventListener("input", keep));
+    root.querySelector("#gPlace")?.addEventListener("click", () => {
+      keep();
+      const msg = tryOrder("placeOrder", { id: ui.good, side: t.side, price: +t.price, qty: +t.qty });
+      if (!msg) t.price = t.qty = "";
       flash(msg); render();
     });
-    root.querySelectorAll("[data-tab]").forEach(b => b.addEventListener("click", () => { ui.tab = b.dataset.tab; render(); }));
-    // Throw-away list: one setDiscard order, replaced whenever it changes
-    const setDiscard = list => { ui.orders = ui.orders.filter(o => o.name !== "setDiscard"); doAct("setDiscard", { list }); };
-    root.querySelector("#gDiscAdd")?.addEventListener("change", e => { if (e.target.value) setDiscard([...(p.discard || []), e.target.value]); });
-    root.querySelectorAll("[data-disc-del]").forEach(b => b.addEventListener("click", () => setDiscard((p.discard || []).filter((_, i) => i !== +b.dataset.discDel))));
-    // Broker
-    const num = id => +root.querySelector(id)?.value;
-    root.querySelectorAll("[data-fin]").forEach(b => b.addEventListener("click", () => {
-      const k = b.dataset.fin;
-      if (k === "borrow" || k === "repay") doAct(k, { amount: num("#gLoanAmt") });
-      if (k === "buyBond") doAct(k, { length: num("#gBondLen"), count: num("#gBondN") });
-      if (k === "openFuture") doAct(k, { cid: ui.fut.cid, side: ui.fut.side, qty: ui.fut.qty, rounds: ui.fut.rounds });
-    }));
-    ["#gFutC", "#gFutSide", "#gFutQ", "#gFutR"].forEach(id => root.querySelector(id)?.addEventListener("change", () => {
-      ui.fut = { cid: root.querySelector("#gFutC").value, side: root.querySelector("#gFutSide").value, qty: Math.max(1, num("#gFutQ")), rounds: Math.min(BROKER.futures.maxRounds, Math.max(1, num("#gFutR"))) };
+    root.querySelector("#gQty")?.addEventListener("keydown", e => { if (e.key === "Enter") root.querySelector("#gPlace").click(); });
+    // Cancel: an order already on the book becomes a cancel order; a new one is just taken back
+    root.querySelectorAll("[data-cancel]").forEach(b => b.addEventListener("click", () => {
+      const id = +b.dataset.cancel;
+      if (!b.dataset.new) return doAct("cancelOrder", { order: id });
+      // New orders get the next ids in the order they were placed
+      let k = st.nextOrderId - 1;
+      const i = ui.orders.findIndex(o => o.name === "placeOrder" && ++k === id);
+      const next = ui.orders.filter((_, j) => j !== i);
+      if (i < 0 || G.draft(st, ui.seat, next).error) flash("Can't take that back: later orders depend on it. Remove those first.");
+      else ui.orders = next;
       render();
     }));
-    root.querySelectorAll("[data-sellbond]").forEach(b => b.addEventListener("click", () => doAct("sellBond", { id: +b.dataset.sellbond })));
-    root.querySelectorAll("[data-closefut]").forEach(b => b.addEventListener("click", () => doAct("closeFuture", { id: +b.dataset.closefut })));
-    root.querySelectorAll("[data-etf-buy]").forEach(b => b.addEventListener("click", () => doAct("buyEtf", { sector: b.dataset.etfBuy, units: +b.dataset.q })));
-    root.querySelectorAll("[data-etf-sell]").forEach(b => b.addEventListener("click", () => doAct("sellEtf", { sector: b.dataset.etfSell, units: 1 })));
+    // Contracts
+    root.querySelectorAll("[data-deliver]").forEach(b => b.addEventListener("click", () => doAct("deliver", { contract: +b.dataset.deliver })));
+    root.querySelectorAll("[data-discard]").forEach(b => b.addEventListener("click", () => { if (confirm("Throw this contract away? A new one comes overnight.")) doAct("discardContract", { contract: +b.dataset.discard }); }));
+    // Afternoon
     root.querySelectorAll("[data-move]").forEach(b => b.addEventListener("click", () => doAct("move", { to: b.dataset.move })));
     root.querySelectorAll("[data-build]").forEach(b => b.addEventListener("click", () => doAct("build", { type: b.dataset.build })));
-    root.querySelectorAll("[data-card]").forEach(b => b.addEventListener("click", () => { ui.card = +b.dataset.card; render(); }));
-    root.querySelector("#gCancel")?.addEventListener("click", () => { ui.card = null; render(); });
-    root.querySelector("#gPlay")?.addEventListener("click", () => {
-      const args = { card: ui.card, commodity: root.querySelector("#gcCom")?.value, ownBusiness: root.querySelector("#gcOwn")?.value, targetBusiness: root.querySelector("#gcTgt")?.value, targetPlayer: root.querySelector("#gcPl")?.value };
-      ui.card = null; doAct("playCard", args);
-    });
   }
 
   // ----- End of game -----
   function renderEnd() {
-    const rank = [...st.players].sort((a, b) => G.netWorth(st, b) - G.netWorth(st, a));
+    const rank = G.ranking(st);
     root.innerHTML = `<div class="gsetup">
       <h1>${esc(rank[0].name)} wins</h1>
-      <table class="gplayers"><thead><tr><th>#</th><th>Player</th><th class="n">Net worth</th><th class="n">Cash</th><th class="n">Businesses</th></tr></thead><tbody>
-      ${rank.map((p, i) => `<tr><td>${i + 1}</td><td><i class="gdot" style="background:${p.colour}"></i>${esc(p.name)}</td><td class="n"><b>${m(G.netWorth(st, p))}</b></td><td class="n">${m(p.cash)}</td><td class="n">${G.myBusinesses(st, p.id).length}</td></tr>`).join("")}
+      <table class="gplayers"><thead><tr><th>#</th><th>Player</th><th class="n">Points</th><th class="n">Contracts</th><th class="n">Cash</th><th class="n">Businesses</th></tr></thead><tbody>
+      ${rank.map((p, i) => `<tr><td>${i + 1}</td><td><i class="gdot" style="background:${p.colour}"></i>${esc(p.name)}</td><td class="n"><b>${p.points}</b></td><td class="n">${p.delivered || 0}</td><td class="n">${m(G.totalCash(st, p))}</td><td class="n">${G.myBusinesses(st, p.id).length}</td></tr>`).join("")}
       </tbody></table>
       <div class="grow"><button class="gbtn" id="gAgain">New game</button></div></div>`;
     root.querySelector("#gAgain").addEventListener("click", () => { st = null; localStorage.removeItem(KEY); render(); });
@@ -465,6 +428,6 @@
 
   // Start: continue a saved game in progress, or show setup
   const saved = load();
-  st = saved && saved.version === 5 && !saved.over ? saved : null;
+  st = saved && saved.version === 6 && !saved.over ? saved : null;
   render();
 })();
