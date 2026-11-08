@@ -110,7 +110,7 @@
     const a = o.args || {};
     if (o.name === "placeOrder") return `${a.side === "buy" ? "Bid for" : "Offer"} ${a.qty} ${G.COM[a.id].name} at ${m(+a.price)} <em>${m(a.qty * a.price)}</em>`;
     if (o.name === "cancelOrder") { const x = st.book.find(y => y.id === a.order); return x ? `Cancel ${x.side === "buy" ? "bid for" : "offer of"} ${x.qty} ${G.COM[x.good].name} at ${m(x.price)}` : "Cancel an order"; }
-    if (o.name === "deliver") return `Deliver a contract`;
+    if (o.name === "deliver") { const k = G.player(st, ui.seat).contracts.find(x => x.id === a.contract); if (!k) return "Produce a contract"; const it = G.contractItem(k); return `Produce ${it.icon} ${esc(it.name.toLowerCase())}`; }
     if (o.name === "discardContract") return `Throw away a contract`;
     if (o.name === "dump") return `Throw away ${a.qty} ${G.COM[a.id].name}`;
     if (o.name === "upgradeSpace") return `+${S.spaceUpgrade.crates} crates of space`;
@@ -130,6 +130,36 @@
   };
   let flashMsg = "", qTimer = null, dStop = () => {}; // qTimer: the quote board replay; dStop: stops the order book replay
   const flash = msg => { flashMsg = msg; };
+  // A section that starts closed and stays however the player left it (render() rebuilds the page)
+  const fold = (key, cls, summary, body) => `<details class="${cls} fold" data-fold="${key}" ${ui.open?.[key] ? "open" : ""}><summary>${summary}</summary>${body}</details>`;
+
+  // Keep the page still on clicks: most buttons redraw everything, and things above the button can change
+  // height. So note where the clicked element (or its nearest findable ancestor) sits on screen, and after
+  // the redraw scroll so its new copy sits in the same place.
+  let anchor = null;
+  const sig = e => {
+    if (e.id) return `#${CSS.escape(e.id)}`;
+    const a = [...e.attributes].find(x => x.name.startsWith("data-") && x.name !== "data-tip");
+    if (a) return `${e.tagName.toLowerCase()}[${a.name}="${CSS.escape(a.value)}"]`;
+    const c = ["gticket", "qboard", "gorders", "gpanel", "gdash", "gmap"].find(c => e.classList.contains(c));
+    return c ? `.${c}` : null;
+  };
+  root.addEventListener("click", e => {
+    const chain = [];
+    for (let el = e.target; el && el !== root; el = el.parentElement) {
+      const s = sig(el); if (!s) continue;
+      chain.push({ s, i: [...root.querySelectorAll(s)].indexOf(el), top: el.getBoundingClientRect().top });
+    }
+    anchor = chain.length ? chain : null;
+    setTimeout(() => anchor = null); // only for redraws caused by this click
+  }, true);
+  function keepPlace() {
+    if (!anchor) return;
+    for (const a of anchor) {
+      const el = root.querySelectorAll(a.s)[a.i];
+      if (el) { window.scrollBy(0, el.getBoundingClientRect().top - a.top); break; }
+    }
+  }
 
   function render() {
     if (!st) return renderSetup();
@@ -152,7 +182,8 @@
         <button class="gbtn ghost" id="gNew" title="Start a new game">New game</button>
       </div>
       ${flashMsg ? `<div class="gflash">${esc(flashMsg)}</div>` : ""}
-      ${news.length ? `<div class="gnews"><div><b>What happened since your last orders</b><button class="glink" id="gNewsOk">✕</button></div>${news.filter(l => !/^Round \d/.test(l.msg)).slice(-40).map(l => `<span class="${l.pid === p.id ? "mine" : l.pid ? "" : "pub"}">${who(l)}${esc(l.msg)}</span>`).join("")}</div>` : ""}
+      ${news.length ? (n => fold("news", "gnews", `<b>What happened since your last orders <span class="muted small">${n.length} event${n.length === 1 ? "" : "s"}</span></b><button class="glink" id="gNewsOk" title="Dismiss">✕</button>`,
+        n.map(l => `<span class="${l.pid === p.id ? "mine" : l.pid ? "" : "pub"}">${who(l)}${esc(l.msg)}</span>`).join("")))(news.filter(l => !/^Round \d/.test(l.msg)).slice(-40)) : ""}
       <div class="glay">
         <div class="gmain ${st.phase}">
           <div class="gmap" id="gMap"></div>
@@ -170,6 +201,7 @@
     flashMsg = "";
     drawMap(p);
     wire(p);
+    keepPlace();
   }
 
   function renderPass(seat) {
@@ -265,7 +297,7 @@
     const ids = new Set(st.book.map(o => o.good));
     st.history.forEach(h => { Object.keys(h.trades).forEach(i => ids.add(i)); Object.keys(h.quotes || {}).forEach(i => ids.add(i)); Object.keys(h.pre || {}).forEach(i => ids.add(i)); });
     const busy = id => st.history.reduce((s, h) => s + (h.trades[id] ? 2 : 0) + (h.quotes?.[id] ? 1 : 0), 0) + (st.book.some(o => o.good === id) ? 1 : 0);
-    const goods = [...ids].sort((a, b) => busy(b) - busy(a) || G.COM[a].name.localeCompare(G.COM[b].name)).slice(0, 24);
+    const goods = [...ids].sort((a, b) => busy(b) - busy(a) || G.COM[a].name.localeCompare(G.COM[b].name)).slice(0, 10);
     // Two frames per auction: the book with everyone's orders in (bids can cross asks), then what's left
     // after it cleared, with the trades. (Auctions from before this was recorded only have the second.)
     const qs = (src, id) => { const x = src?.[id]; return x ? [id, [x.bid, x.ask, x.bq || 0, x.aq || 0]] : null; };
@@ -309,10 +341,11 @@
     const lastTrade = id => st.lastTrade[id]?.price ?? null, f = d.frames.at(-1);
     ui.board = d; // the replay reads this
     return `<section class="msec qboard">
-      <h3>Quote board <span class="muted small">bid ↔ ask for each good; the dot is the last trade</span></h3>
-      <div class="qctl"><div class="gseg"><button data-rmode="last" class="${ui.rmode !== "game" ? "on" : ""}">Last auction</button><button data-rmode="game" class="${ui.rmode === "game" ? "on" : ""}">Whole game</button></div>
+      <div class="qhead"><h3>Quote board <span class="muted small">bid ↔ ask for each good; the dot is the last trade</span></h3>
+        <button class="gbtn ghost" id="qOpen" ${ui.qOpen ? "hidden" : ""}>▶ Replay</button></div>
+      <div class="qctl" ${ui.qOpen ? "" : "hidden"}><div class="gseg"><button data-rmode="last" class="${ui.rmode !== "game" ? "on" : ""}">Last auction</button><button data-rmode="game" class="${ui.rmode === "game" ? "on" : ""}">Whole game</button></div>
         <button class="gbtn ghost" id="qPlay">▶ Replay</button><input type="range" id="qSlide" min="${ui.rmode === "game" ? 0 : d.lastStart}" max="${d.frames.length - 1}" value="${d.frames.length - 1}" aria-label="Step through the auctions">
-        <span id="qLabel" class="muted small">${f.label}</span></div>
+        <span id="qLabel" class="muted small">${f.label}</span><button class="glink" id="qClose" title="Close the replay">✕</button></div>
       <div class="qgrid" id="qGrid">${d.goods.map(id => cardHTML(id, cardState(d, id, f, lastTrade(id)), fresh.has(id))).join("")}</div>
     </section>`;
   }
@@ -352,16 +385,26 @@
         <div><span>Cash</span><b>${m(p.cash)}</b>${locked ? `<small class="muted">+${m(locked)} in buy orders</small>` : ""}</div>
       </div>
       <div class="dsec">
-        <h4>Contracts <em>${p.delivered || 0} delivered</em></h4>
+        <h4>Contracts <em>${p.delivered || 0} made</em></h4>
+        ${(() => { const all = p.made || [], done = (G.player(st, p.id).made || []).length; // made this turn: shown as cards until you submit
+          return all.slice(done).map(x => `<div class="kc made">
+            <div class="kc-top"><span class="kc-icon">${x.icon}</span><div class="kc-title"><b>${esc(x.name)}</b><small>Made when you submit · undo it in your orders</small></div><span class="kc-pts">+${x.points}<small>pts</small></span></div>
+            <div class="kc-bar"><i style="width:100%"></i></div></div>`).join(""); })()}
         ${p.contracts.map(k => {
-          const ok = G.canDeliver(vw, p, k);
-          return `<div class="dcon${ok ? " ready" : ""}">
-            <div class="dcon-h"><b>${k.points} pts</b>
-              <span><button class="glink" data-deliver="${k.id}" ${ok ? "" : "disabled"} title="${ok ? "Hand the goods over now" : "You don't have all of it yet (goods on offer don't count)"}">Deliver</button>
-              <button class="glink" data-discard="${k.id}" ${canDiscard ? "" : "disabled"} title="${canDiscard ? "Throw it away; a new one comes overnight (one a round)" : "You've already thrown one away this round"}">✕</button></span></div>
-            ${Object.entries(k.goods).map(([c, q]) => { const h = have(p, c); return `<button class="dgood ${h >= q ? "ok" : ""}" data-good="${c}" title="Open ${G.COM[c].name} in the market">${Math.min(h, q)}/${q} ${G.COM[c].name}</button>`; }).join("")}
+          const ok = G.canDeliver(vw, p, k), it = G.contractItem(k), goods = Object.entries(k.goods);
+          const need = goods.reduce((s, [, q]) => s + q, 0), got = goods.reduce((s, [c, q]) => s + Math.min(have(p, c), q), 0);
+          return `<div class="kc${ok ? " ready" : ""}">
+            <div class="kc-top"><span class="kc-icon">${it.icon}</span>
+              <div class="kc-title"><b>${esc(it.name)}</b><small>${ok ? "Ready to produce" : `${got} of ${need} goods in hand`}</small></div>
+              <span class="kc-pts">${k.points}<small>pts</small></span>
+              <button class="kc-x" data-discard="${k.id}" ${canDiscard ? "" : "disabled"} title="${canDiscard ? "Throw it away; a new one comes overnight (one a round)" : "You've already thrown one away this round"}">✕</button></div>
+            <div class="kc-bar"><i style="width:${Math.round(got / need * 100)}%"></i></div>
+            <div class="kc-foot"><div class="kc-goods">${goods.map(([c, q]) => { const h = Math.min(have(p, c), q); return `<button class="kc-good${h >= q ? " ok" : ""}" data-good="${c}" title="Open ${G.COM[c].name} in the market">${G.COM[c].name}<b>${h}/${q}</b></button>`; }).join("")}</div>
+              <button class="kc-make" data-deliver="${k.id}" ${ok ? "" : "disabled"} title="${ok ? "Use these goods to make it, for the points" : "You don't have all of it yet (goods on offer don't count)"}">Produce</button></div>
           </div>`;
         }).join("") || `<p class="dnone">None. New ones come overnight.</p>`}
+        ${(() => { const all = p.made || [], done = (G.player(st, p.id).made || []).length; // the shelf of things made in earlier turns
+          return (done ? `<div class="dmade" title="What you've made">${all.slice(0, done).map(x => `<span class="dthing" title="${esc(x.name)}: ${x.points} points, round ${x.round}">${x.icon}</span>`).join("")}</div>` : ""); })()}
       </div>
       <div class="dsec">
         <h4>Businesses <em>${biz.length} · each holds ${S.businessSpace}</em></h4>
@@ -417,12 +460,12 @@
       return { id: c.id, bid, ask, basis, margin, makers: [...new Set(makers)], biz, score: (margin ?? bid.price * 0.3) * bid.qty + (ask ? 0 : 1000) };
     }).filter(Boolean).sort((a, b) => b.score - a.score).slice(0, 6);
     if (!list.length) return "";
-    return `<section class="msec"><h3>Opportunities <span class="muted small">what other players want and nobody is selling</span></h3>
+    return fold("opps", "msec", `<h3>Opportunities <span class="muted small">${list.length} · what other players want and nobody is selling</span></h3>`, `
       <div class="opps">${list.map(o => `<button class="opp" data-good="${o.id}">
         <b>${G.COM[o.id].name}</b> <span class="mtag good">wanted: ${o.bid.qty} at ${m(o.bid.price)}</span>
         ${o.margin != null ? `<span class="${o.margin > 0 ? "up" : "dn"}">cost basis ${m(o.basis)}: ${o.margin >= 0 ? "+" : "−"}${m(Math.abs(o.margin))} a unit</span>` : ""}
         <small>${o.ask ? `cheapest ask ${m(o.ask.price)}` : "nobody selling"} · ${o.makers.length ? `made by ${esc(o.makers.join(", "))}` : `nobody makes it${o.biz ? `: a ${o.biz.name.toLowerCase()} would` : ""}`}</small>
-      </button>`).join("")}</div></section>`;
+      </button>`).join("")}</div>`);
   }
 
   function marketPanel(p) {
@@ -474,26 +517,26 @@
     const inPlay = goodsInPlay(), hidden = COMMODITIES.length - inPlay.size;
     const rows = COMMODITIES.filter(c => (ui.allGoods || inPlay.has(c.id)) && (!ui.search || c.name.toLowerCase().includes(ui.search)));
     return `
-      <div class="mstats">
+      ${fold("stats", "msec", `<h3>Market summary <span class="muted small">last auction, your orders, what's trading</span></h3>`, `<div class="mstats">
         <div><span>Last auction</span><b>${last ? `${Object.keys(last.trades).length} good${Object.keys(last.trades).length === 1 ? "" : "s"}` : "–"}</b><small>${last ? `${Object.values(last.trades).reduce((s, t) => s + t.qty, 0)} units · round ${last.round} ${last.phase}` : "no auctions yet"}</small></div>
         <div><span>Goods with orders</span><b>${live}</b><small>of 50 on the book</small></div>
         <div><span>Your orders</span><b>${myOrders.length}</b><small>${G.lockedCash(vw, p) ? `${m(G.lockedCash(vw, p))} cash locked` : "nothing locked"}</small></div>
       </div>
       <p class="muted small">One sealed auction at the end of this phase: each good trades at a single price, where the most units change hands. Orders stay until they fill or you cancel.</p>
-      ${sel ? ticket(p, sel, want) : ""}
-      ${quoteBoard(fresh)}
-      ${opportunities(p)}
-      <section class="msec"><h3>Sell what you make</h3>
-        ${sellIds.length ? `<div class="mgrid">${sellIds.map(sellCard).join("")}</div>` : `<p class="muted">Nothing spare right now.</p>`}</section>
-      <section class="msec"><h3>Buy what you need <span class="muted small">for your contracts and factories</span></h3>
-        ${buyIds.length ? `<div class="mgrid">${buyIds.map(buyCard).join("")}</div>` : `<p class="muted">You have everything your contracts and factories need.</p>`}</section>
-      <section class="msec"><h3>What's trading <span class="muted small">last ${recent.length || 6} auctions</span></h3>
+      <h4 class="msub">What's trading <span class="muted small">last ${recent.length || 6} auctions</span></h4>
         ${movers.length ? `<table class="gmkt mmovers"><thead><tr><th>Good</th><th>Price</th><th class="n">Last</th><th class="n">Change</th><th class="n">Units</th><th class="n">Bid / ask now</th></tr></thead><tbody>
           ${movers.map(([id, vol]) => { const { s, last, chg } = lastBits(id), q = G.quote(vw, id);
             return `<tr data-good="${id}" class="${fresh.has(id) ? "flash" : ""}"><td>${G.COM[id].name}</td><td>${spark(s.slice(-12), 80, 20)}</td><td class="n"><b>${m(last)}</b></td>
               <td class="n ${chg > 0 ? "up" : chg < 0 ? "dn" : ""}">${chg != null ? pct(chg) : "–"}</td><td class="n">${vol}</td>
               <td class="n">${q.bid != null ? m(q.bid) : "–"} / ${q.ask != null ? m(q.ask) : "–"}</td></tr>`; }).join("")}
-        </tbody></table>` : `<p class="muted">Nothing has traded yet. The first trades set the first prices.</p>`}</section>
+        </tbody></table>` : `<p class="muted">Nothing has traded yet. The first trades set the first prices.</p>`}`)}
+      ${sel ? ticket(p, sel, want) : ""}
+      ${quoteBoard(fresh)}
+      ${opportunities(p)}
+      ${fold("sell", "msec", `<h3>Sell what you make <span class="muted small">${sellIds.length || "nothing"} spare</span></h3>`,
+        sellIds.length ? `<div class="mgrid">${sellIds.map(sellCard).join("")}</div>` : `<p class="muted">Nothing spare right now.</p>`)}
+      ${fold("buy", "msec", `<h3>Buy what you need <span class="muted small">${buyIds.length ? `${buyIds.length} good${buyIds.length === 1 ? "" : "s"} · ` : ""}for your contracts and factories</span></h3>`,
+        buyIds.length ? `<div class="mgrid">${buyIds.map(buyCard).join("")}</div>` : `<p class="muted">You have everything your contracts and factories need.</p>`)}
       <details class="msec mall" ${ui.allOpen ? "open" : ""}><summary><h3>${ui.allGoods ? `All ${COMMODITIES.length} goods` : `Goods in play (${inPlay.size})`}</h3></summary>
         <div class="grow"><input class="gsearch" id="gSearch" placeholder="Search" value="${esc(ui.search)}">
           <button class="glink blink" id="gAllGoods">${ui.allGoods ? "Show only goods in play" : `Show the other ${hidden} goods`}</button></div>
@@ -554,18 +597,17 @@
         <text class="px" x="${sell ? cx - 6 : cx + 6}" y="${y + rowH - 4}" text-anchor="${sell ? "end" : "start"}">${m(x.price)}</text>
         <text class="qt" x="${sell ? bx + bw + 4 : bx - 4}" y="${y + rowH - 4}" text-anchor="${sell ? "start" : "end"}">${x.qty}${mine ? " ●" : ""}</text></g>`;
     };
-    const spread = q.spread != null ? `Spread ${m(q.ask - q.bid)} · ${Math.round(q.spread * 100)}%` : q.last ? `One side empty · last trade ${m(q.last.price)}` : "One side empty";
+    const spread = q.spread != null ? `Spread ${m(q.ask - q.bid)} · ${Math.round(q.spread * 100)}%` : `${asks.length ? "No bids" : "No asks"}${q.last ? ` · last ${m(q.last.price)}` : ""}`;
     return `<div class="depth"><svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Order book. Asks: ${asks.map(x => `${x.qty} at ${m(x.price)}`).join(", ") || "none"}. Bids: ${bids.map(x => `${x.qty} at ${m(x.price)}`).join(", ") || "none"}.">
-      <text class="lbl" x="${cx + 6}" y="12">Sell orders (asks)</text>
+      <text class="lbl" x="${cx + 6}" y="12">Asks</text>
       ${A.map((x, i) => row(x, yA(i), "sell")).join("") || `<text class="none" x="${cx + 8}" y="${yA(0) + rowH - 4}">Nobody selling</text>`}
       <rect class="band" x="4" y="${bandTop}" width="${W - 8}" height="${bandH}"/>
       <line class="edge sell" x1="4" x2="${W - 4}" y1="${bandTop}" y2="${bandTop}"/><line class="edge buy" x1="4" x2="${W - 4}" y1="${bandBot}" y2="${bandBot}"/>
       <text class="sp" x="10" y="${bandTop + bandH / 2 + 4}">↕ ${spread}</text>
       ${B.map((x, i) => row(x, yB(i), "buy")).join("") || `<text class="none" x="${cx - 8}" y="${yB(0) + rowH - 4}" text-anchor="end">Nobody buying</text>`}
-      <text class="lbl" x="${cx - 6}" y="${H - 4}" text-anchor="end">Buy orders (bids)</text>
+      <text class="lbl" x="${cx - 6}" y="${H - 4}" text-anchor="end">Bids</text>
       <line class="axis" x1="${cx}" x2="${cx}" y1="${head - 4}" y2="${H - head + 4}"/>
-    </svg><div class="ptip" hidden></div>
-    <p class="muted small dnote">Bars add up from the best price outwards; the number is the amount at that price. ● = includes yours.</p></div>`;
+    </svg><div class="ptip" hidden></div></div>`;
   }
 
   // ----- Order book replay: the last 4 rounds of one good's book, animated smoothly -----
@@ -607,8 +649,8 @@
       const meet = { ...pre }, gone = { ...pre };
       Object.keys(pre).filter(k => k[0] === "t").forEach(k => { meet[k] = { ...pre[k], p: tr.price, x0: 0, col: "y" }; gone[k] = { ...meet[k], op: 0 }; });
       frames.push({ label: `${when}: orders in`, segs: pre });
-      frames.push({ label: `${when}: bids meet asks at ${m(tr.price)}`, segs: meet, trade: tr.price, hold: 500 });
-      frames.push({ label: `${when}: traded ${tr.qty} at ${m(tr.price)}`, segs: gone, trade: tr.price, sold: tr.price, hold: 200 });
+      frames.push({ label: `${when}: bids meet asks at ${m(tr.price)}`, segs: meet, trade: tr.price, hold: 250 });
+      frames.push({ label: `${when}: traded ${tr.qty} at ${m(tr.price)}`, segs: gone, trade: tr.price, sold: tr.price, hold: 100 });
       frames.push({ label: `${when}: after the auction`, segs: book(d.post) });
     });
     frames.push({ label: "Now", segs: book({ b: G.depth(st, id, "buy").slice(0, 10).map(x => [x.price, x.qty]), a: G.depth(st, id, "sell").slice(0, 10).map(x => [x.price, x.qty]) }) });
@@ -685,7 +727,7 @@
     const D = depthFrames(id, rounds), C = themeColours();
     if (D.empty) { label.textContent = `Nothing to replay: nobody bid for or offered ${G.COM[id].name.toLowerCase()} in the last ${rounds} round${rounds === 1 ? "" : "s"}.`; label.classList.add("dnow"); done(); return () => {}; }
     label.classList.add("dnow");
-    const MOVE = 650, HOLD = 750, F = D.frames;
+    const MOVE = 325, HOLD = 375, F = D.frames;
     // The clock starts on the first frame: a browser stamps each frame with when the frame began, which can
     // be a moment before the click was handled, so time measured from the click could come out negative
     let k = 0, t0 = null, raf = 0;
@@ -716,33 +758,33 @@
     const standIn = b => Object.keys(b.inputs).find(x => G.substitutesFor(b, x).some(([y]) => y === id));
     const usedBy = G.BIZ.filter(b => usesGood(b, id)).map(b => `${b.name.toLowerCase()}${b.inputs[id] ? "" : ` <i>instead of ${G.COM[standIn(b)].name.toLowerCase()}</i>`}`);
     return `<div class="gticket">
-      <div class="ghead"><h3>${c.name}</h3><span class="muted">${q.last ? `last ${m(q.last.price)} · ${q.volume} traded in the last 3 rounds` : "nothing traded yet"}${basisText(id) ? ` · today's cost basis ${basisText(id)}${basisNote(id)}` : G.COM[id].type === "raw" && !q.last ? " · raw: the market sets its price" : ""}${q.spread != null ? ` · spread ${Math.round(q.spread * 100)}%` : ""}</span><span class="gsp"></span><button class="glink" id="gTicketClose" title="Close">✕</button></div>
+      <div class="ghead"><h3>${c.name}</h3><span class="muted small">${q.last ? `last ${m(q.last.price)} · ${q.volume} traded in 3 rounds` : "nothing traded yet"}${basisText(id) ? ` · <span title="What its inputs cost at their last traded prices${basisNote(id)}">cost basis ${basisText(id)}</span>` : G.COM[id].type === "raw" && !q.last ? " · raw: the market sets its price" : ""}${q.spread != null ? ` · spread ${Math.round(q.spread * 100)}%` : ""}</span><span class="gsp"></span><button class="glink" id="gTicketClose" title="Close">✕</button></div>
       <div class="tfacts">
         <div><span>You have</span><b>${hold}${spoils(p, id) ? ` <small class="bad">⌛ ${spoils(p, id)} go off tonight</small>` : G.roundsLeft && G.roundsLeft(vw, p, id) != null ? ` <small class="muted">oldest lasts ${G.roundsLeft(vw, p, id)} more round${G.roundsLeft(vw, p, id) === 1 ? "" : "s"}</small>` : ""}</b>${whereIs(p, id).length > 1 || (whereIs(p, id)[0] && whereIs(p, id)[0].label !== "your stockpile") ? `<small>${whereIs(p, id).map(x => `${x.qty} ${x.label === "your stockpile" ? "in" : "at"} ${x.label.toLowerCase()}`).join(", ")}</small>` : ""}</div>
         <div><span>Made by</span><b>${makers.length ? names(makers) : "nobody else"}</b></div>
-        <div><span>Others who could use it</span><b>${users.length ? names(users) : "nobody yet"}</b><small>${[wanted(p, id) ? `wanted by ${wanted(p, id)} player${wanted(p, id) === 1 ? "'s" : "s'"} contracts` : "", G.isMaterial(id) ? "building material" : "", contractGood(id) ? "contracts can ask for it" : ""].filter(Boolean).join(" · ")}</small></div>
+        <div><span>Could use it</span><b>${users.length ? names(users) : "nobody yet"}</b></div>
       </div>
-      <p class="small muted tused">Used by: ${usedBy.join(" · ") || "no factory"}${S.depreciation?.on ? ` · ${G.lifeOf(id) ? `lasts ${G.lifeOf(id)} rounds` : "never goes off"}` : ""}</p>
+      <p class="small muted tused">${[wanted(p, id) ? `wanted by ${wanted(p, id)} player${wanted(p, id) === 1 ? "'s" : "s'"} contracts` : "", G.isMaterial(id) ? "building material" : "", contractGood(id) ? "contracts can ask for it" : ""].filter(Boolean).map(x => x + " · ").join("")}used by ${usedBy.join(", ") || "no factory"}${S.depreciation?.on ? ` · ${G.lifeOf(id) ? `lasts ${G.lifeOf(id)} rounds` : "never goes off"}` : ""}</p>
       <div class="tcharts">
-        <div><h4>Order book</h4><div class="depthbox">${depthChart(q, yours)}</div>
-          <div class="drctl">${bookRoundsKept() ? `<button class="gbtn ghost" id="dPlay">▶ Replay</button><label class="drr">the last <input type="number" id="dRounds" min="1" max="${bookRoundsKept()}" value="${Math.min(ui.dRounds || 4, bookRoundsKept())}"> rounds <span class="muted">(of ${bookRoundsKept()} recorded)</span></label><span id="dLabel" class="muted small"></span>` : `<button class="gbtn ghost" disabled>▶ Replay</button><span class="muted small">Replays build up from here on: each auction from now is recorded.</span>`}</div></div>
+        <div><h4 title="Bars add up from the best price outwards; the number is the amount at that price. ● = includes yours.">Order book <span class="hint">ⓘ</span></h4><div class="depthbox">${depthChart(q, yours)}</div>
+          <div class="drctl">${bookRoundsKept() ? `<button class="gbtn ghost" id="dPlay">▶ Replay</button><label class="drr">last <input type="number" id="dRounds" min="1" max="${bookRoundsKept()}" value="${Math.min(ui.dRounds || bookRoundsKept(), bookRoundsKept())}"> <span class="muted">of ${bookRoundsKept()} rounds</span></label><span id="dLabel" class="muted small"></span>` : `<button class="gbtn ghost" disabled>▶ Replay</button><span class="muted small">Replays build up from here on: each auction from now is recorded.</span>`}</div></div>
         <div><h4>Price history</h4>${priceChart(id)}</div>
       </div>
-      <div class="gtwo">
+      <div class="${myOrders.length ? "gtwo" : ""}">
         <div>
           <h4>New order</h4>
-          <div class="gseg"><button data-side="buy" class="${t.side === "buy" ? "on" : ""}">Buy</button><button data-side="sell" class="${t.side === "sell" ? "on" : ""}">Sell</button></div>
           <div class="gform">
+            <div class="gseg"><button data-side="buy" class="${t.side === "buy" ? "on" : ""}">Buy</button><button data-side="sell" class="${t.side === "sell" ? "on" : ""}">Sell</button></div>
             <label>Price each <input type="number" id="gPrice" min="1" step="1" value="${t.price || (suggest != null ? suggest : "")}" placeholder="price"></label>
             <label>Quantity <input type="number" id="gQty" min="1" step="1" value="${t.qty || (t.side === "sell" ? hold : Math.max(1, (want[id] || 0) - hold)) || 1}"></label>
-            <button class="gbtn" id="gPlace">${t.side === "buy" ? "Place buy order" : "Place sell order"}</button>
+            <button class="gbtn" id="gPlace">${t.side === "buy" ? "Place buy" : "Place sell"}</button>
           </div>
-          <p class="muted small">${t.side === "buy" ? `Locks price × quantity of your cash (${m(p.cash)} free) until it fills or you cancel. What you buy goes to your stockpile.` : `Takes the goods from your businesses first, then your stockpile: you have ${hold} not already on offer.`}</p>
+          <p class="muted small" title="${t.side === "buy" ? "Locks price × quantity of your cash until it fills or you cancel. What you buy goes to your stockpile." : "Takes the goods from your businesses first, then your stockpile."}">${t.side === "buy" ? `Locks the cash until filled or cancelled · ${m(p.cash)} free` : `${hold} available to sell`}</p>
         </div>
-        <div>
-          <h4>Your orders for this good</h4>
-          ${myOrders.map(o => `<div class="gpos">${o.side === "buy" ? "Buy" : "Sell"} ${o.qty} at ${m(o.price)}${isNew(o) ? ` <em>new</em>` : ""}<button data-cancel="${o.id}" data-new="${isNew(o) ? 1 : ""}">Cancel</button></div>`).join("") || `<p class="muted small">None.</p>`}
-        </div>
+        ${myOrders.length ? `<div>
+          <h4>Your orders</h4>
+          ${myOrders.map(o => `<div class="gpos">${o.side === "buy" ? "Buy" : "Sell"} ${o.qty} at ${m(o.price)}${isNew(o) ? ` <em>new</em>` : ""}<button data-cancel="${o.id}" data-new="${isNew(o) ? 1 : ""}">Cancel</button></div>`).join("")}
+        </div>` : ""}
       </div>
     </div>`;
   }
@@ -856,17 +898,29 @@
     });
   }
 
+  // Overnight: a light night-blue tint that warms to morning gold, with a small "Night" label
+  function nightfall(round) {
+    document.querySelector(".gnight")?.remove();
+    const el = document.createElement("div");
+    el.className = "gnight";
+    el.innerHTML = `<div><span class="gmoon"></span><b>Night</b><small>Round ${round} · Morning</small></div>`;
+    el.addEventListener("animationend", () => el.remove()); // the tint and the label end together
+    document.body.appendChild(el);
+  }
+
   // ----- Clicks -----
   function wire(p) {
     root.querySelector("#gEnd").addEventListener("click", () => {
-      const before = st.log.length, who = ui.seat;
+      const before = st.log.length, who = ui.seat, round = st.round;
       const r = G.submit(st, ui.seat, ui.orders);
       if (!r.ok) { flash(r.msg); return render(); }
       ui.orders = []; ui.card = null;
       ui.seenBy[who] = before; // next time they look, show everything since they submitted
       save(); render();
+      if (st.round > round && !st.over) nightfall(st.round);
     });
-    root.querySelector("#gNewsOk")?.addEventListener("click", () => { ui.seenBy[ui.seat] = st.log.length; render(); });
+    root.querySelector("#gNewsOk")?.addEventListener("click", e => { e.preventDefault(); ui.seenBy[ui.seat] = st.log.length; render(); });
+    root.querySelectorAll("[data-fold]").forEach(d => d.addEventListener("toggle", () => (ui.open ??= {})[d.dataset.fold] = d.open));
     root.querySelectorAll("[data-undo]").forEach(b => b.addEventListener("click", () => {
       const next = ui.orders.filter((_, i) => i !== +b.dataset.undo);
       const d = G.draft(st, ui.seat, next);
@@ -882,7 +936,9 @@
     root.querySelectorAll("[data-good]").forEach(el => el.addEventListener("click", () => {
       const fromSide = !!el.closest(".gdash");
       ui.good = !fromSide && ui.good === el.dataset.good ? null : el.dataset.good; ui.tab = "market"; render();
-      if (ui.good) root.querySelector(".gticket")?.scrollIntoView({ block: "nearest", behavior: "smooth" });
+      // The good's panel opens above the market; glide up to it only if it's off screen
+      const tk = root.querySelector(".gticket");
+      if (ui.good && tk && tk.getBoundingClientRect().top < 0) tk.scrollIntoView({ block: "start", behavior: "smooth" });
     }));
     root.querySelector("#gTicketClose")?.addEventListener("click", () => { ui.good = null; render(); });
     root.querySelector(".mall")?.addEventListener("toggle", e => ui.allOpen = e.target.open);
@@ -891,17 +947,25 @@
     dStop(); dStop = () => {};
     const dPlay = root.querySelector("#dPlay");
     // How many rounds back to replay (remembered while you look at other goods)
-    root.querySelector("#dRounds")?.addEventListener("change", e => { ui.dRounds = Math.max(1, Math.min(bookRoundsKept(), Math.floor(+e.target.value) || 4)); e.target.value = ui.dRounds; });
+    root.querySelector("#dRounds")?.addEventListener("change", e => { ui.dRounds = Math.max(1, Math.min(bookRoundsKept(), Math.floor(+e.target.value) || bookRoundsKept())); e.target.value = ui.dRounds; });
     dPlay?.addEventListener("click", () => {
       if (dPlay.dataset.on) { dStop(); dStop = () => {}; delete dPlay.dataset.on; dPlay.textContent = "▶ Replay"; return; }
       dPlay.dataset.on = 1; dPlay.textContent = "■ Stop";
-      dStop = playDepth(root.querySelector(".depthbox"), root.querySelector("#dLabel"), ui.good, Math.min(ui.dRounds || 4, bookRoundsKept()), () => { delete dPlay.dataset.on; dPlay.textContent = "▶ Replay again"; dStop = () => {}; });
+      dStop = playDepth(root.querySelector(".depthbox"), root.querySelector("#dLabel"), ui.good, Math.min(ui.dRounds || bookRoundsKept(), bookRoundsKept()), () => { delete dPlay.dataset.on; dPlay.textContent = "▶ Replay again"; dStop = () => {}; });
     });
     // Quote board replay: ▶ steps through the auctions, one every 0.7s; the slider jumps to any of them
     clearInterval(qTimer); qTimer = null;
     const qPlay = root.querySelector("#qPlay"), qSlide = root.querySelector("#qSlide");
     const stopReplay = () => { clearInterval(qTimer); qTimer = null; if (qPlay) qPlay.textContent = "▶ Replay"; };
     qSlide?.addEventListener("input", () => { stopReplay(); showFrame(+qSlide.value); });
+    // One ▶ Replay button: opens the controls and starts playing; ✕ puts them away and shows the book as it stands
+    root.querySelector("#qOpen")?.addEventListener("click", e => {
+      ui.qOpen = true; e.target.hidden = true; root.querySelector(".qctl").hidden = false; qPlay.click();
+    });
+    root.querySelector("#qClose")?.addEventListener("click", () => {
+      ui.qOpen = false; stopReplay(); showFrame(ui.board.frames.length - 1);
+      root.querySelector(".qctl").hidden = true; root.querySelector("#qOpen").hidden = false;
+    });
     root.querySelectorAll("[data-rmode]").forEach(b => b.addEventListener("click", () => { ui.rmode = b.dataset.rmode; render(); }));
     qPlay?.addEventListener("click", () => {
       if (qTimer) return stopReplay();

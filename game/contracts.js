@@ -108,6 +108,40 @@
   G.onSetup.push(st => { st.players.forEach(p => p.home = p.pos); refill(st); });
   G.refillContracts = refill;
 
+  // What a contract makes: a name and emoji for the thing its goods could build. Cosmetic only: the main
+  // good (most processed, then biggest) picks the thing, the next one says what it's made of, and the
+  // contract's id picks among the options, so a contract always keeps its name.
+  const ITEMS = {
+    steel:     ["Steel",       [["bridge", "🌉"], ["locomotive", "🚂"], ["steamship", "🚢"], ["crane", "🏗️"]]],
+    iron:      ["Cast-iron",   [["stove", "🔥"], ["anvil", "⚒️"], ["railway", "🛤️"], ["bell", "🔔"]]],
+    cement:    ["Concrete",    [["dam", "🌊"], ["lighthouse", "🗼"], ["harbour wall", "⚓"], ["stadium", "🏟️"]]],
+    paper:     ["Paper",       [["atlas", "🗺️"], ["newspaper", "📰"], ["kite", "🪁"], ["library", "📚"]]],
+    bread:     ["Harvest",     [["banquet", "🍽️"], ["bakery", "🥖"], ["picnic", "🧺"]]],
+    glass:     ["Glass",       [["greenhouse", "🪴"], ["lantern", "🏮"], ["telescope", "🔭"], ["chandelier", "💡"]]],
+    ceramic:   ["Porcelain",   [["tea set", "🫖"], ["vase", "🏺"], ["bathhouse", "🛁"]]],
+    lumber:    ["Timber",      [["barn", "🛖"], ["sailing ship", "⛵"], ["cabin", "🏡"], ["windmill", "🌬️"]]],
+    flour:     ["Baker's",     [["cake", "🎂"], ["pastry shop", "🥐"], ["noodle bar", "🍜"]]],
+    wood:      ["Wooden",      [["rowing boat", "🛶"], ["toy box", "🧸"], ["cart", "🛒"]]],
+    sand:      ["Sand-cast",   [["hourglass", "⏳"], ["sandcastle", "🏰"]]],
+    clay:      ["Terracotta",  [["brick oven", "🧱"], ["pottery", "🏺"]]],
+    limestone: ["Limestone",   [["cathedral", "⛪"], ["monument", "🗿"]]],
+    coal:      ["Coal-fired",  [["forge", "🔥"], ["steam engine", "🚂"]]],
+    iron_ore:  ["Ironstone",   [["foundry", "🏭"], ["mine cart", "⛏️"]]],
+    wheat:     ["Wheat",       [["haystack", "🌾"], ["granary", "🏚️"]]],
+    water:     ["Spring",      [["fountain", "⛲"], ["well", "🪣"]]],
+  };
+  const FOOD = new Set(["flour", "bread", "wheat"]);
+  G.contractItem = k => {
+    // Food only names the thing when the contract is all food (no "baker's lighthouse")
+    const keys = Object.keys(k.goods), solid = keys.filter(c => !FOOD.has(c));
+    const ids = (solid.length ? solid : keys).sort((a, b) => G.tier(b) - G.tier(a) || k.goods[b] * G.rawUnits(b) - k.goods[a] * G.rawUnits(a) || a.localeCompare(b));
+    const main = ITEMS[ids[0]], things = main ? main[1] : [["works", "📦"]];
+    const [thing, icon] = things[k.id % things.length];
+    const by = ids.slice(1).map(c => ITEMS[c]?.[0]).find(Boolean); // what it is made of, from the other goods
+    const name = by ? `${by} ${thing}` : thing;
+    return { name: name[0].toUpperCase() + name.slice(1), icon };
+  };
+
   const open = st => G.need(st.phase === "morning" || st.phase === "afternoon", "Not right now.");
   G.canDeliver = (st, p, k) => Object.entries(k.goods).every(([c, q]) => G.have(st, p, c) >= q);
   // Public demand: how many players hold a contract that asks for a good (not who, how many or for what).
@@ -125,7 +159,9 @@
     { const d = (st.stats.deliveredGoods ||= {})[p.id] ||= {}; Object.entries(k.goods).forEach(([c, q]) => d[c] = (d[c] || 0) + q); } // for the simulator
     p.contracts = p.contracts.filter(x => x !== k);
     st.stats.delivered = (st.stats.delivered || 0) + 1;
-    return `delivered a contract for ${k.points} points`;
+    const item = G.contractItem(k);
+    (p.made ||= []).push({ ...item, points: k.points, round: st.round }); // the shelf of things you've made (display only)
+    return `produced ${/^[AEIOU]/.test(item.name) ? "an" : "a"} ${item.name.toLowerCase()} ${item.icon} for ${k.points} points`;
   };
 
   G.actions.discardContract = (st, p, { contract }) => {
