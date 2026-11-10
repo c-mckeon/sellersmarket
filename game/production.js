@@ -1,17 +1,16 @@
-// Sellers Market game engine: midday production.
+// Sellers Market game engine: production, each night after the auction.
 //
 // Each business runs once, in the order it was built:
-//   - Extraction (mines, farms, wells): makes its output × the territory's richness bonus. No inputs.
+//   - Extraction (mines, pits, farms, water works): makes its output (2). No inputs.
 //   - Factories: if the owner's stockpile holds every input, they're used up and the outputs made.
 //     Short of an input? A stand-in from settings.substitutes can take its place (wood burned as charcoal
 //     instead of coal…), so most raw goods have more than one use. See G.inputsFor.
 // Card effects on "output" multiply what comes out (rounded down).
-// Anything that doesn't fit in the stockpile is thrown away (goods on offer still take up space).
+// Anything that doesn't fit in the stockpile is thrown away (goods on offer still take up space):
+// with settings.fifo, the oldest units go first, whatever they are.
 
 (() => {
   const G = SMG, S = GAME_SETTINGS;
-
-  G.richness = (b, territory) => BUILD.richness[(TERRITORY_INFO[territory].res || {})[b.makes] || 1];
 
   // Stand-ins a factory can use when it's short of an input (settings.substitutes):
   // [[good, units of it per unit of the input], …]
@@ -53,7 +52,7 @@
       const p = G.player(st, biz.owner), b = G.BIZ_BY[biz.type];
       const say = m => (report[p.id] ||= []).push(m);
       const mult = yieldMod[biz.id] ?? 1;
-      const yieldOf = q => Math.floor(q * mult * (b.kind === "extract" ? G.richness(b, biz.territory) * S.extractOutput : 1) + 1e-9);
+      const yieldOf = q => Math.floor(q * mult + 1e-9);
       st.stats.runs++;
       if (mult === 0) { st.stats.idle++; say(`${b.name} in ${G.TERR[biz.territory].name} was shut`); return; }
       const full = () => own && G.bizRoom(biz) < Math.min(yieldOf(b.outputs[b.makes]), S.businessSpace);
@@ -82,7 +81,7 @@
     // Over the limit? Throw things away, in the order each player chose
     st.players.forEach(p => {
       const lost = G.makeRoom(st, p);
-      if (lost.length) (report[p.id] ||= []).push(`stockpile full: threw away ${lost.map(([c, n]) => `${n} ${G.COM[c].name}`).join(", ")}`);
+      if (lost.length) (report[p.id] ||= []).push(`stockpile full: ${S.fifo ? "pushed out the oldest" : "threw away"} ${lost.map(([c, n]) => `${n} ${G.COM[c].name}`).join(", ")}`);
     });
     Object.entries(report).forEach(([pid, msgs]) => msgs.forEach(m => G.log(st, m, +pid)));
   };
@@ -99,6 +98,14 @@
   G.makeRoom = (st, p) => {
     const lost = [];
     let over = G.used(p) + G.offered(st, p) - p.space;
+    if (over > 0 && S.fifo && p.lots) {
+      // First in, first out: push out the oldest units (removing a good always takes its oldest first)
+      const units = Object.entries(p.lots).flatMap(([c, L]) => L.flatMap(([q, made]) => Array(q).fill([c, made])))
+        .sort((a, b) => a[1] - b[1]);
+      const out = {};
+      for (const [c] of units) { if (over <= 0) break; out[c] = (out[c] || 0) + 1; over--; }
+      Object.entries(out).forEach(([c, n]) => { G.add(p, c, -n); st.stats.overflow += n; lost.push([c, n]); });
+    }
     for (const c of G.discardOrder(st, p)) {
       if (over <= 0) break;
       const n = Math.min(over, p.stock[c]);

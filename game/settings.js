@@ -5,22 +5,21 @@ const GAME_SETTINGS = {
   rounds: 30,              // the game ends after this many rounds; most points wins, cash breaks ties
   startCash: 1000,         // the only money there will ever be. It's used for trading and nothing else.
   startBusinesses: 2,      // the business you pick, plus the one that goes with it (a farm and a flour mill…)
-  startSpace: 30,          // stockpile crates at the start; 1 unit of anything = 1 crate (ignored while unlimitedSpace is on)
-  unlimitedSpace: true,    // your own stockpile has no limit, for now
-  businessStock: true,     // what a business makes stays in its own stock until you sell or use it…
-  businessSpace: 10,       // …which holds this many units (10: producers have stock to sell; tuned by simulation)
+  startSpace: 20,          // your stockpile: 20 rows, one unit of anything in each
+  unlimitedSpace: false,
+  fifo: true,              // the stockpile is first in, first out: when it overflows, the oldest units are pushed out
+  businessStock: false,    // false: what your businesses make goes straight into your stockpile
+  businessSpace: 10,       // (only with businessStock: how many units each business holds)
 
   // Starting goods, on top of one round's output of your free business
-  startGoods: { lumber: 6, iron: 4 },
+  startGoods: {},
 
-  // Buying more stockpile space (any phase): paid in building materials, like a business
-  spaceUpgrade: { crates: 10, cost: 4, costStep: 2 }, // 4 crates of materials, then 6, then 8…
-
-  // Afternoon: each player may move to one neighbouring territory OR build one business
-  afternoonActions: 1,
+  // Each round, besides trading, each player may move to one neighbouring territory OR build one business.
+  // Building is free; each territory allows only certain businesses (js/territories.js). Every business
+  // makes 2 of its product a round (js/businesses.js, js/commodities.js).
 
   // ---------- The market (game/market.js) ----------
-  // One sealed auction per phase. Every good clears at a single price set by the players' own bids and asks.
+  // One sealed auction a round, at night. Every good clears at a single price set by the players' own bids and asks.
   market: {
     maxPrice: 10000,       // no order may be priced above this
     bookRounds: 30,        // how many rounds of full order books to keep, for the order book replay
@@ -33,6 +32,7 @@ const GAME_SETTINGS = {
     hand: 3,               // contracts each player holds; refilled overnight
     goodsPerContract: [2, 3], // fewest and most different goods a contract asks for
     size: 10,              // how big a contract is, in raw-material units (see G.rawUnits)
+    maxUnits: 12,          // …but never more than this many units in all (the stockpile has 20 rows)
     pointsPerUnit: 0.5,    // points per raw-material unit delivered
     distanceBonus: 0.15,   // +15% points for every step the goods' nearest source is away from you
     distancePower: 2,      // how strongly contracts lean to faraway goods: chance ∝ (1 + distance) ^ this
@@ -47,21 +47,6 @@ const GAME_SETTINGS = {
             "bread", "paper", "cement", "steel"],          // level 2
     // The raw materials contracts can ask for (and that spread-out starts hand out: G.spreadStarts)
     raws: ["wood", "sand", "clay", "limestone", "coal", "iron_ore"],
-  },
-
-  // ---------- Building (game/map.js) ----------
-  // Businesses are paid for in goods, not cash: a number of crates of building materials, where each
-  // crate covers valuePerCrate of the business's base cost (js/businesses.js), after the territory's
-  // cost level and crowding. Any building material will do, so no single good can block building.
-  build: {
-    valuePerCrate: 40,
-    ownedCostStep: 0.3,    // each business you already own makes your next one 30% dearer (so players specialise and trade)
-    // Building materials, and how many crates one unit counts for
-    // (raw wood, clay, sand and limestone count half: you can always build, slowly, from what your own mines make)
-    materials: { lumber: 1, iron: 1, ceramic: 1, cement: 1, glass: 1, concrete: 0.5, steel: 2,
-                 wood: 0.5, clay: 0.5, sand: 0.5, limestone: 0.5 },
-    // Big factories (tier 3 and up) need at least this share of their crates in heavy materials
-    heavy: { fromTier: 3, share: 0.5, goods: ["steel", "glass", "concrete"] },
   },
 
   // ---------- Depreciation (game/depreciation.js) ----------
@@ -91,7 +76,6 @@ const GAME_SETTINGS = {
     { for: "limestone", use: "clay",       ratio: 1, at: ["cement_kiln"] },     // clay cement
     { for: "iron",      use: "iron_ore",   ratio: 3, at: ["steelworks"] },      // direct reduction
   ],
-  extractOutput: 1.0,      // multiplies what every mine, farm and well makes (1 = as listed on the Territories tab)
 
   // ---------- Switched off for now ----------
   // Cards, wages, inflation and the broker (loans, bonds, futures, ETFs) are kept in the code but not
@@ -102,6 +86,5 @@ const GAME_SETTINGS = {
   inflationPerRound: 0,
   overflowSale: 0,
   businessValue: 0,
-  buildCostScale: 1,
   finance: { tightenAbove: 0.03, loosenBelow: 0.005, borrowShareStep: 0.05, borrowShareMin: 0.3, borrowShareMax: 0.6 },
 };

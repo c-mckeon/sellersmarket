@@ -1,6 +1,9 @@
 // ---------- Pricing model ----------
 const PR = MARKET.pricing;
 
+// Old design (prices now come from players): factory costs, kept only for these base prices
+const OLD_FACTORY_COST = { 1: 150, 2: 250, 3: 400, 4: 700 };
+
 // Base price: hand-set for raw goods and wastes, otherwise worked out from the recipe.
 const baseMemo = {};
 function basePrice(id) {
@@ -10,7 +13,7 @@ function basePrice(id) {
   let cost = 0;
   for (const [i, q] of Object.entries(r.in)) cost += q * basePrice(i);
   for (const w of r.extras) cost -= r.out[w] * basePrice(w); // waste fees add cost; recyclables earn a little back
-  return (baseMemo[id] = (cost + MARKET.valueAdded * BUILD.factoryCost[tierOf(id)]) / r.out[id]);
+  return (baseMemo[id] = (cost + MARKET.valueAdded * OLD_FACTORY_COST[tierOf(id)]) / r.out[id]);
 }
 const isFee = id => basePrice(id) < 0;
 const tierOf = id => tier(id);

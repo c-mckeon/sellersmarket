@@ -95,7 +95,7 @@
 
   // ---------- Actions ----------
   G.actions.placeOrder = (st, p, { id, side, price, qty }) => {
-    G.need(st.phase === "morning" || st.phase === "afternoon", "The market is closed right now.");
+    G.need(st.phase === "day", "The market is closed right now.");
     G.need(G.COM[id], "Unknown good.");
     G.need(side === "buy" || side === "sell", "Buy or sell?");
     qty = Math.floor(+qty); price = +price;
@@ -193,8 +193,7 @@
 
   G.auction = st => {
     G.clock = st.round;
-    const ph = st.phase === "midday" ? "morning" : st.phase === "overnight" ? "afternoon" : st.phase;
-    const record = { n: st.stats.auctions || 0, round: st.round, phase: ph, trades: {} }; // n: auctions before this one (history keeps the last 120)
+    const record = { n: st.stats.auctions || 0, round: st.round, trades: {} }; // n: auctions before this one (history keeps the last 120)
     // The book just before it cleared (everyone's new orders in, bids may cross asks), for the replay
     const quotesNow = () => { const q = {}; new Set(st.book.map(o => o.good)).forEach(id => { const b = G.bestBid(st, id), a = G.bestAsk(st, id);
       q[id] = { bid: b?.price ?? null, ask: a?.price ?? null, bq: b?.qty || 0, aq: a?.qty || 0 }; }); return q; };
@@ -239,7 +238,7 @@
       Object.entries(bought).forEach(([pid, n]) => say(+pid, `bought ${n} ${c.name} at ${G.money(P)}`));
       Object.entries(sold).forEach(([pid, n]) => say(+pid, `sold ${n} ${c.name} at ${G.money(P)}`));
       st.prices[id] = P;
-      st.lastTrade[id] = { price: P, qty: vol, round: st.round, phase: ph };
+      st.lastTrade[id] = { price: P, qty: vol, round: st.round };
       record.trades[id] = { price: P, qty: vol };
     });
     // What was left on the book afterwards: best bid and ask (and how many at each) for every good with orders
@@ -258,17 +257,6 @@
     Object.entries(mine).forEach(([pid, msgs]) => msgs.forEach(m => G.log(st, m, +pid)));
     st.stats.auctions = (st.stats.auctions || 0) + 1;
     st.stats.trades = (st.stats.trades || 0) + n;
-  };
-
-  // ---------- Stockpile space (any phase), paid in building materials ----------
-  G.spaceUpgradeCost = p => ({ crates: S.spaceUpgrade.cost + S.spaceUpgrade.costStep * p.upgrades, heavy: 0 });
-  G.actions.upgradeSpace = (st, p) => {
-    G.need(st.phase === "morning" || st.phase === "afternoon", "Not right now.");
-    const need = G.spaceUpgradeCost(p), { pay, short } = G.payFor(st, p, need);
-    G.need(!short, `More space costs ${G.needText(need)}; you're ${short} short.`);
-    Object.entries(pay).forEach(([c, q]) => G.take(st, p, c, q));
-    p.space += S.spaceUpgrade.crates; p.upgrades++;
-    return `built ${S.spaceUpgrade.crates} more crates of space from ${G.costText(pay)}`;
   };
 
   // Throw goods away (any phase): for waste and anything else you don't want

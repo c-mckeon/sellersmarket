@@ -34,54 +34,41 @@
       <p>Sellers Market is a trading game over <b><span data-s="rounds"></span> rounds</b>. You score points by delivering secret <b>contracts</b>; most points wins, and cash only breaks ties. Nothing has a set price: every price comes from what players bid and ask. Raw materials are each found in one region of the map, so to make what your contracts ask for you have to trade with players far away.</p>
     </div>
 
-    <div class="cyclegrid">
+    <div class="cyclegrid one">
       <div class="cg-svg">
-        <svg class="cycle" viewBox="0 0 440 520" role="img" aria-label="A game day: Morning, then midday automatic steps, Afternoon, then overnight automatic steps, back to Morning">
+        <svg class="cycle" viewBox="0 0 440 440" role="img" aria-label="One round: the day, when players order, then the night, when it all happens">
           <defs>
             <marker id="hMid" viewBox="0 0 10 10" refX="3" refY="5" markerWidth="30" markerHeight="30" orient="auto" markerUnits="userSpaceOnUse"><path d="M0,0 L10,5 L0,10 z" class="hd-mid" fill="#d9a21b"/></marker>
             <marker id="hNight" viewBox="0 0 10 10" refX="3" refY="5" markerWidth="30" markerHeight="30" orient="auto" markerUnits="userSpaceOnUse"><path d="M0,0 L10,5 L0,10 z" class="hd-night" fill="#4b55b8"/></marker>
           </defs>
-          <circle class="ring" cx="220" cy="260" r="180" fill="none" stroke="#dcd8cf" stroke-dasharray="2 6"/>
-          <path class="arc mid" d="M325.8,114.4 A180,180 0 0 1 349.5,385.0" fill="none" stroke="#d9a21b" stroke-width="13" stroke-linecap="round" marker-end="url(#hMid)"/>
-          <path class="arc night" d="M114.2,405.6 A180,180 0 0 1 90.5,135.0" fill="none" stroke="#4b55b8" stroke-width="13" stroke-linecap="round" marker-end="url(#hNight)"/>
-          <text class="centre" x="220" y="256" text-anchor="middle" fill="#1d1d1b" font-size="19" font-weight="800">One game day</text>
-          <text class="arcsub" x="220" y="276" text-anchor="middle" fill="#6b6860" font-size="12">one round</text>
-          <g class="phase morning" transform="translate(220,80)">
-            <rect x="-95" y="-30" width="190" height="60" rx="14" fill="#fff" stroke="#d9a21b" stroke-width="2.5"/>
-            <circle cx="-62" cy="0" r="10" class="sun" fill="#d9a21b"/>
-            <text class="ph" x="-36" y="7" fill="#1d1d1b" font-size="20" font-weight="800">Morning</text>
+          <circle class="ring" cx="220" cy="220" r="160" fill="none" stroke="#dcd8cf" stroke-dasharray="2 6"/>
+          <path class="arc mid" d="M300,81.4 A160,160 0 0 1 300,358.6" fill="none" stroke="#d9a21b" stroke-width="13" stroke-linecap="round" marker-end="url(#hMid)"/>
+          <path class="arc night" d="M140,358.6 A160,160 0 0 1 140,81.4" fill="none" stroke="#4b55b8" stroke-width="13" stroke-linecap="round" marker-end="url(#hNight)"/>
+          <text class="centre" x="220" y="216" text-anchor="middle" fill="#1d1d1b" font-size="19" font-weight="800">One round</text>
+          <text class="arcsub" x="220" y="236" text-anchor="middle" fill="#6b6860" font-size="12">a game day</text>
+          <g class="phase morning" transform="translate(220,60)">
+            <rect x="-80" y="-28" width="160" height="56" rx="14" fill="#fff" stroke="#d9a21b" stroke-width="2.5"/>
+            <circle cx="-50" cy="0" r="10" class="sun" fill="#d9a21b"/>
+            <text class="ph" x="-28" y="7" fill="#1d1d1b" font-size="20" font-weight="800">Day</text>
           </g>
-          <g class="phase afternoon" transform="translate(220,440)">
-            <rect x="-95" y="-30" width="190" height="60" rx="14" fill="#fff" stroke="#d4682a" stroke-width="2.5"/>
-            <circle cx="-62" cy="4" r="11" class="sun2" fill="#d4682a"/>
-            <rect x="-80" y="4" width="36" height="14" class="horizon" fill="#fff"/>
-            <text class="ph" x="-36" y="7" fill="#1d1d1b" font-size="20" font-weight="800">Afternoon</text>
+          <g class="phase afternoon" transform="translate(220,380)">
+            <rect x="-80" y="-28" width="160" height="56" rx="14" fill="#fff" stroke="#4b55b8" stroke-width="2.5"/>
+            <circle cx="-50" cy="0" r="10" fill="#4b55b8"/>
+            <text class="ph" x="-28" y="7" fill="#1d1d1b" font-size="20" font-weight="800">Night</text>
           </g>
         </svg>
       </div>
 
       <div class="cg cg-morning">
-        <h3>Morning <span>players trade</span></h3>
-        <p>Place and cancel buy and sell orders, deliver contracts you can fill, and throw away one contract if you want (one a round). Everyone enters their orders in secret; then they all go through at once.</p>
-      </div>
-
-      <div class="cg cg-mid">
-        <h3>Midday <span>automatic</span></h3>
-        <ol>
-          <li>The morning's sealed auction: each good trades at one price (see <a href="#/mechanics/market">Market dynamics</a>)</li>
-          <li>Every business produces: mines dig, factories turn inputs into products</li>
-        </ol>
-      </div>
-
-      <div class="cg cg-aft">
-        <h3>Afternoon <span>players act</span></h3>
-        <p>Trade again, and do <b>one</b> of these: move your pawn to a neighbouring territory, or build a business in the territory you're in. If two players move into the same territory at once, neither gets in.</p>
+        <h3>Day <span>players order</span></h3>
+        <p>Everyone enters their orders in secret: buy and sell orders, contracts to deliver, one contract to throw away if you want, and <b>one</b> of these: move your pawn to a neighbouring territory, or build a business where you are. Then they all go through at once. If two players move into the same territory, neither gets in.</p>
       </div>
 
       <div class="cg cg-night">
-        <h3>Overnight <span>automatic</span></h3>
+        <h3>Night <span>automatic</span></h3>
         <ol>
-          <li>The afternoon's sealed auction</li>
+          <li>The sealed auction: each good trades at one price (see <a href="#/mechanics/market">Market dynamics</a>)</li>
+          <li>Every business produces 2 of its product: mines dig, factories turn inputs into products</li>
           <li>Goods at the end of their life go off</li>
           <li>Delivered and thrown-away contracts are replaced</li>
         </ol>
@@ -94,15 +81,15 @@
         <ul>
           <li><b><span data-s="startCash"></span> cash</b>. It's the only money there will ever be: it's used for trading and nothing else.</li>
           <li><b>Two free businesses</b> where you start: a mine (or farm, or well) and the factory that uses its output, e.g. an iron mine and a blast furnace.</li>
-          <li><b>Some building materials</b> (<span data-s="startGoods"></span>) and <b><span data-s="contracts.hand"></span> secret contracts</b>.</li>
-          <li>An unlimited stockpile for what you buy. The setup screen spreads players out, each with a different region's mine.</li>
+          <li><b><span data-s="contracts.hand"></span> secret contracts</b>.</li>
+          <li>A stockpile of <b><span data-s="startSpace"></span> rows</b>, one unit in each. The setup screen spreads players out, each with a different region's mine.</li>
         </ul>
       </section>
 
       <section>
         <h2>Contracts and points</h2>
         <ul>
-          <li>A contract asks for 2 or 3 goods in set amounts, about <span data-s="contracts.size"></span> raw materials' worth in all. Deliver it whole, any time you trade, from anything you own (your stockpile or your businesses' stock; goods in sell orders don't count).</li>
+          <li>A contract asks for 2 or 3 goods in set amounts, about <span data-s="contracts.size"></span> raw materials' worth in all, and never more than <span data-s="contracts.maxUnits"></span> units. Deliver it whole, any time you trade, from anything you own (your stockpile or your businesses' stock; goods in sell orders don't count).</li>
           <li>Contracts ask for these made goods: <span data-s="contractGoods"></span>. Each item has a <span data-s="contracts.rawShare" data-f="pct"></span> chance of being a raw material instead: <span data-s="contractRaws"></span>.</li>
           <li>They lean towards goods made far from where you started, so you'll need other players.</li>
           <li><b>Points</b> = raw materials in it × <span data-s="contracts.pointsPerUnit"></span> × (1 + <span data-s="contracts.distanceBonus" data-f="pct"></span> for each step its goods come from) × (1 + <span data-s="contracts.tierBonus" data-f="pct"></span> for each processing step). Made goods pay more than raw ones.</li>
@@ -114,16 +101,16 @@
       <section>
         <h2>Businesses and production</h2>
         <ul>
-          <li>Once a round, at midday, each business runs. Mines, farms and wells make their output (more where the deposit is richer). Factories need every input; they take them from anything you own, your businesses first.</li>
+          <li>Once a round, at night after the auction, each business runs and makes <b>2</b> of its product. Mines, pits, farms and water works need nothing; factories need every input, from your stockpile.</li>
           <li><b>Stand-ins:</b> a factory short of an input can use another good instead, e.g. <span data-s="substitutes"></span>. Goods a contract of yours asks for are never used as stand-ins.</li>
-          <li>What a business makes stays in <b>its own stock</b>, up to <span data-s="businessSpace"></span> units, until you sell, deliver or use it. When it's full it makes only what fits.</li>
+          <li>What your businesses make goes into your <b>stockpile</b>: <span data-s="startSpace"></span> rows, one unit in each, first in at the top. It's <b>first in, first out</b>: the oldest units are used, sold and delivered first, and when it overflows the oldest are pushed out. Goods in your sell orders keep their rows; buy orders keep rows free for what they could bring in.</li>
         </ul>
       </section>
 
       <section>
         <h2>Goods go off</h2>
         <ul>
-          <li>Every unit remembers when it was made and goes off at the end of its life: <span data-s="lifetimes"></span>.</li>
+          <li>Every unit remembers when it was made and goes off at the end of its life: <span data-s="lifetimes"></span>. Each stockpile row counts down to it.</li>
           <li>Goods are used, sold and delivered oldest first, and keep their age in sell orders and when bought, so holding goods back has a cost.</li>
         </ul>
       </section>
@@ -131,8 +118,8 @@
       <section>
         <h2>Building</h2>
         <ul>
-          <li>In the afternoon, in the territory you're in. A business costs a number of <b>building materials</b>: base cost × the territory's cost level × (1 + 25% for each business already there) × (1 + <span data-s="build.ownedCostStep" data-f="pct"></span> for each business you own) ÷ <span data-s="build.valuePerCrate"></span>.</li>
-          <li>Any building material will do: <span data-s="materials"></span>. Big factories need half of it in heavy materials (<span data-s="heavy"></span>). Materials your contracts ask for are used last.</li>
+          <li>Building is <b>free</b>: one business a round, instead of moving, in the territory you're in.</li>
+          <li>Each territory allows only certain businesses: the mines, pits and farms for what's found there, the factories that process it, and bakeries and concrete plants in big cities. Click a territory to see its list.</li>
         </ul>
       </section>
 
@@ -140,8 +127,8 @@
         <h2>The map</h2>
         <ul>
           <li>60 territories: 46 on land and 14 seas. Move one step a turn, over land or sea.</li>
-          <li>Each raw material is found in one region: <span data-s="regions"></span>. Farms and water works can go on any land.</li>
-          <li>Click a territory in the game to see what can be mined, grown or drilled there. The <a href="#/mechanics/territories">Territories</a> page shows the whole map.</li>
+          <li>Each raw material is found in only a few places: <span data-s="regions"></span>.</li>
+          <li>Click a territory in the game to see what can be built there. The <a href="#/mechanics/territories">Territories</a> page shows the whole map.</li>
         </ul>
       </section>
 
@@ -154,21 +141,18 @@
   <section id="view-territories" class="view">
     <div class="intro">
       <h1>Territories</h1>
-      <p>Each of the 60 territories has its own character: what's in the ground, whether it's on the coast, and how expensive it is to build there. Each raw material is found in only a few regions, so players have to trade across the map. Mines and wells can only go where their resource is; farms, water works and most factories can go on any land.</p>
+      <p>Each of the 60 territories has its own character and its own short list of businesses. Each raw material is found in only a few regions, so players have to trade across the map.</p>
     </div>
 
     <div class="eqcard">
-      <div class="big">Building materials = base cost × territory cost level × (1 + 25% × businesses already there) × (1 + <span data-s="build.ownedCostStep" data-f="pct"></span> × businesses you own) ÷ <span data-s="build.valuePerCrate"></span></div>
+      <div class="big">Building is free, one business a round, but each territory allows only certain businesses</div>
       <dl>
-        <div><dt>Base cost</dt><dd>Set for each kind of business. A water works is 80, a farm 100, an iron mine 150. A factory costs 150, 250 or 400, depending on how advanced its product is.</dd></div>
-        <div><dt>Cost level</dt><dd>Land and wages differ. London is ×2.0 and Paris ×1.8; Ukraine is ×0.7 and North Africa ×0.6.</dd></div>
-        <div><dt>Crowding</dt><dd>Every business already in a territory, anyone's, makes the next one 25% dearer. The first is ×1, the fifth is ×2. Popular spots fill up and get expensive, which spreads players out.</dd></div>
-        <div><dt>Richness</dt><dd>Mines, farms and wells produce more where the deposit is richer: ★ ×1, ★★ ×1.5, ★★★ ×2. Northern England's iron mines out-produce Brittany's.</dd></div>
-        <div><dt>Where</dt><dd>Mines, pits and quarries only where the resource is; farms and water works anywhere on land. Factories can go on any land. Nothing can be built at sea.</dd></div>
-        <div><dt>Paid in</dt><dd>Building materials, not cash: <span data-s="materials"></span>. Big factories need half in heavy materials.</dd></div>
+        <div><dt>Mines, pits and farms</dt><dd>Only where their raw material is found. Water works only where there's plenty of water: the Alps, Scandinavia, the Danube, Scotland and Wales.</dd></div>
+        <div><dt>Factories</dt><dd>Next to what they process: sawmills and paper mills in the forests, blast furnaces by the iron, steelworks on the coalfields, glassworks on the sand, kilns on the clay, cement kilns on the limestone, flour mills in the farm belts.</dd></div>
+        <div><dt>Big cities</dt><dd>Bakeries and concrete plants.</dd></div>
+        <div><dt>Output</dt><dd>Every business makes 2 of its product a round.</dd></div>
+        <div><dt>Seas</dt><dd>Nothing can be built at sea. Seas are for moving through.</dd></div>
       </dl>
-      <p class="muted small">In the game, more settings apply (tuned by simulation): every cost is ×1.5, each business you already own makes your next one 30% dearer, every business pays wages overnight of 3% of its cost, and mines, farms and wells make 20% more than listed here.</p>
-      <p class="example"><b>Example:</b> a coal mine (base 140) in the Ruhr (×1.2) with 2 businesses already there: 140 × 1.2 × 1.5 = <b>252</b>. It makes 4 × 2 = 8 coal a round, since the Ruhr's coal is ★★★.</p>
     </div>
 
     <div class="tctl">
@@ -191,7 +175,7 @@
   <section id="view-market" class="view">
     <div class="intro">
       <h1>Market dynamics</h1>
-      <p>There is no price list. Every price comes from what players bid and ask, matched in one <b>sealed auction</b> at the end of each morning and each afternoon. Only players trade: there are no outside buyers or sellers.</p>
+      <p>There is no price list. Every price comes from what players bid and ask, matched in one <b>sealed auction</b> each night. Only players trade: there are no outside buyers or sellers.</p>
     </div>
 
     <div class="rules">

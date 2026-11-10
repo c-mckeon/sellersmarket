@@ -10,24 +10,22 @@ const r = vm.runInContext(`(() => {
   const human = (name, start) => ({ name, bot: false, start, business: "farm" });
   // Ukraine and Warsaw both border Galicia
   let st = G.newGame({ players: [human("A", "ukraine"), human("B", "warsaw"), human("C", "prussia")], seed: 1 });
-  [1, 2, 3].forEach(id => G.submit(st, id, []));                       // morning: no trades
-  out.push("phase " + st.phase);
+  out.push("round " + st.round + ", " + st.phase);
   G.submit(st, 1, [{ name: "move", args: { to: "galicia" } }]);
   G.submit(st, 2, [{ name: "move", args: { to: "galicia" } }]);
   G.submit(st, 3, [{ name: "move", args: { to: "warsaw" } }]);         // C moves into the square B is leaving: fine
-  out.push("A at " + st.players[0].pos + ", B at " + st.players[1].pos + ", C at " + st.players[2].pos);
+  out.push("round " + st.round + ": A at " + st.players[0].pos + ", B at " + st.players[1].pos + ", C at " + st.players[2].pos);
   out.push(st.log.filter(l => /Nobody got in/.test(l.msg)).map(l => l.msg).join(""));
-  // Two players building in the same place on the same afternoon pay the same price
-  [1, 2, 3].forEach(id => G.submit(st, id, []));
-  st.players.forEach(p => p.cash = 2000);
-  const cost = G.buildCost(st, G.BIZ_BY.water_works, "warsaw", 2);
+  // Building is free, and two players can build the same thing in the same place in the same round
   G.submit(st, 1, []);
-  G.submit(st, 2, [{ name: "build", args: { type: "water_works" } }]);
-  G.submit(st, 3, [{ name: "build", args: { type: "water_works" } }]);
-  const built = st.businesses.filter(b => b.territory === "warsaw").map(b => b.cost);
-  out.push("price at start of afternoon " + JSON.stringify(cost) + " (B) ; paid " + built.map(c => JSON.stringify(c)).join(", "));
+  G.submit(st, 2, [{ name: "build", args: { type: "kiln" } }]);
+  G.submit(st, 3, [{ name: "build", args: { type: "kiln" } }]);
+  out.push("kilns in Warsaw: " + st.businesses.filter(b => b.territory === "warsaw" && b.type === "kiln").length + ", cash " + st.players.map(p => p.cash).join("/"));
+  // Only the businesses a territory allows
+  out.push("steelworks in Warsaw: " + JSON.stringify(G.submit(st, 2, [{ name: "build", args: { type: "steelworks" } }])));
+  // One move or build a round
+  out.push("build twice: " + JSON.stringify(G.submit(st, 2, [{ name: "build", args: { type: "kiln" } }, { name: "build", args: { type: "farm" } }])));
   // Orders are checked when submitted
-  [1, 2, 3].forEach(id => G.submit(st, id, []));
   out.push("bad order: " + JSON.stringify(G.submit(st, 1, [{ name: "move", args: { to: "spain" } }])));
   return out.join("\\n");
 })()`, ctx);

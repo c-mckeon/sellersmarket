@@ -4,12 +4,12 @@
 //
 // Other files plug in by adding to SMG:
 //   SMG.actions[name] = (state, playerId, args) => message     player actions
-//   SMG.steps.midday / SMG.steps.overnight                     automatic steps, run in order
-//   SMG.bots.morning / SMG.bots.afternoon                      what computer players do
+//   SMG.steps.night                                            automatic steps at the end of a round, in order
+//   SMG.bots.day                                               what computer players do
 
 const SMG = (() => {
   const S = GAME_SETTINGS;
-  const G = { actions: {}, steps: { midday: [], overnight: [] }, bots: {}, onSetup: [] };
+  const G = { actions: {}, steps: { night: [] }, bots: {}, onSetup: [] };
 
   // ---------- Catalogue: the rulebook, built from the data files ----------
   const slug = s => s.toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_|_$/g, "");
@@ -20,7 +20,7 @@ const SMG = (() => {
   G.coastal = tid => !G.isSea(tid) && (TERRITORY_NEIGHBOURS[tid] || []).some(G.isSea);
   G.neighbours = tid => TERRITORY_NEIGHBOURS[tid] || [];
 
-  // Tier of each commodity (raw = 0), used for factory build costs.
+  // Tier of each commodity (raw = 0): how many processing steps it takes.
   const producerOf = {};
   RECIPES.forEach(r => producerOf[Object.keys(r.out)[0]] = r);
   const tierMemo = {};
@@ -35,11 +35,10 @@ const SMG = (() => {
     return (tierMemo[id] = t);
   };
 
-  // Every business type: extractors first, then the 30 factories.
+  // Every business type: extractors first, then the factories. Where each can go: js/territories.js.
   G.BIZ = [
-    ...EXTRACTORS.map(([name, makes, out, base, where]) => ({ id: slug(name), name, kind: "extract", where, base, inputs: {}, outputs: { [makes]: out }, makes })),
-    ...RECIPES.map(r => ({ id: slug(r.at), name: r.at, kind: "factory", where: NEEDS_OIL_ACCESS.includes(r.at) ? "oil" : "land",
-      base: BUILD.factoryCost[G.tier(Object.keys(r.out)[0])], inputs: { ...r.in }, outputs: { ...r.out }, makes: Object.keys(r.out)[0] })),
+    ...EXTRACTORS.map(([name, makes, out]) => ({ id: slug(name), name, kind: "extract", inputs: {}, outputs: { [makes]: out }, makes })),
+    ...RECIPES.map(r => ({ id: slug(r.at), name: r.at, kind: "factory", inputs: { ...r.in }, outputs: { ...r.out }, makes: Object.keys(r.out)[0] })),
   ];
   G.BIZ_BY = Object.fromEntries(G.BIZ.map(b => [b.id, b]));
 
@@ -173,8 +172,8 @@ const SMG = (() => {
   // config.players: [{ name, colour, bot, start: territoryId, business: businessTypeId }]
   G.newGame = config => {
     const st = {
-      version: 6, seed: config.seed ?? Math.floor(Math.random() * 1e9),
-      round: 1, rounds: config.rounds ?? S.rounds, phase: "morning", over: false,
+      version: 7, seed: config.seed ?? Math.floor(Math.random() * 1e9),
+      round: 1, rounds: config.rounds ?? S.rounds, phase: "day", over: false,
       orders: {},
       players: [], businesses: [], nextBizId: 1,
       effects: [], pending: [], log: [],
@@ -198,24 +197,24 @@ const SMG = (() => {
       const p = st.players[i];
       const mine = st.businesses.find(x => x.owner === p.id && x.type === b.id);
       if (b.kind === "extract") Object.entries(b.outputs).forEach(([cid, q]) => {
-        const n = Math.floor(q * G.richness(b, c.start) * S.extractOutput);
+        const n = q;
         if (S.businessStock) G.addBiz(mine, cid, Math.min(n, S.businessSpace)); else G.add(p, cid, n);
       });
       else Object.entries(b.inputs).forEach(([cid, q]) => G.add(p, cid, q));
     });
     G.onSetup.forEach(f => f(st));
-    G.log(st, `Game started with ${st.players.length} players. Round 1, morning.`);
+    G.log(st, `Game started with ${st.players.length} players. Round 1.`);
     G.botOrders(st);
     if (!G.waitingFor(st).length) G.resolve(st); // all computer players: play the whole game
     return st;
   };
 
-  // ---------- Phases: everyone orders, then it all happens at once ----------
-  // Morning and afternoon: every player submits a list of orders, privately.
-  // Once all have submitted, the orders are carried out together, then the automatic step runs.
-  //   - Market orders go on the book; the auction at the end of the phase matches them (game/market.js).
-  //   - Afternoon moves: if two or more players move into the same territory, none of them gets in.
-  //   - Afternoon builds: costs are worked out from the businesses there at the start of the afternoon.
+  // ---------- One round: everyone orders, then it all happens at once ----------
+  // Each round every player submits a list of orders, privately: trades, deliveries, and one move or build.
+  // Once all have submitted, the orders are carried out together, then the night's automatic steps run
+  // (game/pipeline.js: the auction, production, goods going off, new contracts).
+  //   - Market orders go on the book; the night's auction matches them (game/market.js).
+  //   - Moves: if two or more players move into the same territory, none of them gets in.
   // A copy of the game. The full order books kept for the replay (st.bookLog) are left out: computer
   // players copy the game every time they decide something, and don't need them.
   const clone = x => { const bl = x.bookLog; if (bl) delete x.bookLog; try { return JSON.parse(JSON.stringify(x)); } finally { if (bl) x.bookLog = bl; } };
@@ -256,42 +255,32 @@ const SMG = (() => {
     return { ok: true };
   };
 
-  // Everyone has submitted: carry out the orders, then run the automatic steps.
+  // Everyone has submitted: carry out the orders, then run the automatic steps, and start the next round.
   G.resolve = st => {
     let guard = 0;
     do {
       G.clock = st.round;
-      if (st.phase === "morning") {
-        st.players.forEach(p => (st.orders[p.id] || []).forEach(o => G.act(st, p.id, o.name, o.args)));
-        st.orders = {};
-        st.phase = "midday"; G.steps.midday.forEach(f => f(st));
-        st.phase = "afternoon"; st.players.forEach(p => { p.acted = false; p.cardsPlayed = 0; });
-        G.log(st, `Round ${st.round}, afternoon.`);
-      } else if (st.phase === "afternoon") {
-        // Moves into the same territory bounce
-        const moves = {};
-        st.players.forEach(p => (st.orders[p.id] || []).filter(o => o.name === "move").forEach(o => (moves[o.args.to] ||= []).push(p)));
-        const bounced = new Set();
-        Object.entries(moves).forEach(([to, ps]) => {
-          if (ps.length < 2) return;
-          ps.forEach(p => bounced.add(p.id));
-          const names = ps.map(p => p.name), who = names.length === 2 ? `${names[0]} and ${names[1]} both` : `${names.slice(0, -1).join(", ")} and ${names.at(-1)} all`;
-          G.log(st, `${who} tried to move into ${G.TERR[to].name} at the same time. Nobody got in.`);
-        });
-        st.costBasis = st.businesses.map(b => ({ territory: b.territory, owner: b.owner })); // build prices as at the start
-        st.players.forEach(p => (st.orders[p.id] || []).forEach(o => {
-          if (o.name === "move" && bounced.has(p.id)) return;
-          G.act(st, p.id, o.name, o.args);
-        }));
-        delete st.costBasis;
-        st.orders = {};
-        st.phase = "overnight"; G.steps.overnight.forEach(f => f(st));
-        if (st.round >= st.rounds) { st.over = true; st.phase = "over"; G.log(st, "Game over."); return; }
-        st.round++; st.phase = "morning";
-        st.players.forEach(p => { p.acted = false; p.cardsPlayed = 0; });
-        G.log(st, `Round ${st.round}, morning.`);
-      }
-      if (!st.over) G.botOrders(st);
+      // Moves into the same territory bounce
+      const moves = {};
+      st.players.forEach(p => (st.orders[p.id] || []).filter(o => o.name === "move").forEach(o => (moves[o.args.to] ||= []).push(p)));
+      const bounced = new Set();
+      Object.entries(moves).forEach(([to, ps]) => {
+        if (ps.length < 2) return;
+        ps.forEach(p => bounced.add(p.id));
+        const names = ps.map(p => p.name), who = names.length === 2 ? `${names[0]} and ${names[1]} both` : `${names.slice(0, -1).join(", ")} and ${names.at(-1)} all`;
+        G.log(st, `${who} tried to move into ${G.TERR[to].name} at the same time. Nobody got in.`);
+      });
+      st.players.forEach(p => (st.orders[p.id] || []).forEach(o => {
+        if (o.name === "move" && bounced.has(p.id)) return;
+        G.act(st, p.id, o.name, o.args);
+      }));
+      st.orders = {};
+      st.phase = "night"; G.steps.night.forEach(f => f(st));
+      if (st.round >= st.rounds) { st.over = true; st.phase = "over"; G.log(st, "Game over."); return; }
+      st.round++; st.phase = "day";
+      st.players.forEach(p => { p.acted = false; p.cardsPlayed = 0; });
+      G.log(st, `Round ${st.round}.`);
+      G.botOrders(st);
     } while (!st.over && !G.waitingFor(st).length && guard++ < 10000);
   };
 

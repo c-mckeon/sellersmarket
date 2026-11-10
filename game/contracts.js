@@ -18,13 +18,13 @@
 (() => {
   const G = SMG, S = GAME_SETTINGS, C = S.contracts;
 
-  // Raw-material units in one unit of a good (water counts a third: it's everywhere)
+  // Raw-material units in one unit of a good (water counts a third, a by-product half)
   const rawMemo = {};
   G.rawUnits = id => {
     if (id in rawMemo) return rawMemo[id];
     const c = G.COM[id];
     if (c.type === "raw") return (rawMemo[id] = id === "water" ? 1 / 3 : 1);
-    if (c.type === "waste") return (rawMemo[id] = 0);
+    if (c.type === "waste") return (rawMemo[id] = 0.5);
     const r = RECIPES.find(x => Object.keys(x.out)[0] === id);
     return (rawMemo[id] = Object.entries(r.in).reduce((s, [i, q]) => s + q * G.rawUnits(i), 0) / r.out[id]);
   };
@@ -48,21 +48,20 @@
     return (distMemo[from] = d);
   };
   // Where each raw material can be produced
-  const anywhere = new Set(EXTRACTORS.filter(e => e[4] === "land").map(e => e[1]));
-  const sourcesOf = raw => anywhere.has(raw) ? null : TERRITORIES.filter(t => (TERRITORY_INFO[t.id]?.res || {})[raw]).map(t => t.id);
+  const sourcesOf = G.sourcesOf;
   G.distanceOf = (id, from) => {
     const d = G.distances(from);
-    return Math.max(0, ...G.rawsOf(id).map(raw => { const src = sourcesOf(raw); return src ? Math.min(...src.map(t => d[t] ?? 99)) : 0; }));
+    return Math.max(0, ...G.rawsOf(id).map(raw => { const src = sourcesOf(raw); return src.length ? Math.min(...src.map(t => d[t] ?? 99)) : 0; }));
   };
   // Goods that can't be made at all on this map (a raw material with no source) never appear
-  G.contractGoods = () => C.goods.filter(id => G.rawsOf(id).every(raw => { const s = sourcesOf(raw); return !s || s.length; }));
+  G.contractGoods = () => C.goods.filter(id => G.rawsOf(id).every(raw => { const s = sourcesOf(raw); return s.length; }));
 
-  // Raw goods a contract can ask for: any with a source on the map, except ones that can be had anywhere (water)
-  G.contractRaws = () => COMMODITIES.filter(c => c.type === "raw" && !anywhere.has(c.id) && sourcesOf(c.id)?.length && (!C.raws || C.raws.includes(c.id))).map(c => c.id);
+  // Raw goods a contract can ask for: any with a source on the map (only settings.contracts.raws, if set)
+  G.contractRaws = () => COMMODITIES.filter(c => c.type === "raw" && sourcesOf(c.id).length && (!C.raws || C.raws.includes(c.id))).map(c => c.id);
 
   // Starting places for n players, spread across the map so the economy has its raw materials:
   // each player gets a different regional raw material (from the ones contracts ask for), starts in
-  // a territory that has it (richer ones more likely, never next to another player) and begins with
+  // a territory that has it (never next to another player, if it can be helped) and begins with
   // that mine. rng: { seed } for G.rand. Returns [{ start, business }].
   G.spreadStarts = (n, rng) => {
     const raws = [...(S.contracts.raws || G.contractRaws())];
@@ -70,13 +69,13 @@
     for (let i = 0; i < n; i++) {
       const pool = raws.filter(r => !picks.some(x => x.raw === r));
       const raw = pool.length ? pool[Math.floor(G.rand(rng) * pool.length)] : raws[Math.floor(G.rand(rng) * raws.length)];
-      const mine = G.BIZ.find(b => b.kind === "extract" && b.makes === raw && b.where === "res");
+      const mine = G.BIZ.find(b => b.kind === "extract" && b.makes === raw);
       const spots = TERRITORIES.filter(t => !t.sea && mine && G.canBuildAt(mine, t.id) && !taken.has(t.id));
       const free = spots.filter(t => !G.neighbours(t.id).some(x => taken.has(x)));
-      const list = (free.length ? free : spots).flatMap(t => Array(G.richness(mine, t.id) * 2).fill(t.id));
+      const list = (free.length ? free : spots).map(t => t.id);
       const start = list.length ? list[Math.floor(G.rand(rng) * list.length)] : G.pick(rng, TERRITORIES.filter(t => !t.sea).map(t => t.id));
       taken.add(start);
-      picks.push({ raw, start, business: mine && G.canBuildAt(mine, start) ? mine.id : "farm" });
+      picks.push({ raw, start, business: mine && G.canBuildAt(mine, start) ? mine.id : G.buildable(start)[0]?.id });
     }
     return picks.map(({ start, business }) => ({ start, business }));
   };
@@ -98,7 +97,11 @@
     }
     const goods = {};
     let raw = 0;
-    chosen.forEach(x => { const q = Math.max(1, Math.round(C.size / chosen.length / G.rawUnits(x.id))); goods[x.id] = q; raw += q * G.rawUnits(x.id); });
+    chosen.forEach(x => goods[x.id] = Math.max(1, Math.round(C.size / chosen.length / G.rawUnits(x.id))));
+    // Never more units than settings.contracts.maxUnits in all, so it fits in a stockpile
+    const units = Object.values(goods).reduce((s, q) => s + q, 0);
+    if (C.maxUnits && units > C.maxUnits) Object.keys(goods).forEach(id => goods[id] = Math.max(1, Math.floor(goods[id] * C.maxUnits / units)));
+    chosen.forEach(x => raw += goods[x.id] * G.rawUnits(x.id));
     const avgD = chosen.reduce((s, x) => s + x.d, 0) / chosen.length, avgT = chosen.reduce((s, x) => s + G.tier(x.id), 0) / chosen.length;
     st.nextContractId = (st.nextContractId || 0) + 1;
     return { id: st.nextContractId, goods, points: Math.max(1, Math.round(raw * C.pointsPerUnit * (1 + C.distanceBonus * avgD) * (1 + (C.tierBonus || 0) * avgT))), drawn: st.round };
@@ -142,7 +145,7 @@
     return { name: name[0].toUpperCase() + name.slice(1), icon };
   };
 
-  const open = st => G.need(st.phase === "morning" || st.phase === "afternoon", "Not right now.");
+  const open = st => G.need(st.phase === "day", "Not right now.");
   G.canDeliver = (st, p, k) => Object.entries(k.goods).every(([c, q]) => G.have(st, p, c) >= q);
   // Public demand: how many players hold a contract that asks for a good (not who, how many or for what).
   // except: leave this player out (so you see what others want).

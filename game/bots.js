@@ -1,19 +1,19 @@
 // Sellers Market game engine: simple computer players.
 // Deliberately simple: enough to play against and to run simulations (tools/sim.js).
 //
-// Every phase a bot:
+// Every round a bot:
 //   1. cancels its old orders, delivers any contract it can, and throws away a contract that can't be
 //      done (after 3 rounds, under a third of its goods exist anywhere)
-//   2. works out what it wants (goods for its two best contracts, its factories' inputs, materials for
-//      its next build) and what it can spare (everything else)
+//   2. works out what it wants (goods for its two best contracts and its factories' inputs) and what it
+//      can spare (everything else)
 //   3. sells spares: from its guess of the price, falling the longer they go unsold; if a buyer is already
 //      bidding near that, at their bid; goods going off tonight or piling up go at the best bid there is
 //   4. buys wants, up to what each is worth to it: a contract good is worth its share of the contract's
 //      points at the bot's cash value of a point (its cash over the rounds left, so it spends more
 //      freely near the end); if someone asks no more than that it pays their ask, otherwise it creeps up
 //        guess = last traded price, else the cost basis, else its own rough estimate (never shown)
-// In the afternoon it also builds (or heads somewhere it can build) something that feeds its contracts,
-// that others are bidding for, or that other players' contracts want (the public demand count).
+// It also builds (or heads somewhere it can build) something that feeds its contracts, that others are
+// bidding for, or that other players' contracts want (the public demand count).
 
 (() => {
   const G = SMG, S = GAME_SETTINGS;
@@ -21,15 +21,14 @@
   const B = S.bots = Object.assign({
     perRawUnit: 30,        // what a bot guesses a raw-material unit is worth, before anything has traded
     bidStart: 0.8,         // first bid: 80% of its guess…
-    bidStep: 0.15,         // …+15% of the guess for every phase it goes unfilled…
+    bidStep: 0.15,         // …+15% of the guess for every round it goes unfilled…
     bidMax: 3,             // …up to 3× the guess
     askStart: 1.3,         // first ask: 130% of its guess…
-    askStep: 0.1,          // …−10% for every phase it goes unsold…
+    askStep: 0.1,          // …−10% for every round it goes unsold…
     askMin: 0.4,           // …down to 40%
     cashPerPhase: 0.6,     // spend at most this share of cash in one auction
-    reserve: 6,            // crates of building materials a bot always keeps
     pointsPerRound: 0.7,   // how many points a bot expects to score a round: sets what a point is worth in cash
-    inputPremium: 1.5,     // what a factory input or building material is worth: × its going price
+    inputPremium: 1.5,     // what a factory input is worth: × its going price
     reach: 4,              // how many moves away a bot will travel to build
     demandWeight: 1,       // how much a bot favours building what other players' contracts want (the public count)
   }, S.bots || {});
@@ -49,17 +48,6 @@
 
   const addTo = (m, c, q) => { if (q > 0) m[c] = (m[c] || 0) + q; };
 
-  // The goods a bot would use to pay for a build (or a reserve): what it holds, and for the rest the
-  // cheapest material per crate on offer (nothing on offer: its own cheapest guess)
-  const materialsFor = (st, p, need) => {
-    const M = S.build.materials, { pay, short, heavyShort } = G.payFor(st, p, need);
-    const cheapest = list => list.map(c => ({ c, px: (G.bestAsk(st, c)?.price ?? G.guess(st, c) * 1.5) / M[c] })).sort((a, b) => a.px - b.px)[0].c;
-    const goods = { ...pay };
-    if (heavyShort) { const c = cheapest(S.build.heavy.goods); addTo(goods, c, Math.ceil(heavyShort / M[c])); }
-    if (short - heavyShort > 0) { const c = cheapest(G.MATERIALS); addTo(goods, c, Math.ceil((short - heavyShort) / M[c])); }
-    return goods;
-  };
-
   // What a bot wants to have in its stockpile right now
   const wantsOf = (st, p) => {
     const want = {};
@@ -75,16 +63,13 @@
       const sub = !p.stock[c] && !G.bestAsk(st, c) && G.substitutesFor(b, c).find(([x]) => G.bestAsk(st, x) || p.stock[x]);
       if (sub) addTo(want, sub[0], q * sub[1]); else addTo(want, c, q);
     }); });
-    // The next build, or at least a small reserve of building materials
-    if (p.plan) Object.entries(p.plan.cost).forEach(([c, q]) => addTo(want, c, q));
-    if (!p.plan) Object.entries(materialsFor(st, p, { crates: B.reserve, heavy: 0 })).forEach(([c, q]) => addTo(want, c, q));
     return want;
   };
 
   // What a good is worth to this bot, per unit. A contract good is worth its share of the contract's points
   // (by raw-material content) at the bot's value of a point: its cash spread over the rounds left, so it
   // spends more freely as the game nears its end (cash left over only breaks ties). Anything else (factory
-  // inputs, building materials) is worth a bit more than its going price.
+  // inputs) is worth a bit more than its going price.
   const worthOf = (st, p, c) => {
     const vpp = Math.max(5, (p.cash + G.lockedCash(st, p)) / Math.max(4, (st.rounds - st.round + 1) * B.pointsPerRound));
     let w = G.guess(st, c) * B.inputPremium;
@@ -163,8 +148,6 @@
       if (r) Object.keys(r.in).forEach(i => walk(i, depth + 1));
     };
     [...p.contracts].sort((a, b) => b.points - a.points).slice(0, 2).forEach(k => Object.keys(k.goods).forEach(c => walk(c, 0)));
-    // Building materials we're short of are missing links too
-    Object.entries(p.plan?.cost || materialsFor(st, p, { crates: B.reserve, heavy: 0 })).forEach(([c, q]) => { if ((p.stock[c] || 0) < q) walk(c, 1); });
     return links;
   };
 
@@ -176,29 +159,28 @@
     s += (B.demandWeight || 0) * G.demand(st, out, p.id);                                // others' contracts want it (public count)
     { const bid = G.bestBid(st, out), cb = G.costBasis(st, out);                            // …and pays more than it costs to make
       if (bid && cb && !cb.missing.length && bid.price > cb.value * 1.1) s += 2 * Math.min(2, bid.price / Math.max(1, cb.value) - 1); }
-    if (b.kind === "extract") s *= G.richness(b, tid);
-    else {
+    if (b.kind === "factory") {
       const mine = new Set(G.myBusinesses(st, p.id).flatMap(x => Object.keys(G.BIZ_BY[x.type].outputs)));
       Object.keys(b.inputs).forEach(c => { if (!mine.has(c) && !p.stock[c] && !G.bestAsk(st, c) && !(c in links) && !st.lastTrade[c]) s *= 0.4; });
     }
     const same = G.myBusinesses(st, p.id).filter(x => x.type === b.id).length;
     return s * Math.pow(0.5, same);
   };
-  const bestHere = (st, p, tid, links = missingLinks(st, p)) => G.buildable(st, tid, p.id)
-    .map(o => ({ ...o, s: usefulness(st, p, o.b, tid, links) / (1 + o.cost.crates / 10) }))
+  const bestHere = (st, p, tid, links = missingLinks(st, p)) => G.buildable(tid)
+    .map(b => ({ b, s: usefulness(st, p, b, tid, links) }))
     .sort((a, b) => b.s - a.s)[0];
 
-  const afternoon = (st, p) => {
+  const moveOrBuild = (st, p) => {
     const links = missingLinks(st, p);
     const here = bestHere(st, p, p.pos, links);
-    if (here && here.s > 0.5 && G.canPay(st, p, here.cost)) { G.act(st, p.id, "build", { type: here.b.id }); p.plan = null; return; }
-    // Somewhere within reach with something better? Head there; meanwhile save up materials for it.
+    if (here && here.s > 0.5) { G.act(st, p.id, "build", { type: here.b.id }); p.plan = null; return; }
+    // Nothing worth building here? Head for the best place within reach.
     const d = G.distances(p.pos);
     let target = { tid: p.pos, o: here, s: here ? here.s : 0 };
     Object.entries(d).filter(([t, n]) => n > 0 && n <= (B.reach || 4) && !G.isSea(t)).forEach(([t, n]) => {
       const o = bestHere(st, p, t, links); if (o && o.s / (1 + 0.25 * n) > target.s) target = { tid: t, o, s: o.s / (1 + 0.25 * n) };
     });
-    p.plan = target.o ? { type: target.o.b.id, tid: target.tid, cost: materialsFor(st, p, target.o.cost) } : null;
+    p.plan = target.o ? { type: target.o.b.id, tid: target.tid } : null;
     if (target.tid !== p.pos) {
       // One step along a shortest path
       const dt = G.distances(target.tid);
@@ -208,6 +190,5 @@
   };
 
   G.botWants = wantsOf; // what a bot is keeping for itself (used by tools/sim.js)
-  G.bots.morning = (st, p) => trade(st, p);
-  G.bots.afternoon = (st, p) => { afternoon(st, p); trade(st, p); };
+  G.bots.day = (st, p) => { moveOrBuild(st, p); trade(st, p); };
 })();

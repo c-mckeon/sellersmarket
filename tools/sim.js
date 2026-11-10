@@ -22,18 +22,18 @@ const overrides = JSON.parse(arg("set", "{}"));
 const E = engine(overrides), G = E.G, COMMODITIES = E.COMMODITIES;
 const land = E.run("TERRITORIES").filter(t => !t.sea).map(t => t.id);
 
-// The nightly check, run after the afternoon auction
+// The nightly check, run after the night's steps
 const watch = st => {
   const m = st.mon ||= { outRaw: 0, nRaw: 0, outAll: 0, nAll: 0, short: 0, shortGoods: {}, dead: 0, rounds: 0, firstDelivery: null, cornered: 0, contested: 0, corneredGoods: {}, lastDelivered: 0, lastBiz: st.businesses.length };
   m.rounds++;
   const usesOf = b => new Set([...Object.keys(b.inputs), ...Object.keys(b.inputs).flatMap(c => G.substitutesFor(b, c).map(([x]) => x))]);
   st.businesses.forEach(biz => {
     const g = G.BIZ_BY[biz.type].makes, raw = G.BIZ_BY[biz.type].kind === "extract";
-    const ok = G.isMaterial(g) || st.businesses.some(x => x.owner !== biz.owner && usesOf(G.BIZ_BY[x.type]).has(g))
+    const ok = st.businesses.some(x => x.owner !== biz.owner && usesOf(G.BIZ_BY[x.type]).has(g))
       || st.players.some(p => p.id !== biz.owner && p.contracts.some(k => k.goods[g]));
-    m.nAll++; m.outAll += ok; if (raw && g !== "water") { m.nRaw++; m.outRaw += ok; } // water: anyone can make it anywhere
+    m.nAll++; m.outAll += ok; if (raw && g !== "water") { m.nRaw++; m.outRaw += ok; }
   });
-  const traded = st.history.slice(-2).some(h => Object.keys(h.trades).length);
+  const traded = st.history.slice(-1).some(h => Object.keys(h.trades).length);
   const delivered = (st.stats.delivered || 0) > m.lastDelivered, built = st.businesses.length > m.lastBiz;
   if (!traded && !delivered && !built) m.dead++;
   if (delivered && m.firstDelivery == null) m.firstDelivery = st.round;
@@ -54,7 +54,7 @@ const watch = st => {
     if (held[top] / total >= 0.8 && surplus > 0 && offeredNear < surplus) { m.cornered++; m.corneredGoods[c.id] = (m.corneredGoods[c.id] || 0) + 1; }
   });
 };
-G.steps.overnight.push(watch);
+G.steps.night.push(watch);
 
 const out = [];
 for (let g = 0; g < games; g++) {
@@ -63,7 +63,7 @@ for (let g = 0; g < games; g++) {
   if (starts === "spread") G.spreadStarts(players, rng).forEach((x, i) => ps.push({ name: "Bot " + (i + 1), bot: true, ...x }));
   else for (let i = 0; i < players; i++) {
     const start = G.pick(rng, land);
-    const opts = G.BIZ.filter(b => G.canBuildAt(b, start) && b.kind === "extract").sort((a, b) => G.richness(b, start) * G.rawUnits(b.makes) * b.outputs[b.makes] - G.richness(a, start) * G.rawUnits(a.makes) * a.outputs[a.makes]);
+    const opts = G.BIZ.filter(b => G.canBuildAt(b, start) && b.kind === "extract").sort((a, b) => G.rawUnits(b.makes) * b.outputs[b.makes] - G.rawUnits(a.makes) * a.outputs[a.makes]);
     ps.push({ name: "Bot " + (i + 1), bot: true, start, business: opts[0].id });
   }
   const st = G.newGame({ players: ps, seed: seed * 1000 + g });

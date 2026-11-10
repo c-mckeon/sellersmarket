@@ -56,7 +56,7 @@
   G.borrowLimit = (st, p) => G.collateral(st, p) * G.borrowLimitShare(st);
 
   // ---------- Morning actions ----------
-  const morning = st => G.need(st.phase === "morning" || st.phase === "afternoon", "The broker is closed right now.");
+  const morning = st => G.need(st.phase === "day", "The broker is closed right now.");
   const amt = x => { x = Math.round(+x * 100) / 100; G.need(x > 0, "Enter an amount."); return x; };
 
   G.actions.borrow = (st, p, { amount }) => {

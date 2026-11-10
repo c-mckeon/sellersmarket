@@ -29,7 +29,7 @@ const night = (st, round) => { st.round = round; G.clock = round; G.expire(st); 
 }
 { // On the book, goods keep ageing; a buyer gets them with their age
   const st = fresh(), [a, b] = st.players;
-  G.clock = 1; G.add(a, "wood", 5); st.round = 2; st.phase = "morning";
+  G.clock = 1; G.add(a, "wood", 5); st.round = 2; st.phase = "day";
   G.act(st, a.id, "placeOrder", { id: "wood", side: "sell", price: 5, qty: 5 });
   night(st, 3); eq("goods on offer go off too (the order shrinks)", st.book.length, 0);
   G.clock = 3; st.round = 3; G.add(a, "wood", 4, 2); // made in round 2: goes off at the end of round 4
@@ -41,7 +41,7 @@ const night = (st, round) => { st.round = round; G.clock = round; G.expire(st); 
 }
 { // Cancelling gives goods back with their age
   const st = fresh(), a = st.players[0];
-  G.clock = 1; G.add(a, "wood", 2); st.round = 2; st.phase = "morning";
+  G.clock = 1; G.add(a, "wood", 2); st.round = 2; st.phase = "day";
   G.act(st, a.id, "placeOrder", { id: "wood", side: "sell", price: 9, qty: 2 });
   G.act(st, a.id, "cancelAll", {});
   eq("cancel keeps the age", a.lots.wood, [[2, 1]]);

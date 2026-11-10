@@ -11,8 +11,7 @@ function buildDbRows() {
 
   R.sectors = Object.entries(SECTORS).map(([k, s]) => [k, s.name, EF.tickers[k]]);
   R.commodities = COMMODITIES.map(c => [c.id, c.name, c.type, sectorOf[c.id], r2(basePrice(c.id)), PR[c.id].s0, PR[c.id].e]);
-  const placement = { res: "resource", land: "land", oil: "oil_access", sea: "sea" };
-  R.business_types = BIZ.map(b => [bizId(b.name), b.name, b.kind, placement[b.where], b.base]);
+  R.business_types = BIZ.map(b => [bizId(b.name), b.name, b.kind]);
   R.recipe_inputs = [];
   R.recipe_outputs = [];
   BIZ.forEach(b => {
@@ -20,9 +19,9 @@ function buildDbRows() {
     Object.entries(b.recipe.in).forEach(([c, q]) => R.recipe_inputs.push([bizId(b.name), c, q]));
     Object.entries(b.recipe.out).forEach(([c, q], i) => R.recipe_outputs.push([bizId(b.name), c, q, i > 0]));
   });
-  R.territories = TERRITORIES.map(t => [t.id, t.name, !!t.sea, coastal(t.id), TERRITORY_INFO[t.id].cost ?? null, TERRITORY_INFO[t.id].note]);
-  R.territory_resources = [];
-  TERRITORIES.forEach(t => Object.entries(TERRITORY_INFO[t.id].res).forEach(([c, r]) => R.territory_resources.push([t.id, c, r])));
+  R.territories = TERRITORIES.map(t => [t.id, t.name, !!t.sea, coastal(t.id), TERRITORY_INFO[t.id].note]);
+  R.territory_businesses = [];
+  TERRITORIES.forEach(t => (TERRITORY_INFO[t.id].biz || []).forEach(b => R.territory_businesses.push([t.id, b])));
   R.territory_neighbours = [];
   TERRITORIES.forEach(t => (TERRITORY_NEIGHBOURS[t.id] || []).forEach(n => R.territory_neighbours.push([t.id, n])));
   R.cards = CARDS.map((c, i) => [i + 1, c.name, c.cat, c.rarity, c.text]);
@@ -36,7 +35,7 @@ function buildDbRows() {
 
   // The example game
   const base = baseRate(0.02);
-  R.games = [[1, "Test game", ME.round, "morning", 0.02, base]];
+  R.games = [[1, "Test game", ME.round, "day", 0.02, base]];
   const pid = { you: 1, ana: 2, ben: 3, cleo: 4 };
   const cash = { you: ME.cash, ana: 410, ben: 280, cleo: 515 };
   R.players = Object.entries(PLAYERS).map(([k, p]) => [pid[k], 1, p.name, p.color, cash[k], PAWNS[k], 40]);
@@ -49,12 +48,7 @@ function buildDbRows() {
   R.holdings = [];
   Object.entries(stock).forEach(([k, st]) => Object.entries(st).forEach(([c, q]) => R.holdings.push([pid[k], c, q])));
   R.businesses = [];
-  const count = {};
-  PLOTS.forEach(([tid, who, name], i) => {
-    const b = BIZ.find(x => x.name === name), n = count[tid] || 0;
-    R.businesses.push([i + 1, 1, pid[who], bizId(name), tid, 1 + (i % 6), Math.round(buildCost(b, tid, n))]);
-    count[tid] = n + 1;
-  });
+  PLOTS.forEach(([tid, who, name], i) => R.businesses.push([i + 1, 1, pid[who], bizId(name), tid, 1 + (i % 6)]));
   // Two rounds of price history
   let seed = 11;
   const rnd = () => (seed = (seed * 16807) % 2147483647) / 2147483647;

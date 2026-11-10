@@ -32,17 +32,17 @@ const COMMODITIES = [
   { id: "concrete",       name: "Concrete",       type: "made",  desc: "Cement, sand and water. Foundations for anything big." },
 ];
 
-// Each recipe turns inputs into outputs. The first output is the main product;
-// any further outputs are by-products (usually waste).
+// Each recipe turns inputs into outputs, once a round. The first output is the main product (every
+// business makes 2 of it a round); any further outputs are by-products.
 const RECIPES = [
-  { at: "Flour mill",          in: { wheat: 3, water: 1 },                  out: { flour: 2 } },
-  { at: "Sawmill",             in: { wood: 2 },                             out: { lumber: 1, sawdust: 1 } },
-  { at: "Blast furnace",       in: { iron_ore: 2, coal: 1 },                out: { iron: 1, slag: 1 } },
+  { at: "Flour mill",          in: { wheat: 2, water: 1 },                  out: { flour: 2 } },
+  { at: "Sawmill",             in: { wood: 2 },                             out: { lumber: 2, sawdust: 1 } },
+  { at: "Blast furnace",       in: { iron_ore: 2, coal: 1 },                out: { iron: 2, slag: 1 } },
   { at: "Glassworks",          in: { sand: 2, limestone: 1 },               out: { glass: 2 } },
-  { at: "Kiln",                in: { clay: 2, coal: 1 },                    out: { ceramic: 1 } },
+  { at: "Kiln",                in: { clay: 2, coal: 1 },                    out: { ceramic: 2 } },
   { at: "Cement kiln",         in: { limestone: 2, slag: 1 },               out: { cement: 2 } },
-  { at: "Paper mill",          in: { sawdust: 2, water: 2 },                out: { paper: 1 } },
-  { at: "Bakery",              in: { flour: 2, water: 1 },                  out: { bread: 3 } },
-  { at: "Steelworks",          in: { iron: 1, coal: 1 },                    out: { steel: 1, slag: 1 } },
-  { at: "Concrete plant",      in: { cement: 1, sand: 3, water: 1 },         out: { concrete: 4 } },
+  { at: "Paper mill",          in: { sawdust: 2, water: 1 },                out: { paper: 2 } },
+  { at: "Bakery",              in: { flour: 2, water: 1 },                  out: { bread: 2 } },
+  { at: "Steelworks",          in: { iron: 2, coal: 1 },                    out: { steel: 2, slag: 1 } },
+  { at: "Concrete plant",      in: { cement: 1, sand: 2, water: 1 },        out: { concrete: 2 } },
 ];

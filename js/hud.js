@@ -11,9 +11,9 @@ const PLAYERS = {
 // Example businesses: [territory, owner, business]
 const PLOTS = [
   ["ukraine", "you", "Flour mill"], ["paris", "you", "Bakery"], ["sweden", "you", "Sawmill"],
-  ["ruhr", "ana", "Blast furnace"], ["berlin", "ana", "Steelworks"], ["bohemia", "ana", "Cement kiln"],
+  ["ruhr", "ana", "Blast furnace"], ["berlin", "ana", "Steelworks"], ["bohemia", "ana", "Coal mine"],
   ["lowlands", "ben", "Glassworks"], ["warsaw", "ben", "Kiln"], ["munich", "ben", "Concrete plant"],
-  ["spain", "cleo", "Blast furnace"], ["finland", "cleo", "Paper mill"], ["london", "cleo", "Steelworks"],
+  ["spain", "cleo", "Blast furnace"], ["finland", "cleo", "Paper mill"], ["london", "cleo", "Bakery"],
 ];
 // Where each player's pawn stands
 const PAWNS = { you: "paris", ana: "ruhr", ben: "lowlands", cleo: "spain" };

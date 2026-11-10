@@ -57,8 +57,8 @@
 
   // ---------- Playing (afternoon) ----------
   G.actions.playCard = (st, p, { card, commodity, ownBusiness, targetBusiness, targetPlayer }) => {
-    G.need(st.phase === "afternoon", "Cards are played in the afternoon.");
-    G.need(p.cardsPlayed < S.cardsPerAfternoon, "You've already played a card this afternoon.");
+    G.need(st.phase === "day", "Not right now.");
+    G.need(p.cardsPlayed < S.cardsPerAfternoon, "You've already played a card this round.");
     const i = p.hand.indexOf(+card); G.need(i >= 0, "That card isn't in your hand.");
     const c = G.CARD[+card], needs = G.cardNeeds(c);
     if (needs.commodity) G.need(G.COM[commodity], "Choose a commodity.");
@@ -140,7 +140,7 @@
 
   // Effects are active from the round after they're played to `until` inclusive.
   // Overnight we're setting up the next round, so count from that one.
-  G.activeEffects = st => { const r = st.round + (st.phase === "overnight" ? 1 : 0); return st.effects.filter(e => e.from <= r && r <= e.until); };
+  G.activeEffects = st => { const r = st.round + (st.phase === "night" ? 1 : 0); return st.effects.filter(e => e.from <= r && r <= e.until); };
   G.expireEffects = st => { st.effects = st.effects.filter(e => e.until > st.round); };
 
   // Price modifiers by commodity
