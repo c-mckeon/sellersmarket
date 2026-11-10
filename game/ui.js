@@ -116,7 +116,7 @@
     if (o.name === "build") return `Build a ${G.BIZ_BY[a.type].name.toLowerCase()}`;
     return o.name;
   };
-  let flashMsg = "", qTimer = null, dStop = () => {}; // qTimer: the quote board replay; dStop: stops the order book replay
+  let flashMsg = "", qStop = null, dStop = () => {}; // qStop / dStop: stop the quote board / order book replay
   const flash = msg => { flashMsg = msg; };
   // A section that starts closed and stays however the player left it (render() rebuilds the page)
   const fold = (key, cls, summary, body) => `<details class="${cls} fold" data-fold="${key}" ${ui.open?.[key] ? "open" : ""}><summary>${summary}</summary>${body}</details>`;
@@ -279,85 +279,136 @@
     return new Set(st.history.filter(h => h.n > seen).flatMap(h => Object.keys(h.trades)));
   };
 
-  // Frames for the replay: one per auction (book left afterwards + what traded), then "now" (the public book)
+  // ----- Quote board: a small order book per good, price running bottom to top -----
+  // The same moments as the big order book replay, lined up so every card moves together: four per
+  // auction (orders in, bids meet asks, traded, what's left; a good that didn't trade just holds), then now.
   function boardData() {
-    let lastStart = 0;
     const ids = new Set(st.book.map(o => o.good));
     st.history.forEach(h => { Object.keys(h.trades).forEach(i => ids.add(i)); Object.keys(h.quotes || {}).forEach(i => ids.add(i)); Object.keys(h.pre || {}).forEach(i => ids.add(i)); });
     const busy = id => st.history.reduce((s, h) => s + (h.trades[id] ? 2 : 0) + (h.quotes?.[id] ? 1 : 0), 0) + (st.book.some(o => o.good === id) ? 1 : 0);
     const goods = [...ids].sort((a, b) => busy(b) - busy(a) || G.COM[a].name.localeCompare(G.COM[b].name)).slice(0, 10);
-    // Two frames per auction: the book with everyone's orders in (bids can cross asks), then what's left
-    // after it cleared, with the trades. (Auctions from before this was recorded only have the second.)
-    const qs = (src, id) => { const x = src?.[id]; return x ? [id, [x.bid, x.ask, x.bq || 0, x.aq || 0]] : null; };
+    const hs = st.history.filter(bookOf);
     const frames = [];
-    st.history.forEach((h, i) => {
-      if (i === st.history.length - 1) lastStart = frames.length;
-      if (h.pre) frames.push({ label: `Round ${h.round}: orders in`, q: Object.fromEntries(goods.map(id => qs(h.pre, id)).filter(Boolean)), t: {} });
-      frames.push({ label: `Round ${h.round}: auction cleared`, q: Object.fromEntries(goods.map(id => qs(h.quotes, id)).filter(Boolean)),
-        t: Object.fromEntries(goods.filter(id => h.trades[id]).map(id => [id, [h.trades[id].price, h.trades[id].qty]])) });
+    hs.forEach(h => {
+      const tr = goods.some(id => h.trades[id]), r = `Round ${h.round}`;
+      (tr ? ["orders in", "bids meet asks", "traded", "after the auction"] : ["orders in", "orders in", "nothing traded", "nothing traded"])
+        .forEach((l, i) => frames.push({ label: `${r}: ${l}`, hold: tr ? [375, 250, 100, 375][i] : [375, 0, 0, 375][i] }));
     });
-    frames.push({ label: "Now: the book as it stands", now: true, t: {},
-      q: Object.fromEntries(goods.map(id => { const b = G.bestBid(st, id), a = G.bestAsk(st, id); return b || a ? [id, [b?.price ?? null, a?.price ?? null, b?.qty || 0, a?.qty || 0]] : null; }).filter(Boolean)) });
-    // Each good's price scale, fixed for the whole replay so the bars move rather than the axis
-    const scale = {};
+    frames.push({ label: "Now: the book as it stands", now: true });
+    const per = {};
     goods.forEach(id => {
-      const v = frames.flatMap(f => [f.q[id]?.[0], f.q[id]?.[1], f.t[id]?.[0]]).filter(x => x != null);
-      const lo = Math.min(...v), hi = Math.max(...v), pad = Math.max(1, (hi - lo) * 0.15);
-      scale[id] = [Math.max(0, lo - pad), hi + pad];
+      const fs = [];
+      hs.forEach(h => { const f = auctionFrames(id, h); fs.push(...(f.length === 4 ? f : [f[0], f[0], f[1], f[1]])); });
+      fs.push({ segs: bookSegs(nowBook(st, id)) });
+      let last = null;
+      for (const h of st.history) { if (hs[0] && h.n >= hs[0].n) break; if (h.trades[id]) last = h.trades[id].price; }
+      fs.forEach(f => { if (f.sold != null) last = f.sold; f.last = last; });
+      const ghosts = ghostsOf(id, hs.slice(-8)), sc = scaleOf(fs, ghosts);
+      fs.forEach(f => { f.lo = sc.lo; f.hi = sc.hi; });
+      per[id] = { frames: fs, ghosts, maxQ: sc.maxQ };
     });
-    return { goods, frames, scale, lastStart };
+    return { goods, frames, per, lastStart: Math.max(0, frames.length - 5) };
   }
 
-  // One card's contents for a frame. last: the last trade up to that frame, or null.
-  const cardState = (d, id, f, last) => {
-    const [lo, hi] = d.scale[id], X = v => ((v - lo) / (hi - lo || 1) * 100).toFixed(1);
-    const q = f.q[id] || [null, null, 0, 0], tr = f.t[id];
-    return { bid: q[0], ask: q[1], bq: q[2], aq: q[3], last, traded: !!tr, tr, crossed: q[0] != null && q[1] != null && q[0] >= q[1],
-      xb: q[0] != null ? X(q[0]) : null, xa: q[1] != null ? X(q[1]) : null, xl: last != null ? X(last) : null };
-  };
-  const cardHTML = (id, c, flash) => `<button class="qcard${flash ? " flash" : ""}" data-good="${id}">
-      <span class="qc-h"><b>${G.COM[id].name}${(n => n ? ` <small class="qc-want" title="In ${n} open contract${n === 1 ? "" : "s"}">in ${n} contract${n === 1 ? "" : "s"}</small>` : "")(G.demand(vw, id, ui.seat))}</b><span class="qc-last">${c.tr ? `traded ${c.tr[1]} at ${m(c.tr[0])}` : c.last != null ? `last ${m(c.last)}` : "no trades"}</span></span>
-      <span class="qc-bar"><span class="qc-band${c.crossed ? " cross" : ""}" style="${c.xb != null && c.xa != null ? `left:${Math.min(c.xb, c.xa)}%;width:${Math.abs(c.xa - c.xb).toFixed(1)}%` : "display:none"}"></span>
-        <i class="qc-bid" style="${c.xb != null ? `left:${c.xb}%` : "display:none"}"></i><i class="qc-ask" style="${c.xa != null ? `left:${c.xa}%` : "display:none"}"></i>
-        <i class="qc-tr" style="${c.xl != null ? `left:${c.xl}%` : "display:none"}"></i></span>
-      <span class="qc-n"><span class="b">${c.bid != null ? `bid ${m(c.bid)} <small>×${c.bq}</small>` : "no bids"}</span><span class="sp">${c.crossed ? "crossed" : c.bid != null && c.ask != null ? `spread ${m(c.ask - c.bid)}` : ""}</span><span class="a">${c.ask != null ? `ask ${m(c.ask)} <small>×${c.aq}</small>` : "no asks"}</span></span>
-    </button>`;
+  // One card's little chart: asks to the right of the centre line, bids to the left, past orders as grey
+  // blobs, the spread shaded, a line at a clearing price, and the last sale as a dot on the centre line
+  function drawMini(D, s) {
+    const W = 140, H = 100, T = 5, B = 5, cx = W / 2, half = cx - 5, span = s.hi - s.lo || 1, plotH = H - T - B;
+    const Yraw = p => T + (s.hi - p) / span * plotH, Y = p => Math.min(H - B, Math.max(T, Yraw(p)));
+    const pinned = p => Yraw(p) < T - 0.5 || Yraw(p) > H - B + 0.5;
+    const k = half / D.maxQ, bh = Math.max(3, Math.min(7, plotH / span * 0.7));
+    const segs = Object.values(s.segs).filter(x => x.w > 0.02 && x.op > 0.02);
+    let g = "";
+    const G0 = D.ghosts;
+    if (G0.n) {
+      const sd = Math.max(span / 30, 0.5), N = 60;
+      const curve = list => Array.from({ length: N + 1 }, (_, i) => list.reduce((t, [pp, q]) => t + q * Math.exp(-((s.hi - i / N * span - pp) ** 2) / (2 * sd * sd)), 0));
+      const C2 = { a: curve(G0.a), b: curve(G0.b) }, kg = 0.7 * half / Math.max(1e-9, ...C2.a, ...C2.b);
+      [["a", 1], ["b", -1]].forEach(([side, dir]) => {
+        if (!G0[side].length) return;
+        g += `<path class="ghost" d="M${cx},${T} ${C2[side].map((v, i) => `L${(cx + dir * v * kg).toFixed(1)},${(T + i / N * plotH).toFixed(1)}`).join(" ")} L${cx},${H - B} Z"/>`;
+      });
+    }
+    const live = side => segs.filter(x => x.side === side && x.op > 0.5 && !x.fill);
+    const bid = Math.max(-Infinity, ...live("b").map(x => x.p)), ask = Math.min(Infinity, ...live("a").map(x => x.p));
+    if (isFinite(bid) && isFinite(ask) && ask > bid) g += `<rect class="band" x="3" y="${Y(ask).toFixed(1)}" width="${W - 6}" height="${(Y(bid) - Y(ask)).toFixed(1)}"/>`;
+    if (s.trade != null && s.tradeOp > 0.02) g += `<line class="tline" opacity="${s.tradeOp.toFixed(2)}" x1="3" x2="${W - 3}" y1="${Y(s.trade).toFixed(1)}" y2="${Y(s.trade).toFixed(1)}"/>`;
+    segs.forEach(x => {
+      const w = x.w * k, off = x.x0 * k, fill = `rgb(${x.rgb.map(Math.round).join(",")})`;
+      g += `<rect x="${(x.side === "a" ? cx + off : cx - off - w).toFixed(1)}" y="${(Y(x.p) - bh / 2).toFixed(1)}" width="${w.toFixed(1)}" height="${bh.toFixed(1)}" rx="1" fill="${fill}" opacity="${(x.op * (pinned(x.p) ? 0.35 : 1)).toFixed(2)}"/>`;
+    });
+    g += `<line class="axis" x1="${cx}" x2="${cx}" y1="${T}" y2="${H - B}"/>`;
+    if (s.last != null) g += `<circle class="ldot" cx="${cx}" cy="${Y(s.last).toFixed(1)}" r="3.5"/>`;
+    return `<svg viewBox="0 0 ${W} ${H}" aria-hidden="true">${g}</svg>`;
+  }
 
-  function quoteBoard(fresh) {
+  // The words on a card for moment k: best bid and ask still standing, and the last or current trade
+  const cardWords = (id, f) => {
+    const best = side => Object.entries(f.segs).filter(([key, x]) => key[0] === side && x.op > 0.5).sort((a, b) => side === "b" ? b[1].p - a[1].p : a[1].p - b[1].p)[0]?.[1];
+    const b = best("b"), a = best("a");
+    const n = G.demand(vw, id);
+    return {
+      h: `<b>${G.COM[id].name}${n ? ` <small class="qc-want" title="In ${n} open contract${n === 1 ? "" : "s"}">in ${n} contract${n === 1 ? "" : "s"}</small>` : ""}</b><span class="qc-last">${f.sold != null ? `traded at ${m(f.sold)}` : f.last != null ? `last ${m(f.last)}` : "no trades"}</span>`,
+      n: `<span class="b">${b ? `bid ${m(b.p)} <small>×${b.w}</small>` : "no bids"}</span><span class="sp">${a && b ? `spread ${m(a.p - b.p)}` : ""}</span><span class="a">${a ? `ask ${m(a.p)} <small>×${a.w}</small>` : "no asks"}</span>`,
+    };
+  };
+  const cardHTML = (id, d, k, flash) => {
+    const f = d.per[id].frames[k], w = cardWords(id, f);
+    return `<button class="qcard${flash ? " flash" : ""}" data-good="${id}">
+      <span class="qc-h">${w.h}</span><span class="qc-svg">${drawMini(d.per[id], still(f, themeColours()))}</span><span class="qc-n">${w.n}</span></button>`;
+  };
+
+  function quoteBoard(fresh, open = "") {
     const d = boardData();
-    if (!d.goods.length) return `<section class="msec"><h3>Quote board</h3><p class="muted">No orders or trades yet. Cards appear here as goods get bids and asks.</p></section>`;
-    const lastTrade = id => st.lastTrade[id]?.price ?? null, f = d.frames.at(-1);
+    const openHTML = id => `<div class="qopen" data-open="${id}">${open}</div>`;
+    if (!d.goods.length) return `<section class="msec"><h3>Quote board</h3>${open ? `<div class="qgrid">${openHTML(ui.good)}</div>` : `<p class="muted">No orders or trades yet. Cards appear here as goods get bids and asks.</p>`}</section>`;
+    const k = d.frames.length - 1;
     ui.board = d; // the replay reads this
+    const cards = d.goods.map(id => id === ui.good && open ? openHTML(id) : cardHTML(id, d, k, fresh.has(id)));
+    if (open && !d.goods.includes(ui.good)) cards.unshift(openHTML(ui.good)); // a good with no card yet: open at the top
     return `<section class="msec qboard">
-      <div class="qhead"><h3>Quote board <span class="muted small">bid ↔ ask for each good; the dot is the last trade</span></h3>
+      <div class="qhead"><h3>Quote board <span class="muted small">each good's book: asks right, bids left, the dot is the last trade</span></h3>
         <button class="gbtn ghost" id="qOpen" ${ui.qOpen ? "hidden" : ""}>▶ Replay</button></div>
       <div class="qctl" ${ui.qOpen ? "" : "hidden"}><div class="gseg"><button data-rmode="last" class="${ui.rmode !== "game" ? "on" : ""}">Last auction</button><button data-rmode="game" class="${ui.rmode === "game" ? "on" : ""}">Whole game</button></div>
-        <button class="gbtn ghost" id="qPlay">▶ Replay</button><input type="range" id="qSlide" min="${ui.rmode === "game" ? 0 : d.lastStart}" max="${d.frames.length - 1}" value="${d.frames.length - 1}" aria-label="Step through the auctions">
-        <span id="qLabel" class="muted small">${f.label}</span><button class="glink" id="qClose" title="Close the replay">✕</button></div>
-      <div class="qgrid" id="qGrid">${d.goods.map(id => cardHTML(id, cardState(d, id, f, lastTrade(id)), fresh.has(id))).join("")}</div>
+        <button class="gbtn ghost" id="qPlay">▶ Replay</button><input type="range" id="qSlide" min="${ui.rmode === "game" ? 0 : d.lastStart}" max="${k}" value="${k}" aria-label="Step through the auctions">
+        <span id="qLabel" class="muted small">${d.frames[k].label}</span><button class="glink" id="qClose" title="Close the replay">✕</button></div>
+      <div class="qgrid" id="qGrid">${cards.join("")}</div>
     </section>`;
   }
 
-  // Show frame k of the replay: update each card in place, so the bars slide (CSS transitions)
-  function showFrame(k) {
+  // Draw the board at moment k, or part-way from k - 1 to k (t from 0 to 1). Cards update in place.
+  function showFrame(k, t = 1, C = themeColours()) {
     const d = ui.board, grid = root.querySelector("#qGrid");
     if (!d || !grid) return;
-    const f = d.frames[k];
-    root.querySelector("#qLabel").textContent = f.label;
+    root.querySelector("#qLabel").textContent = d.frames[k].label;
     root.querySelector("#qSlide").value = k;
     d.goods.forEach(id => {
-      let last = null;
-      for (let i = k; i >= 0 && last == null; i--) last = d.frames[i].t[id]?.[0] ?? null;
-      const el = grid.querySelector(`.qcard[data-good="${id}"]`), c = cardState(d, id, f, last);
-      const tmp = document.createElement("div"); tmp.innerHTML = cardHTML(id, c, false);
-      const fresh = tmp.firstElementChild;
-      // Keep the element (so transitions run); swap its insides
-      el.querySelector(".qc-h").innerHTML = fresh.querySelector(".qc-h").innerHTML;
-      el.querySelector(".qc-n").innerHTML = fresh.querySelector(".qc-n").innerHTML;
-      ["qc-band", "qc-bid", "qc-ask", "qc-tr"].forEach(cl => { const a = el.querySelector("." + cl), b = fresh.querySelector("." + cl); a.setAttribute("style", b.getAttribute("style")); a.setAttribute("class", b.getAttribute("class")); });
-      el.classList.remove("flash");
-      if (c.traded) { void el.offsetWidth; el.classList.add("flash"); } // restart the flash
+      const el = grid.querySelector(`.qcard[data-good="${id}"]`);
+      if (!el) return;
+      const F = d.per[id].frames, f = F[k];
+      el.querySelector(".qc-svg").innerHTML = drawMini(d.per[id], k > 0 && t < 1 ? blend(F[k - 1], f, t, C) : still(f, C));
+      if (t === 1 || !el.dataset.k || +el.dataset.k !== k) {
+        const w = cardWords(id, f);
+        el.querySelector(".qc-h").innerHTML = w.h; el.querySelector(".qc-n").innerHTML = w.n;
+        if (+el.dataset.k !== k && f.sold != null) { el.classList.remove("flash"); void el.offsetWidth; el.classList.add("flash"); }
+        el.dataset.k = k;
+      }
     });
+  }
+  // Play from moment `from` to `to`: each blends into the next, then holds. Returns a stop function.
+  function playBoard(from, to, fast, done) {
+    const d = ui.board, C = themeColours(), MOVE = fast ? 160 : 325;
+    let k = from, t0 = null, raf = 0;
+    const ease = t => t < .5 ? 2 * t * t : 1 - (-2 * t + 2) ** 2 / 2;
+    const tick = now => {
+      if (t0 == null) t0 = now;
+      const el = Math.max(0, now - t0), move = k === from ? 0 : MOVE, hold = (d.frames[k].hold ?? 375) * (fast ? 0.4 : 1);
+      showFrame(k, move && el < move ? ease(el / move) : 1, C);
+      if (el >= move + hold) { if (++k > to) return done(); t0 = now; }
+      raf = requestAnimationFrame(tick);
+    };
+    raf = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(raf);
   }
 
   // ================= Sidebar =================
@@ -546,8 +597,7 @@
               <td class="n ${chg > 0 ? "up" : chg < 0 ? "dn" : ""}">${chg != null ? pct(chg) : "–"}</td><td class="n">${vol}</td>
               <td class="n">${q.bid != null ? m(q.bid) : "–"} / ${q.ask != null ? m(q.ask) : "–"}</td></tr>`; }).join("")}
         </tbody></table>` : `<p class="muted">Nothing has traded yet. The first trades set the first prices.</p>`}`)}
-      ${sel ? ticket(p, sel, want) : ""}
-      ${quoteBoard(fresh)}
+      ${quoteBoard(fresh, sel ? ticket(p, sel, want) : "")}
       ${opportunities(p)}
       ${fold("sell", "msec", `<h3>Sell what you make <span class="muted small">${sellIds.length || "nothing"} spare</span></h3>`,
         sellIds.length ? `<div class="mgrid">${sellIds.map(sellCard).join("")}</div>` : `<p class="muted">Nothing spare right now.</p>`)}
@@ -615,44 +665,60 @@
   const bookRoundsKept = () => st.history.filter(bookOf).length;
   // How many rounds the book chart and its replay cover (the same, so they share one price scale)
   const bookRounds = () => Math.max(1, Math.min(ui.dRounds || 8, bookRoundsKept()));
+  // A good's book at one auction, as moments to show: { label, segs, trade?, sold?, hold? }
+  // segs: one bar per price level { side "b"/"a", p price, w amount, x0 offset from the centre line, col, op }.
+  // No trade: the orders in, then what's left. A trade: the orders in (the part about to fill drawn beyond
+  // the part that stays), the filling parts sliding to the clearing price and the centre line in yellow,
+  // fading away, then what's left.
+  const seg = (side, p, w, x0 = 0, col = side, op = 1) => ({ side, p, w, x0, col, op });
+  const bookSegs = lv => { const segs = {}; lv.b.forEach(([p, q]) => segs["b" + p] = seg("b", p, q)); lv.a.forEach(([p, q]) => segs["a" + p] = seg("a", p, q)); return segs; };
+  function auctionFrames(id, h) {
+    const d = bookOf(h)?.[id] || { pre: { b: [], a: [] }, post: { b: [], a: [] } }, tr = h.trades[id];
+    const when = `Round ${h.round}`;
+    if (!tr) return [{ label: `${when}: orders in`, segs: bookSegs(d.pre) }, { label: `${when}: nothing traded`, segs: bookSegs(d.post) }];
+    // Which part of each price level filled: best prices first, up to the volume traded
+    const filled = (lv, ok) => { let v = tr.qty; const f = {}; lv.filter(([p]) => ok(p)).forEach(([p, q]) => { const n = Math.min(q, v); if (n > 0) { f[p] = n; v -= n; } }); return f; };
+    const fb = filled(d.pre.b, p => p >= tr.price), fa = filled(d.pre.a, p => p <= tr.price);
+    const pre = {};
+    [["b", d.pre.b, fb], ["a", d.pre.a, fa]].forEach(([s, lv, f]) => lv.forEach(([p, q]) => {
+      const t = f[p] || 0;
+      pre[s + p] = seg(s, p, q - t);
+      if (t) pre["t" + s + p] = seg(s, p, t, q - t);
+    }));
+    const meet = { ...pre }, gone = { ...pre };
+    Object.keys(pre).filter(k => k[0] === "t").forEach(k => { meet[k] = { ...pre[k], p: tr.price, x0: 0, col: "y" }; gone[k] = { ...meet[k], op: 0 }; });
+    return [
+      { label: `${when}: orders in`, segs: pre },
+      { label: `${when}: bids meet asks at ${m(tr.price)}`, segs: meet, trade: tr.price, hold: 250 },
+      { label: `${when}: traded ${tr.qty} at ${m(tr.price)}`, segs: gone, trade: tr.price, sold: tr.price, hold: 100 },
+      { label: `${when}: after the auction`, segs: bookSegs(d.post) },
+    ];
+  }
+  // A fixed price scale covering every bid, ask and sale in a list of moments (and past orders), so
+  // nothing leaves the chart during a replay
+  const scaleOf = (frames, ghosts) => {
+    let maxQ = 1;
+    const all = [...frames.flatMap(f => { Object.values(f.segs).forEach(x => maxQ = Math.max(maxQ, x.x0 + x.w)); return [...Object.values(f.segs).map(x => x.p), f.trade, f.last]; }),
+      ...ghosts.a.map(x => x[0]), ...ghosts.b.map(x => x[0])].filter(x => x != null);
+    const a = all.length ? Math.min(...all) : 0, z = all.length ? Math.max(...all) : 12, wid = Math.max(12, (z - a) * 1.12), mid = (a + z) / 2;
+    return { lo: mid - wid / 2, hi: mid + wid / 2, maxQ };
+  };
+  // Where orders sat in some auctions (each one's book as the orders came in), for the grey blobs
+  const ghostsOf = (id, hs) => {
+    const g = { a: [], b: [], n: 0 };
+    hs.forEach(h => { const d = bookOf(h)?.[id]; if (!d) return; g.n++; d.pre.a.forEach(x => g.a.push(x)); d.pre.b.forEach(x => g.b.push(x)); });
+    return g;
+  };
+
   function depthFrames(id, rounds = 4, now = nowBook(st, id)) {
     const frames = [];
-    const seg = (side, p, w, x0 = 0, col = side, op = 1) => ({ side, p, w, x0, col, op });
-    const book = (lv, keyOf = (s, p) => s + p) => { const segs = {}; lv.b.forEach(([p, q]) => segs[keyOf("b", p)] = seg("b", p, q)); lv.a.forEach(([p, q]) => segs[keyOf("a", p)] = seg("a", p, q)); return segs; };
     const shown = st.history.filter(bookOf).slice(-rounds);
     // The last sale before the replay starts (from earlier auctions), for the last-sale line
     let lastBefore = null;
     for (const h of st.history) { if (shown[0] && h.n >= shown[0].n) break; if (h.trades[id]) lastBefore = h.trades[id].price; }
-    shown.forEach(h => {
-      const d = bookOf(h)[id] || { pre: { b: [], a: [] }, post: { b: [], a: [] } }, tr = h.trades[id];
-      const when = `Round ${h.round}`;
-      if (!tr) {
-        frames.push({ label: `${when}: orders in`, segs: book(d.pre) });
-        frames.push({ label: `${when}: nothing traded`, segs: book(d.post) });
-        return;
-      }
-      // Which part of each price level filled: best prices first, up to the volume traded
-      const filled = (lv, ok) => { let v = tr.qty; const f = {}; lv.filter(([p]) => ok(p)).forEach(([p, q]) => { const n = Math.min(q, v); if (n > 0) { f[p] = n; v -= n; } }); return f; };
-      const fb = filled(d.pre.b, p => p >= tr.price), fa = filled(d.pre.a, p => p <= tr.price);
-      // Orders in: each level is its unfilled part plus (further out) the part about to fill, same colour
-      const pre = {};
-      [["b", d.pre.b, fb], ["a", d.pre.a, fa]].forEach(([s, lv, f]) => lv.forEach(([p, q]) => {
-        const t = f[p] || 0;
-        pre[s + p] = seg(s, p, q - t);
-        if (t) pre["t" + s + p] = seg(s, p, t, q - t);
-      }));
-      // They meet: the filling parts slide to the clearing price and to the centre line, and turn yellow
-      const meet = { ...pre }, gone = { ...pre };
-      Object.keys(pre).filter(k => k[0] === "t").forEach(k => { meet[k] = { ...pre[k], p: tr.price, x0: 0, col: "y" }; gone[k] = { ...meet[k], op: 0 }; });
-      frames.push({ label: `${when}: orders in`, segs: pre });
-      frames.push({ label: `${when}: bids meet asks at ${m(tr.price)}`, segs: meet, trade: tr.price, hold: 250 });
-      frames.push({ label: `${when}: traded ${tr.qty} at ${m(tr.price)}`, segs: gone, trade: tr.price, sold: tr.price, hold: 100 });
-      frames.push({ label: `${when}: after the auction`, segs: book(d.post) });
-    });
-    frames.push({ label: "Now", segs: book(now) });
-    // Where orders sat in those rounds (each auction's book as the orders came in), for the grey blobs
-    const ghosts = { a: [], b: [], n: 0 };
-    shown.forEach(h => { const d = bookOf(h)[id]; if (!d) return; ghosts.n++; d.pre.a.forEach(x => ghosts.a.push(x)); d.pre.b.forEach(x => ghosts.b.push(x)); });
+    shown.forEach(h => frames.push(...auctionFrames(id, h)));
+    frames.push({ label: "Now", segs: bookSegs(now) });
+    const ghosts = ghostsOf(id, shown);
     // Skip moments when this good had no orders at all (they'd just be a blank chart), but keep the
     // first empty one after some orders so the last bars can shrink away
     const has = f => Object.keys(f.segs).length || f.trade != null;
@@ -661,13 +727,8 @@
     // The last sale at each moment: it moves when a trade completes
     let last = lastBefore;
     frames.forEach(f => { if (f.sold != null) last = f.sold; f.last = last; });
-    // One fixed price scale for the whole replay, covering every bid, ask and sale in it, so nothing ever
-    // leaves the chart and you can see how far prices have moved
-    let maxQ = 1;
-    const all = [...frames.flatMap(f => { Object.values(f.segs).forEach(x => maxQ = Math.max(maxQ, x.x0 + x.w)); return [...Object.values(f.segs).map(x => x.p), f.trade, f.last]; }),
-      ...ghosts.a.map(x => x[0]), ...ghosts.b.map(x => x[0])].filter(x => x != null);
-    const a = all.length ? Math.min(...all) : 0, z = all.length ? Math.max(...all) : 12, wid = Math.max(12, (z - a) * 1.12), mid = (a + z) / 2;
-    frames.forEach(f => { f.lo = mid - wid / 2; f.hi = mid + wid / 2; });
+    const { lo, hi, maxQ } = scaleOf(frames, ghosts);
+    frames.forEach(f => { f.lo = lo; f.hi = hi; });
     return { frames, maxQ, ghosts, empty: frames.length < 2 || frames.every(f => !Object.keys(f.segs).length) };
   }
 
@@ -895,6 +956,30 @@
     document.body.appendChild(el);
   }
 
+  // ----- Opening a good: its quote card grows into the big card, and shrinks back when closed -----
+  const pageRect = el => { const r = el.getBoundingClientRect(); return { x: r.left + scrollX, y: r.top + scrollY, w: r.width, h: r.height }; };
+  // A plain box shaped like a card glides from `from` to where `to` now sits, then `to` fades in
+  function morph(from, to) {
+    if (!to) return;
+    const after = () => { if (to.getBoundingClientRect().bottom > innerHeight || to.getBoundingClientRect().top < 0) to.scrollIntoView({ block: "nearest", behavior: "smooth" }); };
+    if (!from || matchMedia("(prefers-reduced-motion: reduce)").matches) return after();
+    const end = pageRect(to), box = document.createElement("div");
+    box.className = "qflip";
+    const place = r => Object.assign(box.style, { left: `${r.x}px`, top: `${r.y}px`, width: `${r.w}px`, height: `${r.h}px` });
+    place(from); document.body.appendChild(box);
+    to.style.opacity = 0;
+    requestAnimationFrame(() => requestAnimationFrame(() => { box.classList.add("go"); place(end); }));
+    let finished = false;
+    const finish = () => { if (finished) return; finished = true; box.remove(); to.style.transition = "opacity .18s"; to.style.opacity = 1; after(); };
+    box.addEventListener("transitionend", finish, { once: true });
+    setTimeout(finish, 600); // in case the transition never fires
+  }
+  function closeGood() {
+    const open = root.querySelector(".qopen"), id = ui.good, from = open && pageRect(open);
+    ui.good = null; render();
+    morph(from, root.querySelector(`.qcard[data-good="${id}"]`));
+  }
+
   // ----- Clicks -----
   function wire(p) {
     root.querySelector("#gEnd").addEventListener("click", () => {
@@ -920,14 +1005,15 @@
     root.querySelectorAll("[data-tab]").forEach(b => b.addEventListener("click", () => { ui.tab = b.dataset.tab; render(); }));
     // Market: pick a good, then the order ticket
     // Any card, row or chip with a good on it opens that good (from the sidebar too, switching to the market)
+    // A good opens in the quote board, growing out of its card; clicking the card's good again (or ✕) shrinks it back
     root.querySelectorAll("[data-good]").forEach(el => el.addEventListener("click", () => {
-      const fromSide = !!el.closest(".gdash");
-      ui.good = !fromSide && ui.good === el.dataset.good ? null : el.dataset.good; ui.tab = "market"; render();
-      // The good's panel opens above the market; glide up to it only if it's off screen
-      const tk = root.querySelector(".gticket");
-      if (ui.good && tk && tk.getBoundingClientRect().top < 0) tk.scrollIntoView({ block: "start", behavior: "smooth" });
+      const fromSide = !!el.closest(".gdash"), id = el.dataset.good;
+      if (!fromSide && ui.good === id) return closeGood();
+      const card = el.closest(".qcard");
+      ui.good = id; ui.tab = "market"; render();
+      morph(card && pageRect(card), root.querySelector(".qopen"));
     }));
-    root.querySelector("#gTicketClose")?.addEventListener("click", () => { ui.good = null; render(); });
+    root.querySelector("#gTicketClose")?.addEventListener("click", closeGood);
     root.querySelector(".mall")?.addEventListener("toggle", e => ui.allOpen = e.target.open);
     root.querySelector("#gAllGoods")?.addEventListener("click", e => { e.preventDefault(); ui.allGoods = !ui.allGoods; ui.allOpen = true; render(); });
     // Order book replay (last 4 rounds): ▶ starts it, ■ stops it; a redraw of the page stops it too
@@ -940,10 +1026,10 @@
       dPlay.dataset.on = 1; dPlay.textContent = "■ Stop";
       dStop = playDepth(root.querySelector(".depthbox"), root.querySelector("#dLabel"), ui.good, bookRounds(), () => { delete dPlay.dataset.on; dPlay.textContent = "▶ Replay again"; dStop = () => {}; });
     });
-    // Quote board replay: ▶ steps through the auctions, one every 0.7s; the slider jumps to any of them
-    clearInterval(qTimer); qTimer = null;
+    // Quote board replay: ▶ animates through the auctions; the slider jumps to any moment
+    qStop?.(); qStop = null;
     const qPlay = root.querySelector("#qPlay"), qSlide = root.querySelector("#qSlide");
-    const stopReplay = () => { clearInterval(qTimer); qTimer = null; if (qPlay) qPlay.textContent = "▶ Replay"; };
+    const stopReplay = () => { qStop?.(); qStop = null; if (qPlay) qPlay.textContent = "▶ Replay"; };
     qSlide?.addEventListener("input", () => { stopReplay(); showFrame(+qSlide.value); });
     // One ▶ Replay button: opens the controls and starts playing; ✕ puts them away and shows the book as it stands
     root.querySelector("#qOpen")?.addEventListener("click", e => {
@@ -955,12 +1041,12 @@
     });
     root.querySelectorAll("[data-rmode]").forEach(b => b.addEventListener("click", () => { ui.rmode = b.dataset.rmode; render(); }));
     qPlay?.addEventListener("click", () => {
-      if (qTimer) return stopReplay();
+      if (qStop) return stopReplay();
       const end = ui.board.frames.length - 1;
       const start = ui.rmode === "game" ? 0 : ui.board.lastStart;
-      let k = +qSlide.value >= end ? start : Math.max(start, +qSlide.value);
-      showFrame(k); qPlay.textContent = "❚❚ Pause";
-      qTimer = setInterval(() => { if (++k > end) return stopReplay(); showFrame(k); }, ui.rmode === "game" ? 700 : 1400);
+      const k = +qSlide.value >= end ? start : Math.max(start, +qSlide.value);
+      qPlay.textContent = "❚❚ Pause";
+      qStop = playBoard(k, end, ui.rmode === "game", () => { qStop = null; qPlay.textContent = "▶ Replay"; });
     });
     // Price chart: crosshair and tooltip on the nearest trade
     root.querySelectorAll(".pchart").forEach(box => {

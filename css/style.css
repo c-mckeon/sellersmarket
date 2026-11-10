@@ -538,11 +538,6 @@ svg.spark .spark-none { stroke: var(--line); stroke-width: 1.5; stroke-dasharray
 .qcard:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 .qc-h { display: flex; justify-content: space-between; align-items: baseline; gap: 6px; font-size: 13px; }
 .qc-last { font-size: 11.5px; color: var(--muted); white-space: nowrap; }
-.qc-bar { position: relative; height: 12px; background: var(--bg); border-radius: 6px; }
-.qc-band { position: absolute; top: 3px; height: 6px; background: color-mix(in srgb, var(--fin) 30%, transparent); border-radius: 3px; transition: left .45s ease, width .45s ease; }
-.qc-bar i { position: absolute; top: 0; width: 3px; height: 12px; margin-left: -1.5px; border-radius: 2px; transition: left .45s ease; }
-.qc-bid { background: var(--raw); } .qc-ask { background: var(--waste); }
-.qc-bar i.qc-tr { top: 3px; width: 7px; height: 7px; margin-left: -3.5px; border-radius: 50%; background: var(--ink); box-shadow: 0 0 0 1.5px var(--surface); }
 .qc-n { display: flex; justify-content: space-between; gap: 4px; font-size: 12px; font-variant-numeric: tabular-nums; }
 .qc-n small { color: var(--muted); }
 .qc-n .sp { color: var(--muted); }
@@ -556,7 +551,6 @@ tr.flash td { animation: tradeflashrow 1.6s ease-out; }
 
 .glink.blink { color: var(--accent); font-size: inherit; font-weight: 700; padding: 0; text-decoration: underline; }
 .offb { color: var(--waste); font-weight: 700; font-size: 11px; margin-left: 2px; }
-.qc-band.cross { background: color-mix(in srgb, #e0b800 55%, transparent); }
 .qctl .gseg button { padding: 5px 10px; }
 /* Territory card under the map: what you can produce there */
 .gterr { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 10px 14px; margin-top: 10px; }
@@ -717,3 +711,16 @@ details.gnews[open] { display: grid; }
 .depthbox .hit { fill: transparent; cursor: default; }
 .depthbox .hit:hover { fill: color-mix(in srgb, var(--ink) 10%, transparent); }
 .depthbox .llbl { font-size: 10.5px; font-weight: 700; fill: var(--accent); }
+
+/* Quote cards: a small order book, price bottom to top; asks right, bids left */
+.qc-svg svg { width: 100%; height: auto; display: block; }
+.qc-svg .ghost { fill: var(--muted); opacity: .16; }
+.qc-svg .band { fill: color-mix(in srgb, var(--fin) 16%, transparent); }
+.qc-svg .axis { stroke: var(--muted); stroke-width: 1.2; }
+.qc-svg .tline { stroke: var(--ink); stroke-width: 1.2; stroke-dasharray: 2 2; }
+.qc-svg .ldot { fill: var(--accent); stroke: var(--surface); stroke-width: 1.5; }
+/* An open good sits in the board, across the whole row */
+.qopen { grid-column: 1 / -1; }
+.qopen .gticket { margin: 2px 0; }
+.qflip { position: absolute; z-index: 50; pointer-events: none; box-sizing: border-box; border: 1px solid var(--accent); border-radius: 10px; background: var(--bg); }
+.qflip.go { transition: left .32s cubic-bezier(.2, .7, .2, 1), top .32s cubic-bezier(.2, .7, .2, 1), width .32s cubic-bezier(.2, .7, .2, 1), height .32s cubic-bezier(.2, .7, .2, 1); }
