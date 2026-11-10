@@ -18,6 +18,12 @@
 //   If one side has more than can be matched, better prices fill first; orders at the clearing price
 //   share what's left in proportion to their size (oldest first for the odd unit).
 //
+// Waste (slag, sawdust) is a negative good: nobody wants it, so the money runs the other way.
+//   sell = get rid of it: "I'll PAY up to this much a unit for someone to take it" (locks the goods and the cash)
+//   buy  = take it:       "PAY ME at least this much a unit and I'll take it" (locks nothing; reserves space)
+//   They trade when someone will pay at least what someone else asks to be paid; everyone gets the
+//   one clearing fee. Waste can't just be thrown away: pay someone, or keep it until it goes off.
+//
 // The book is public but anonymous: price levels and quantities, never who.
 // The last price a good traded at is "the price" (st.prices), used to value stockpiles.
 
@@ -54,24 +60,30 @@
     return b.value || !b.missing.length ? { value: Math.round(b.value), missing: b.missing } : null;
   };
   // ---------- Helpers ----------
+  G.isWaste = id => G.COM[id]?.type === "waste";
+  // Cash an order locks: a bid on a good, or the fee offered to get rid of waste
+  const locks = o => (o.side === "buy") !== G.isWaste(o.good) ? o.price * o.qty : 0;
   // Goods you have on offer still sit in your stockpile; buy orders reserve space for what they bring
   G.offered = (st, p) => st.book.filter(o => o.pid === p.id && o.side === "sell").reduce((s, o) => s + o.qty, 0);
   G.reserved = (st, p) => st.book.filter(o => o.pid === p.id && o.side === "buy").reduce((s, o) => s + o.qty, 0);
-  G.lockedCash = (st, p) => st.book.filter(o => o.pid === p.id && o.side === "buy").reduce((s, o) => s + o.price * o.qty, 0);
+  G.lockedCash = (st, p) => st.book.filter(o => o.pid === p.id).reduce((s, o) => s + locks(o), 0);
   G.spaceLeft = (st, p) => p.space - G.used(p) - G.offered(st, p) - G.reserved(st, p);
 
+  // Which way is better for one side: a bid is better higher, an ask lower (waste: the other way round)
+  const higherBetter = (id, side) => (side === "buy") !== G.isWaste(id);
   // Price levels for one good: [{ price, qty }], best first
   G.depth = (st, id, side) => {
     const lv = {};
     st.book.filter(o => o.good === id && o.side === side).forEach(o => lv[o.price] = (lv[o.price] || 0) + o.qty);
-    return Object.entries(lv).map(([price, qty]) => ({ price: +price, qty })).sort((a, b) => side === "buy" ? b.price - a.price : a.price - b.price);
+    return Object.entries(lv).map(([price, qty]) => ({ price: +price, qty })).sort((a, b) => higherBetter(id, side) ? b.price - a.price : a.price - b.price);
   };
   // Best price on one side and the quantity at it (null if that side is empty)
   const best = (st, id, side) => {
     let price = null, qty = 0;
+    const hi = higherBetter(id, side);
     for (const o of st.book) {
       if (o.good !== id || o.side !== side) continue;
-      if (price === null || (side === "buy" ? o.price > price : o.price < price)) { price = o.price; qty = o.qty; }
+      if (price === null || (hi ? o.price > price : o.price < price)) { price = o.price; qty = o.qty; }
       else if (o.price === price) qty += o.qty;
     }
     return price === null ? null : { price, qty };
@@ -86,7 +98,7 @@
     const bids = G.depth(st, id, "buy"), asks = G.depth(st, id, "sell");
     const bid = bids[0]?.price ?? null, ask = asks[0]?.price ?? null;
     return {
-      bid, ask, spread: bid && ask ? ask / bid - 1 : null, bids, asks,
+      bid, ask, spread: bid && ask ? (G.isWaste(id) ? bid / ask - 1 : ask / bid - 1) : null, bids, asks,
       last: st.lastTrade[id] || null,
       volume: st.history.slice(-n).reduce((s, h) => s + (h.trades[id]?.qty || 0), 0),
     };
@@ -100,19 +112,21 @@
     qty = Math.floor(+qty); price = +price;
     G.need(qty > 0, "Order at least 1.");
     G.need(Number.isInteger(price) && price >= 1 && price <= MS.maxPrice, `Prices are whole numbers: pick one from 1 to ${MS.maxPrice}.`);
-    const name = G.COM[id].name;
+    const name = G.COM[id].name, waste = G.isWaste(id);
     const mine = st.book.filter(o => o.pid === p.id && o.good === id);
-    if (side === "buy") {
-      const ask = mine.filter(o => o.side === "sell").sort((a, b) => a.price - b.price)[0];
-      G.need(!ask || price < ask.price, `You're already selling ${name} at ${G.money(ask?.price)}. Bid below that, or cancel it.`);
-      G.need(p.cash >= price * qty, `Not enough cash: that order locks ${G.money(price * qty)}.`);
-      G.need(G.spaceLeft(st, p) >= qty, `Not enough stockpile space for what it could bring in (${Math.max(0, G.spaceLeft(st, p))} free).`);
-      p.cash = cents(p.cash - price * qty);
-    } else {
-      const bid = mine.filter(o => o.side === "buy").sort((a, b) => b.price - a.price)[0];
-      G.need(!bid || price > bid.price, `You're already bidding for ${name} at ${G.money(bid?.price)}. Ask above that, or cancel it.`);
-      G.need(G.have(st, p, id) >= qty, `You only have ${G.have(st, p, id)} ${name} that isn't already on offer.`);
-    }
+    // Your own orders on the other side: you can't trade with yourself
+    const other = mine.filter(o => o.side !== side).map(o => o.price);
+    if (waste) {
+      // Waste: taking it (buy) must ask a bigger fee than you're offering to pay to get rid of it (sell)
+      if (side === "buy") G.need(!other.length || price > Math.max(...other), `You're already paying ${G.money(Math.max(...other))} to get rid of ${name}. Ask a bigger fee to take it, or cancel that.`);
+      else G.need(!other.length || price < Math.min(...other), `You're already asking ${G.money(Math.min(...other))} to take ${name}. Offer a smaller fee to get rid of it, or cancel that.`);
+    } else if (side === "buy") G.need(!other.length || price < Math.min(...other), `You're already selling ${name} at ${G.money(Math.min(...other))}. Bid below that, or cancel it.`);
+    else G.need(!other.length || price > Math.max(...other), `You're already bidding for ${name} at ${G.money(Math.max(...other))}. Ask above that, or cancel it.`);
+    const lock = (side === "buy") !== waste ? price * qty : 0;
+    G.need(p.cash >= lock, `Not enough cash: that order locks ${G.money(lock)}.`);
+    if (side === "buy" && MS.reserveSpace) G.need(G.spaceLeft(st, p) >= qty, `Not enough stockpile space for what it could bring in (${Math.max(0, G.spaceLeft(st, p))} free).`);
+    else G.need(G.have(st, p, id) >= qty, `You only have ${G.have(st, p, id)} ${name} that isn't already on offer.`);
+    p.cash = cents(p.cash - lock);
     // A sell order takes the goods from your businesses first, then your own stockpile, and remembers where
     const taken = side === "sell" ? G.take(st, p, id, qty) : null;
     st.book.push({ id: st.nextOrderId++, pid: p.id, good: id, side, price, qty, round: st.round, phase: st.phase,
@@ -123,7 +137,8 @@
   // Give back what an order locked
   const release = (st, o) => {
     const p = G.player(st, o.pid);
-    if (o.side === "buy") p.cash = cents(p.cash + o.price * o.qty); else G.giveBack(st, p, o.good, o.qty, o.from, o.lots);
+    p.cash = cents(p.cash + locks(o));
+    if (o.side === "sell") G.giveBack(st, p, o.good, o.qty, o.from, o.lots);
   };
   G.actions.cancelOrder = (st, p, { order }) => {
     const o = st.book.find(x => x.id === order && x.pid === p.id);
@@ -207,11 +222,14 @@
       const id = c.id;
       const bids = st.book.filter(o => o.good === id && o.side === "buy");
       const asks = st.book.filter(o => o.good === id && o.side === "sell");
-      const P = G.clearingPrice(bids, asks, st.lastTrade[id]?.price);
+      // Waste: the ones paying (getting rid of it) are the "bidders" for the service of taking it away
+      const waste = c.type === "waste", payers = waste ? asks : bids, payees = waste ? bids : asks;
+      const P = G.clearingPrice(payers, payees, st.lastTrade[id]?.price);
       if (P == null) return;
-      const inB = bids.filter(o => o.price >= P), inA = asks.filter(o => o.price <= P);
-      const vol = Math.min(inB.reduce((s, o) => s + o.qty, 0), inA.reduce((s, o) => s + o.qty, 0));
-      const bf = allocate(inB, vol, (a, b) => b - a), af = allocate(inA, vol, (a, b) => a - b);
+      const inPayers = payers.filter(o => o.price >= P), inPayees = payees.filter(o => o.price <= P);
+      const vol = Math.min(inPayers.reduce((s, o) => s + o.qty, 0), inPayees.reduce((s, o) => s + o.qty, 0));
+      const pf = allocate(inPayers, vol, (a, b) => b - a), qf = allocate(inPayees, vol, (a, b) => a - b);
+      const bf = waste ? qf : pf, af = waste ? pf : qf; // buyers get the goods, sellers part with them
       const bought = {}, sold = {};
       // The units sold keep their age: sellers part with their oldest first, and buyers get them in that order
       const pool = [];
@@ -222,18 +240,20 @@
         const got = G.takeLots(pool, n), known = got.reduce((s, l) => s + l[0], 0);
         got.forEach(([k, made]) => G.add(p, id, k, made));
         if (n > known) G.add(p, id, n - known);
-        p.cash = cents(p.cash + (o.price - P) * n); // refund what was locked above the clearing price
+        // A bid: refund what was locked above the clearing price. Taking waste: get paid the fee.
+        p.cash = cents(p.cash + (waste ? P : o.price - P) * n);
         o.qty -= n; bought[p.id] = (bought[p.id] || 0) + n;
         { const b = (st.stats.bought ||= {})[p.id] ||= {}; b[id] = (b[id] || 0) + n; } // for the simulator: how much was bought
       });
       af.forEach((n, o) => {
         const p = G.player(st, o.pid);
-        p.cash = cents(p.cash + P * n);
+        // A sale: get the price. Getting rid of waste: pay the fee (the rest of what was locked comes back).
+        p.cash = cents(p.cash + (waste ? o.price - P : P) * n);
         o.qty -= n; sold[p.id] = (sold[p.id] || 0) + n;
       });
       st.book = st.book.filter(o => o.qty > 0);
-      Object.entries(bought).forEach(([pid, n]) => say(+pid, `bought ${n} ${c.name} at ${G.money(P)}`));
-      Object.entries(sold).forEach(([pid, n]) => say(+pid, `sold ${n} ${c.name} at ${G.money(P)}`));
+      Object.entries(bought).forEach(([pid, n]) => say(+pid, waste ? `took ${n} ${c.name} away, paid ${G.money(P)} each` : `bought ${n} ${c.name} at ${G.money(P)}`));
+      Object.entries(sold).forEach(([pid, n]) => say(+pid, waste ? `got rid of ${n} ${c.name}, paying ${G.money(P)} each` : `sold ${n} ${c.name} at ${G.money(P)}`));
       st.prices[id] = P;
       st.lastTrade[id] = { price: P, qty: vol, round: st.round };
       record.trades[id] = { price: P, qty: vol };
@@ -256,8 +276,9 @@
     st.stats.trades = (st.stats.trades || 0) + n;
   };
 
-  // Throw goods away (any phase): for waste and anything else you don't want
+  // Throw goods away (any phase). Not waste: someone has to be paid to take it, or it's kept till it goes off.
   G.actions.dump = (st, p, { id, qty }) => {
+    G.need(!G.isWaste(id), `${G.COM[id]?.name || id} can't just be thrown away: pay someone to take it, or keep it until it goes off.`);
     qty = Math.floor(+qty);
     G.need(qty > 0 && G.have(st, p, id) >= qty, `You only have ${G.have(st, p, id)} ${G.COM[id]?.name || id} that isn't on offer.`);
     G.take(st, p, id, qty);

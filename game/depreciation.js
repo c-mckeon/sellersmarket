@@ -51,6 +51,7 @@
       const n = dueBy(o.lots, o.good, st.round);
       if (!n) return;
       G.takeLots(o.lots, n); o.qty -= n; note(o.pid, o.good, n);
+      if (G.isWaste(o.good)) G.player(st, o.pid).cash += o.price * n; // waste that went off needs no fee: unlock it
     });
     st.book = st.book.filter(o => o.qty > 0);
     Object.entries(lost).forEach(([pid, goods]) => G.log(st, `went off overnight: ${Object.entries(goods).map(([c, n]) => `${n} ${G.COM[c].name}`).join(", ")}`, +pid));

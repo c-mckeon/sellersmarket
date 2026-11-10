@@ -30,7 +30,11 @@
     inputPremium: 1.5,     // what a factory input is worth: × its going price
     reach: 4,              // how many moves away a bot will travel to build
     outputShare: 0.5,
-    buildReserve: 250,     // cash a bot keeps for trading: it only builds if this much is left afterwards      // stop building once its businesses make this share of its stockpile each round
+    buildReserve: 250,
+    wasteRoom: 4,          // a bot pays to get rid of waste when it has fewer free rows than this (and takes it with twice as many)
+    wasteFeeMax: 6,        // the most a bot pays a unit to get rid of waste (and the first fee it asks to take some)
+    sellIdle: 4,
+    feedFactories: true,   // a bot puts its factories' inputs first, and builds what they're missing           // short of cash, a bot sells a factory that has stood idle this many rounds     // cash a bot keeps for trading: it only builds if this much is left afterwards      // stop building once its businesses make this share of its stockpile each round
     demandWeight: 1,       // how much a bot favours building what the open contracts ask for
   }, S.bots || {});
 
@@ -80,6 +84,9 @@
   const worthOf = (st, p, c) => {
     const vpp = Math.max(5, (p.cash + G.lockedCash(st, p)) / Math.max(4, (st.rounds - st.round + 1) * B.pointsPerRound));
     let w = G.guess(st, c) * B.inputPremium;
+    // Inputs for its own factories come first: worth what the factory's output is worth
+    if (B.feedFactories && G.myBusinesses(st, p.id).some(x => G.BIZ_BY[x.type].inputs[c]))
+      w = Math.max(w, G.guess(st, c) * B.inputPremium * 2);
     G.targets(st, p).forEach(k => {
       if (!k.goods[c]) return;
       const raw = Object.entries(k.goods).reduce((s, [g, q]) => s + q * Math.max(0.2, G.rawUnits(g)), 0);
@@ -98,6 +105,7 @@
     // Sell spares. Floor: its going price (falling the longer it goes unsold). If a buyer is already bidding
     // at least that, sell at their bid. Goods that go off tonight, or would just pile up, go at the best bid.
     Object.entries({ ...p.stock }).forEach(([c, q]) => {
+      if (G.isWaste(c)) return; // waste: see below
       const spare = q - (want[c] || 0);
       if (spare <= 0) { delete p.mem.ask[c]; return; }
       const age = p.mem.ask[c] = (p.mem.ask[c] ?? -1) + 1;
@@ -117,10 +125,24 @@
         let price = Math.min(w, G.guess(st, c) * (B.bidStart + B.bidStep * age));
         if (ask && ask.price <= w) price = Math.max(price, ask.price);
         price = Math.max(1, Math.round(price));
-        n = Math.min(n, Math.max(0, G.spaceLeft(st, p)), Math.floor(budget / price));
+        n = Math.min(n, S.market.reserveSpace ? Math.max(0, G.spaceLeft(st, p)) : p.space, Math.floor(budget / price));
         if (n > 0 && G.act(st, p.id, "placeOrder", { id: c, side: "buy", price, qty: n }).ok) budget -= price * n;
       });
     Object.keys(p.mem.bid).forEach(c => { if (!want[c] || (p.stock[c] || 0) >= want[c]) delete p.mem.bid[c]; });
+    // Waste. Short of room: pay to get rid of it, a fee that rises the longer nobody takes it.
+    // Plenty of room: offer to take some for a fee, asking less the longer nobody pays it.
+    p.mem.dump ||= {}; p.mem.take ||= {};
+    COMMODITIES.filter(c => c.type === "waste").forEach(({ id: c }) => {
+      const held = p.stock[c] || 0, room = G.spaceLeft(st, p);
+      if (held && (room < B.wasteRoom || end)) {
+        const age = p.mem.dump[c] = (p.mem.dump[c] ?? -1) + 1, fee = Math.min(B.wasteFeeMax, 1 + age);
+        if (p.cash >= fee * held) G.act(st, p.id, "placeOrder", { id: c, side: "sell", price: fee, qty: held });
+      } else delete p.mem.dump[c];
+      if (!held && room >= B.wasteRoom * 2 && !end) {
+        const age = p.mem.take[c] = (p.mem.take[c] ?? -1) + 1, fee = Math.max(2, B.wasteFeeMax - age);
+        G.act(st, p.id, "placeOrder", { id: c, side: "buy", price: fee, qty: Math.min(3, room - B.wasteRoom) });
+      } else delete p.mem.take[c];
+    });
   };
 
   // ---------- Building ----------
@@ -139,6 +161,9 @@
       if (r) Object.keys(r.in).forEach(i => walk(i, depth + 1));
     };
     G.targets(st, p).forEach(k => Object.keys(k.goods).forEach(c => walk(c, 0)));
+    // Inputs its own factories are missing are links too (an idle factory makes nothing for anyone)
+    if (B.feedFactories) G.myBusinesses(st, p.id).forEach(x => { const b = G.BIZ_BY[x.type];
+      if (b.kind === "factory") G.inputsFor(st, p, b).missing.forEach(([c]) => walk(c, 1)); });
     return links;
   };
 
@@ -162,6 +187,11 @@
     .sort((a, b) => b.s - a.s)[0];
 
   const moveOrBuild = (st, p) => {
+    // Short of cash? Sell a factory that's been idle for a while (for its cost price)
+    if (p.cash < B.buildReserve) {
+      const idle = G.myBusinesses(st, p.id).filter(b => G.BIZ_BY[b.type].kind === "factory" && (b.idleFor || 0) >= B.sellIdle).sort((a, b) => b.idleFor - a.idleFor)[0];
+      if (idle) G.act(st, p.id, "sellBusiness", { biz: idle.id });
+    }
     // More businesses fill the stockpile: stop once what its businesses make would crowd out what it buys
     const output = G.myBusinesses(st, p.id).reduce((n, b) => n + G.BIZ_BY[b.type].outputs[G.BIZ_BY[b.type].makes], 0);
     if (output + 2 > B.outputShare * p.space) { p.plan = null; return; }

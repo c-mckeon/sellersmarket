@@ -163,7 +163,9 @@
   const doAct = (name, args) => { flash(tryOrder(name, args)); render(); };
   const orderText = o => {
     const a = o.args || {};
+    if (o.name === "placeOrder" && G.isWaste(a.id)) return a.side === "buy" ? `Take ${a.qty} ${G.COM[a.id].name} for at least ${m(+a.price)} each` : `Pay up to ${m(+a.price)} each to get rid of ${a.qty} ${G.COM[a.id].name} <em>${m(a.qty * a.price)}</em>`;
     if (o.name === "placeOrder") return `${a.side === "buy" ? "Bid for" : "Offer"} ${a.qty} ${G.COM[a.id].name} at ${m(+a.price)} <em>${m(a.qty * a.price)}</em>`;
+    if (o.name === "sellBusiness") { const b = st.businesses.find(x => x.id === a.biz); return b ? `Sell your ${G.BIZ_BY[b.type].name.toLowerCase()} in ${G.TERR[b.territory].name} for ${m(G.BIZ_BY[b.type].cost)}` : "Sell a business"; }
     if (o.name === "cancelOrder") { const x = st.book.find(y => y.id === a.order); return x ? `Cancel ${x.side === "buy" ? "bid for" : "offer of"} ${x.qty} ${G.COM[x.good].name} at ${m(x.price)}` : "Cancel an order"; }
     if (o.name === "deliver") { const k = (st.contracts || []).find(x => x.id === a.contract); if (!k) return "Deliver a contract"; const it = G.contractItem(k); return `Deliver ${it.icon} ${esc(it.name.toLowerCase())}`; }
     if (o.name === "dump") return `Throw away ${a.qty} ${G.COM[a.id].name}`;
@@ -364,7 +366,7 @@
       fs.forEach(f => { if (f.sold != null) last = f.sold; f.last = last; });
       const ghosts = ghostsOf(id, hs.slice(-8)), sc = scaleOf(fs, ghosts);
       const empty = !ghosts.n && fs.every(f => !Object.keys(f.segs).length && f.last == null);
-      per[id] = { frames: fs, ghosts, maxQ: sc.maxQ, lo: sc.lo, hi: sc.hi, empty };
+      per[id] = { frames: fs, ghosts, maxQ: sc.maxQ, lo: sc.lo, hi: sc.hi, empty, neg: G.isWaste(id) };
     });
     // One scale for every card, so they can be compared: the same zoom (each card centred on its own
     // prices, as a share of them, since goods' prices differ a lot) and the same bar length per unit.
@@ -396,7 +398,9 @@
     // Past orders: grey blobs, older ones lighter (price runs bottom to top here)
     if (D.ghosts.n) g += ghostPaths(D.ghosts, s.lo, s.hi, 40, 10, t => H - B - t * plotH, (y, v) => `${(cx + v).toFixed(1)},${y.toFixed(1)}`, half, [["a", 1], ["b", -1]], [0, H - B, 0, T]);
     const live = side => segs.filter(x => x.side === side && x.op > 0.5 && !x.fill);
-    const bid = Math.max(-Infinity, ...live("b").map(x => x.p)), ask = Math.min(Infinity, ...live("a").map(x => x.p));
+    // (waste runs the other way: the takers' fees sit above the payers', and they trade when they meet)
+    const bid = D.neg ? Math.max(-Infinity, ...live("a").map(x => x.p)) : Math.max(-Infinity, ...live("b").map(x => x.p));
+    const ask = D.neg ? Math.min(Infinity, ...live("b").map(x => x.p)) : Math.min(Infinity, ...live("a").map(x => x.p));
     if (isFinite(bid) && isFinite(ask) && ask > bid) g += `<rect class="band" x="3" y="${Y(ask).toFixed(1)}" width="${W - 6}" height="${(Y(bid) - Y(ask)).toFixed(1)}"/>`;
     if (s.trade != null && s.tradeOp > 0.02) g += `<line class="tline" opacity="${s.tradeOp.toFixed(2)}" x1="3" x2="${W - 3}" y1="${Y(s.trade).toFixed(1)}" y2="${Y(s.trade).toFixed(1)}"/>`;
     segs.forEach(x => {
@@ -414,8 +418,13 @@
 
   // The words on a card for moment k: best bid and ask still standing, and the last or current trade
   const cardWords = (id, f) => {
-    const best = side => Object.entries(f.segs).filter(([key, x]) => key[0] === side && x.op > 0.5).sort((a, b) => side === "b" ? b[1].p - a[1].p : a[1].p - b[1].p)[0]?.[1];
+    const hiFirst = side => (side === "b") !== G.isWaste(id); // waste: the lowest take fee and highest pay fee are best
+    const best = side => Object.entries(f.segs).filter(([key, x]) => key[0] === side && x.op > 0.5).sort((a, b) => hiFirst(side) ? b[1].p - a[1].p : a[1].p - b[1].p)[0]?.[1];
     const b = best("b"), a = best("a");
+    if (G.isWaste(id)) return {
+      h: `<b>${G.COM[id].name}</b><span class="qc-last">${f.sold != null ? `fee ${m(f.sold)}` : f.last != null ? `last fee ${m(f.last)}` : "no trades"}</span>`,
+      n: `<span class="a" title="The most someone will pay to get rid of it">${a ? `pays ${m(a.p)} <small>×${a.w}</small>` : "nobody paying"}</span><span class="b" title="The least someone asks to take it">${b ? `takes ${m(b.p)} <small>×${b.w}</small>` : "nobody taking"}</span><span class="c">waste: costs to dump</span>`,
+    };
     return {
       h: `<b>${G.COM[id].name}</b><span class="qc-last">${f.sold != null ? `traded at ${m(f.sold)}` : f.last != null ? `last ${m(f.last)}` : "no trades"}</span>`,
       n: `<span class="a">${a ? `ask ${m(a.p)} <small>×${a.w}</small>` : "no asks"}</span><span class="b">${b ? `bid ${m(b.p)} <small>×${b.w}</small>` : "no bids"}</span><span class="c" title="What its raw materials cost at their last traded prices${basisNote(id)}">${G.COM[id].type === "raw" ? "raw" : G.COM[id].type === "waste" ? "by-product" : basisText(id) ? `cost ${basisText(id)}` : "cost –"}</span>`,
@@ -550,7 +559,7 @@
           const t = G.BIZ_BY[b.type], held = Object.entries(b.stock || {}), used = held.reduce((s, [, q]) => s + q, 0);
           const miss = t.kind === "factory" ? G.inputsFor(vw, p, t).missing : [];
           return `<div class="dbiz"><span class="bicon" style="background:${p.colour}"><svg viewBox="0 0 24 24">${iconSVG(BIZ_ICON[t.id], 12, 12, 18)}</svg></span>
-            <b>${t.name}</b> <span class="muted">${G.TERR[b.territory].name}</span>
+            <b>${t.name}</b> <span class="muted">${G.TERR[b.territory].name}</span> <button class="glink dsellbiz" data-sellbiz="${b.id}" title="Sell it back for its cost price; it disappears">sell for ${m(t.cost)}</button>
             ${S.businessStock ? `<span class="dcap" title="${used} of ${S.businessSpace} units"><i style="width:${Math.min(100, used / S.businessSpace * 100)}%" class="${used >= S.businessSpace ? "full" : ""}"></i></span>
             <span class="dheld">${held.map(([c, q]) => `<button class="dgood" data-good="${c}" title="Sell it">${q} ${G.COM[c].name}${offBadge(p, c)}</button>`).join("") || `<span class="muted">empty</span>`}${used >= S.businessSpace ? ` <b class="bad">full</b>` : ""}</span>` : ""}
             ${miss.length ? `<span class="bad">needs ${miss.map(([c, n]) => `${n} ${G.COM[c].name}`).join(", ")}</span>` : ""}</div>`;
@@ -633,6 +642,7 @@
     const now = D.frames.at(-1);
     if (!Object.keys(now.segs).length && !D.ghosts.n && now.last == null) return `<p class="muted small">No orders on the book yet. Place the first one.</p>`;
     const tip = x => { const side = x.side === "a" ? "sell" : "buy", mine = yours(side, x.p);
+      if (G.isWaste(id)) return side === "sell" ? `${x.w} to get rid of, paying up to ${m(x.p)} each${mine ? ` (${mine} yours)` : ""}` : `${x.w} would be taken for ${m(x.p)} each or more${mine ? ` (${mine} yours)` : ""}`;
       return `${x.w} ${side === "sell" ? "for sale" : "wanted"} at ${m(x.p)}${mine ? ` (${mine} yours)` : ""}`; };
     return `<div class="depth">${drawBook(D, still(now, themeColours()), Object.values(now.segs).map(x => ({ ...x, tip: tip(x) })))}<div class="ptip" hidden></div></div>`;
   }
@@ -663,7 +673,8 @@
     if (!tr) return [{ label: `${when}: orders in`, segs: bookSegs(d.pre) }, { label: `${when}: nothing traded`, segs: bookSegs(d.post) }];
     // Which part of each price level filled: best prices first, up to the volume traded
     const filled = (lv, ok) => { let v = tr.qty; const f = {}; lv.filter(([p]) => ok(p)).forEach(([p, q]) => { const n = Math.min(q, v); if (n > 0) { f[p] = n; v -= n; } }); return f; };
-    const fb = filled(d.pre.b, p => p >= tr.price), fa = filled(d.pre.a, p => p <= tr.price);
+    const w = G.isWaste(id); // waste: the takers (buy) asking no more than the fee fill, and the payers (sell) offering at least it
+    const fb = filled(d.pre.b, p => w ? p <= tr.price : p >= tr.price), fa = filled(d.pre.a, p => w ? p >= tr.price : p <= tr.price);
     const pre = {};
     [["b", d.pre.b, fb], ["a", d.pre.a, fa]].forEach(([s, lv, f]) => lv.forEach(([p, q]) => {
       const t = f[p] || 0;
@@ -749,7 +760,7 @@
     frames.forEach(f => { if (f.sold != null) last = f.sold; f.last = last; });
     const { lo, hi, maxQ } = scaleOf(frames, ghosts);
     frames.forEach(f => { f.lo = lo; f.hi = hi; });
-    return { frames, maxQ, ghosts, empty: frames.length < 2 || frames.every(f => !Object.keys(f.segs).length) };
+    return { frames, maxQ, ghosts, neg: G.isWaste(id), empty: frames.length < 2 || frames.every(f => !Object.keys(f.segs).length) };
   }
 
   // Colours come from the page's theme (light or dark), so the replay matches the rest of the market
@@ -789,7 +800,9 @@
     if (D.ghosts?.n) g += ghostPaths(D.ghosts, s.lo, s.hi, 80, 14, t => H - B - t * plotH, (y, v) => `${(cx + v).toFixed(1)},${y.toFixed(1)}`, half, [["a", 1], ["b", -1]], [0, H - B, 0, T]);
     // The gap between the best bid and ask still standing
     const live = side => segs.filter(x => x.side === side && x.op > 0.5 && !x.fill);
-    const bid = Math.max(-Infinity, ...live("b").map(x => x.p)), ask = Math.min(Infinity, ...live("a").map(x => x.p));
+    // (waste runs the other way: the takers' fees sit above the payers', and they trade when they meet)
+    const bid = D.neg ? Math.max(-Infinity, ...live("a").map(x => x.p)) : Math.max(-Infinity, ...live("b").map(x => x.p));
+    const ask = D.neg ? Math.min(Infinity, ...live("b").map(x => x.p)) : Math.min(Infinity, ...live("a").map(x => x.p));
     if (isFinite(bid) && isFinite(ask) && ask > bid) g += `<rect class="band" x="${L}" y="${Y(ask).toFixed(1)}" width="${W - L - R}" height="${(Y(bid) - Y(ask)).toFixed(1)}"/>`;
     // A trade happening (replay): a line at the clearing price
     if (s.trade != null && s.tradeOp > 0.02) g += `<line class="tline" opacity="${s.tradeOp.toFixed(2)}" x1="${L}" x2="${W - R}" y1="${Y(s.trade).toFixed(1)}" y2="${Y(s.trade).toFixed(1)}"/>
@@ -859,16 +872,17 @@
         <div>
           <h4>New order</h4>
           <div class="gform">
-            <div class="gseg"><button data-side="buy" class="${t.side === "buy" ? "on" : ""}">Buy</button><button data-side="sell" class="${t.side === "sell" ? "on" : ""}">Sell</button></div>
-            <label>Price each <input type="number" id="gPrice" min="1" step="1" value="${t.price || (suggest != null ? suggest : "")}" placeholder="price"></label>
+            <div class="gseg"><button data-side="buy" class="${t.side === "buy" ? "on" : ""}">${G.isWaste(id) ? "Take it" : "Buy"}</button><button data-side="sell" class="${t.side === "sell" ? "on" : ""}">${G.isWaste(id) ? "Get rid of it" : "Sell"}</button></div>
+            <label>${G.isWaste(id) ? (t.side === "buy" ? "Fee you want, each" : "Most you'll pay, each") : "Price each"} <input type="number" id="gPrice" min="1" step="1" value="${t.price || (suggest != null ? suggest : "")}" placeholder="price"></label>
             <label>Quantity <input type="number" id="gQty" min="1" step="1" value="${t.qty || (t.side === "sell" ? hold : Math.max(1, (want[id] || 0) - hold)) || 1}"></label>
-            <button class="gbtn" id="gPlace">${t.side === "buy" ? "Place buy" : "Place sell"}</button>
+            <button class="gbtn" id="gPlace">${G.isWaste(id) ? (t.side === "buy" ? "Offer to take it" : "Offer to pay") : t.side === "buy" ? "Place buy" : "Place sell"}</button>
           </div>
-          <p class="muted small" title="${t.side === "buy" ? "Locks price × quantity of your cash until it fills or you cancel. What you buy goes to your stockpile." : "Takes the goods from your businesses first, then your stockpile."}">${t.side === "buy" ? `Locks the cash until filled or cancelled · ${m(p.cash)} free` : `${hold} available to sell`}</p>
+          ${G.isWaste(id) ? `<p class="muted small">Waste is worth less than nothing: whoever gets rid of it pays whoever takes it. ${t.side === "buy" ? "You'll be paid at least this fee for each unit you take; it then sits in your stockpile until it goes off." : `You'll pay at most this fee for each unit someone takes; the fee is locked until then · ${m(p.cash)} free`}</p>` : ""}
+          <p class="muted small" ${G.isWaste(id) ? "hidden" : ""} title="${t.side === "buy" ? "Locks price × quantity of your cash until it fills or you cancel. What you buy goes to your stockpile." : "Takes the goods from your businesses first, then your stockpile."}">${t.side === "buy" ? `Locks the cash until filled or cancelled · ${m(p.cash)} free` : `${hold} available to sell`}</p>
         </div>
         ${myOrders.length ? `<div>
           <h4>Your orders</h4>
-          ${myOrders.map(o => `<div class="gpos">${o.side === "buy" ? "Buy" : "Sell"} ${o.qty} at ${m(o.price)}${isNew(o) ? ` <em>new</em>` : ""}<button data-cancel="${o.id}" data-new="${isNew(o) ? 1 : ""}">Cancel</button></div>`).join("")}
+          ${myOrders.map(o => `<div class="gpos">${G.isWaste(id) ? (o.side === "buy" ? `Take ${o.qty} for ≥ ${m(o.price)} each` : `Pay ≤ ${m(o.price)} each to get rid of ${o.qty}`) : `${o.side === "buy" ? "Buy" : "Sell"} ${o.qty} at ${m(o.price)}`}${isNew(o) ? ` <em>new</em>` : ""}<button data-cancel="${o.id}" data-new="${isNew(o) ? 1 : ""}">Cancel</button></div>`).join("")}
         </div>` : ""}
       </div>
     </div>`;
@@ -1030,6 +1044,10 @@
       morph(card && pageRect(card), root.querySelector(".qopen"));
     }));
     root.querySelector("#gTicketClose")?.addEventListener("click", closeGood);
+    root.querySelectorAll("[data-sellbiz]").forEach(b => b.addEventListener("click", () => {
+      const biz = vw.businesses.find(x => x.id === +b.dataset.sellbiz), t = biz && G.BIZ_BY[biz.type];
+      if (t && confirm(`Sell your ${t.name.toLowerCase()} in ${G.TERR[biz.territory].name} for ${m(t.cost)}? It disappears.`)) doAct("sellBusiness", { biz: biz.id });
+    }));
     // Order book replay (last 4 rounds): ▶ starts it, ■ stops it; a redraw of the page stops it too
     dStop(); dStop = () => {};
     const dPlay = root.querySelector("#dPlay");

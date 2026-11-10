@@ -22,6 +22,7 @@ const GAME_SETTINGS = {
   market: {
     maxPrice: 10000,       // no order may be priced above this
     bookRounds: 30,        // how many rounds of full order books to keep, for the order book replay
+    reserveSpace: true,    // a buy order needs free stockpile rows for everything it could bring in
     // No prices are set by the game: raw goods have none until they trade, and a made good's "cost basis"
     // (G.costBasis) is just its raw materials at their last traded prices.
   },
@@ -52,7 +53,7 @@ const GAME_SETTINGS = {
   depreciation: {
     on: true,
     life: 8,
-    byType: { raw: 8, made: 8, waste: 4 },
+    byType: { raw: 8, made: 8, waste: 3 },
     goods: {
       wheat: 4, water: 3, flour: 4, bread: 2,               // food and water spoil quickly
       iron: 12, steel: 15,                                  // metals keep
@@ -65,9 +66,8 @@ const GAME_SETTINGS = {
   // goods more than one use, so there's usually someone who could buy what you make.
   substitutes: [
     { for: "coal",      use: "wood",       ratio: 2 },                          // charcoal, in any furnace or kiln
-    { for: "sawdust",   use: "wood",       ratio: 1, at: ["paper_mill"] },      // pulp from logs
     { for: "flour",     use: "wheat",      ratio: 2, at: ["bakery"] },          // wholegrain, milled on site
-    { for: "sawdust",   use: "wheat",      ratio: 2, at: ["paper_mill"] },      // straw pulp
+    { for: "wood",      use: "wheat",      ratio: 2, at: ["paper_mill"] },      // straw pulp
     { for: "limestone", use: "clay",       ratio: 1, at: ["cement_kiln"] },     // clay cement
     { for: "iron",      use: "iron_ore",   ratio: 3, at: ["steelworks"] },      // direct reduction
   ],

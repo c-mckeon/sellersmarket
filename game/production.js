@@ -45,13 +45,13 @@
       const say = m => (report[p.id] ||= []).push(m);
       st.stats.runs++;
       const full = own && G.bizRoom(biz) < Math.min(b.outputs[b.makes], S.businessSpace);
-      if (full) { st.stats.idle++; say(`${b.name} idle: its stock is full (sell or use some of it)`); return; }
+      if (full) { st.stats.idle++; biz.idleFor = (biz.idleFor || 0) + 1; say(`${b.name} idle: its stock is full (sell or use some of it)`); return; }
       const run = G.inputsFor(st, p, b);
-      if (run.missing.length) { st.stats.idle++; say(`${b.name} idle: needs ${run.missing.map(([c, n]) => `${n} more ${G.COM[c].name}`).join(", ")}`); return; }
+      if (run.missing.length) { st.stats.idle++; biz.idleFor = (biz.idleFor || 0) + 1; say(`${b.name} idle: needs ${run.missing.map(([c, n]) => `${n} more ${G.COM[c].name}`).join(", ")}`); return; }
       const made = {}, subs = {};
       Object.entries(run.use).forEach(([c, q]) => { G.take(st, p, c, q); if (!(c in b.inputs)) subs[c] = q; });
       Object.entries(b.outputs).forEach(([c, n]) => { if (own) G.addBiz(biz, c, n); else G.add(p, c, n); made[c] = n; });
-      biz.runs = (biz.runs || 0) + 1;
+      biz.runs = (biz.runs || 0) + 1; biz.idleFor = 0;
       say(`${b.name} made ${Object.entries(made).map(([c, n]) => `${n} ${G.COM[c].name}`).join(" + ")}${Object.keys(subs).length ? `, using ${Object.entries(subs).map(([c, n]) => `${n} ${G.COM[c].name}`).join(" + ")} instead` : ""}`);
     });
     // Over the limit? The oldest units are pushed out

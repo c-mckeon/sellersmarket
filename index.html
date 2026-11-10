@@ -100,6 +100,8 @@
         <h2>Businesses and production</h2>
         <ul>
           <li>Once a round, at night after the auction, each business runs and makes <b>2</b> of its product. Mines, pits, farms and water works need nothing; factories need every input, from your stockpile.</li>
+          <li><b>Waste:</b> sawmills, blast furnaces and steelworks also make 1 slag or sawdust a round. Nothing uses it and it goes off after 3 rounds, but it takes up stockpile rows and can't just be thrown away. On the market it runs backwards: you <i>pay</i> someone to take it away, or get paid to take someone else's.</li>
+          <li><b>Selling a business:</b> any time you order, sell one of your businesses back for its cost price. It disappears; it doesn't use your move or build.</li>
           <li><b>Stand-ins:</b> a factory short of an input can use another good instead, e.g. <span data-s="substitutes"></span>. Goods a contract of yours asks for are never used as stand-ins.</li>
           <li>What your businesses make goes into your <b>stockpile</b>: <span data-s="startSpace"></span> rows, one unit in each, first in at the top. It's <b>first in, first out</b>: the oldest units are used, sold and delivered first, and when it overflows the oldest are pushed out. Goods in your sell orders keep their rows; buy orders keep rows free for what they could bring in.</li>
         </ul>
@@ -201,6 +203,14 @@
           <p class="example"><b>Example.</b> You bid 5 for 1 water, someone else bids 2 for 1, and a seller asks 1 for 1. Any price from 3 to 5 sells that one unit to you and not to them, so you get it, at <b>3</b>: just enough to beat the other bid. If the seller had 3 to sell, you'd both get one, at 1.</p>
           <p class="example">Rule 4 is why bidding the maximum "to be sure" is safe: one very high bid can't drag the price up on its own.</p>
         </div>
+      </section>
+
+      <section>
+        <h2>Waste runs backwards</h2>
+        <ul>
+          <li>Slag and sawdust are worth less than nothing. A <b>sell</b> order says "I'll pay up to this much a unit for someone to take it"; it locks the waste and the fee. A <b>buy</b> order says "pay me at least this much a unit and I'll take it"; it locks nothing but stockpile room.</li>
+          <li>They trade when someone will pay at least what someone else asks; everyone gets the one clearing fee. On the order book the takers' fees sit above the payers', the other way round from normal goods.</li>
+        </ul>
       </section>
 
       <section>
