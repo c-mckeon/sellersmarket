@@ -6,8 +6,7 @@ const GAME_SETTINGS = {
   startCash: 1000,         // the only money there will ever be. It's used for trading and nothing else.
   startBusinesses: 2,      // the business you pick, plus the one that goes with it (a farm and a flour mill…)
   startSpace: 20,          // your stockpile: 20 rows, one unit of anything in each
-  unlimitedSpace: false,
-  fifo: true,              // the stockpile is first in, first out: when it overflows, the oldest units are pushed out
+                           // first in, first out: when it overflows, the oldest units are pushed out
   businessStock: false,    // false: what your businesses make goes straight into your stockpile
   businessSpace: 10,       // (only with businessStock: how many units each business holds)
 
@@ -61,9 +60,7 @@ const GAME_SETTINGS = {
     },
   },
 
-  // Production
-  factoryRuns: 1,          // a factory runs up to this many times a round, while it has the inputs
-  // Stand-ins: a factory short of an input can use another good instead, at `ratio` units of it per unit
+  // Production. Stand-ins: a factory short of an input can use another good instead, at `ratio` units of it per unit
   // missing (`at`: only these factories). The real input is always used first. This gives most raw
   // goods more than one use, so there's usually someone who could buy what you make.
   substitutes: [
@@ -74,15 +71,4 @@ const GAME_SETTINGS = {
     { for: "limestone", use: "clay",       ratio: 1, at: ["cement_kiln"] },     // clay cement
     { for: "iron",      use: "iron_ore",   ratio: 3, at: ["steelworks"] },      // direct reduction
   ],
-
-  // ---------- Switched off for now ----------
-  // Cards, wages, inflation and the broker (loans, bonds, futures, ETFs) are kept in the code but not
-  // used while the market is player-only. Their old settings stay so the code still loads.
-  cardsPerRound: 0, handMax: 5, cardsPerAfternoon: 0,
-  rarityWeight: { common: 6, uncommon: 3, rare: 1 },
-  wageRate: 0,
-  inflationPerRound: 0,
-  overflowSale: 0,
-  businessValue: 0,
-  finance: { tightenAbove: 0.03, loosenBelow: 0.005, borrowShareStep: 0.05, borrowShareMin: 0.3, borrowShareMax: 0.6 },
 };

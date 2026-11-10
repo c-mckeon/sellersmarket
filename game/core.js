@@ -13,7 +13,6 @@ const SMG = (() => {
 
   // ---------- Catalogue: the rulebook, built from the data files ----------
   const slug = s => s.toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_|_$/g, "");
-  G.slug = slug;
   G.COM = Object.fromEntries(COMMODITIES.map(c => [c.id, c]));
   G.TERR = Object.fromEntries(TERRITORIES.map(t => [t.id, t]));
   G.isSea = tid => !!G.TERR[tid].sea;
@@ -54,7 +53,6 @@ const SMG = (() => {
   // ---------- Helpers ----------
   G.player = (st, pid) => st.players.find(p => p.id === pid);
   G.used = p => Object.values(p.stock).reduce((a, b) => a + b, 0);
-  G.free = p => p.space - G.used(p);
   // ---------- Goods age (settings.depreciation, game/depreciation.js) ----------
   // Each holder (a player, or a business with its own stock) keeps, beside its counts, when its units
   // were made: holder.lots[good] = [[qty, round made], …], oldest first. Goods are always used, sold and
@@ -146,13 +144,6 @@ const SMG = (() => {
   const moneyFmt = new Intl.NumberFormat(undefined, { maximumFractionDigits: 2 }); // one shared formatter: toLocaleString is slow
   G.money = n => moneyFmt.format(Math.round(n * 100) / 100);
   G.myBusinesses = (st, pid) => st.businesses.filter(b => b.owner === pid);
-  // Money ledger: every cash movement, by round and category (positive = money in)
-  G.book = (st, p, cat, amount) => {
-    if (!amount) return;
-    const r = (p.book ||= {})[st.round] ||= {};
-    r[cat] = (r[cat] || 0) + amount;
-    Object.keys(p.book).forEach(k => { if (+k < st.round - 5) delete p.book[k]; });
-  };
 
   // The second free business that goes with a starting one, making a two-step chain:
   //   a mine, farm or well → the factory that uses its output most (then the fewest other inputs, then the simplest)
@@ -176,14 +167,14 @@ const SMG = (() => {
       round: 1, rounds: config.rounds ?? S.rounds, phase: "day", over: false,
       orders: {}, contracts: [],
       players: [], businesses: [], nextBizId: 1,
-      effects: [], pending: [], log: [],
+      log: [],
       stats: { runs: 0, idle: 0, overflow: 0 },
     };
     G.clock = st.round;
     config.players.forEach((c, i) => {
       st.players.push({ id: i + 1, name: c.name, colour: c.colour, bot: !!c.bot, strategy: c.strategy || "best",
-        cash: S.startCash, space: S.startSpace, upgrades: 0, pos: c.start, stock: { ...S.startGoods }, hand: [],
-        points: 0, delivered: 0, acted: false, cardsPlayed: 0 });
+        cash: S.startCash, space: S.startSpace, pos: c.start, stock: { ...S.startGoods },
+        points: 0, delivered: 0, acted: false });
     });
     // Free starting businesses, where each player starts: the one they picked plus its partner,
     // so everyone begins with a small chain (see G.starterPartner)
@@ -278,7 +269,7 @@ const SMG = (() => {
       st.phase = "night"; G.steps.night.forEach(f => f(st));
       if (st.round >= st.rounds) { st.over = true; st.phase = "over"; G.log(st, "Game over."); return; }
       st.round++; st.phase = "day";
-      st.players.forEach(p => { p.acted = false; p.cardsPlayed = 0; });
+      st.players.forEach(p => { p.acted = false; });
       G.log(st, `Round ${st.round}.`);
       G.botOrders(st);
     } while (!st.over && !G.waitingFor(st).length && guard++ < 10000);
@@ -293,7 +284,6 @@ const SMG = (() => {
       // where G.take finds the goods wherever they are
       const cp = G.player(c, p.id);
       c.businesses.forEach(b => { if (b.owner === p.id && b.stock) { Object.entries(b.stock).forEach(([g, q]) => G.add(cp, g, q)); b.stock = {}; } });
-      if (S.unlimitedSpace) cp.space = 1e9;
       const bot = G.bots[st.phase];
       if (bot) bot(c, G.player(c, p.id));
       st.orders[p.id] = c.recording;
@@ -305,10 +295,6 @@ const SMG = (() => {
   // Points win. Cash (including cash locked in buy orders) breaks ties.
   G.totalCash = (st, p) => p.cash + G.lockedCash(st, p);
   G.ranking = st => [...st.players].sort((a, b) => b.points - a.points || G.totalCash(st, b) - G.totalCash(st, a));
-  // What a player's cash and goods would be worth at the last traded prices (goods never traded count 0)
-  G.netWorth = (st, p) => G.totalCash(st, p)
-    + Object.entries(G.holdings(st, p)).reduce((s, [c, q]) => s + q * (st.prices[c] || 0), 0)
-    + st.book.filter(o => o.pid === p.id && o.side === "sell").reduce((s, o) => s + o.qty * (st.prices[o.good] || 0), 0);
 
   return G;
 })();

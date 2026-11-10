@@ -5,9 +5,7 @@
 //   - Factories: if the owner's stockpile holds every input, they're used up and the outputs made.
 //     Short of an input? A stand-in from settings.substitutes can take its place (wood burned as charcoal
 //     instead of coal…), so most raw goods have more than one use. See G.inputsFor.
-// Card effects on "output" multiply what comes out (rounded down).
-// Anything that doesn't fit in the stockpile is thrown away (goods on offer still take up space):
-// with settings.fifo, the oldest units go first, whatever they are.
+// Then, if a stockpile is over its rows (goods on offer count), the oldest units are pushed out.
 
 (() => {
   const G = SMG, S = GAME_SETTINGS;
@@ -35,88 +33,47 @@
     return { use, missing };
   };
 
-  // Waste nothing can use isn't kept anywhere (none at the moment: slag and sawdust both have uses)
-  const uselessMemo = {};
-  G.useless = c => uselessMemo[c] ??= G.COM[c].type === "waste" && !RECIPES.some(r => r.in[c]) && !(S.substitutes || []).some(r => r.use === c);
   // Room left in a business's own stock (settings.businessSpace)
   G.bizRoom = biz => S.businessSpace - Object.values(biz.stock || {}).reduce((a, b) => a + b, 0);
 
   G.produce = st => {
     G.clock = st.round;
-    const yieldMod = G.businessYield ? G.businessYield(st) : {};
     const report = {};
     const own = S.businessStock; // outputs stay at the business, which holds settings.businessSpace units
     st.businesses.forEach(biz => {
       const p = G.player(st, biz.owner), b = G.BIZ_BY[biz.type];
       const say = m => (report[p.id] ||= []).push(m);
-      const mult = yieldMod[biz.id] ?? 1;
-      const yieldOf = q => Math.floor(q * mult + 1e-9);
       st.stats.runs++;
-      if (mult === 0) { st.stats.idle++; say(`${b.name} in ${G.TERR[biz.territory].name} was shut`); return; }
-      const full = () => own && G.bizRoom(biz) < Math.min(yieldOf(b.outputs[b.makes]), S.businessSpace);
-      if (b.kind === "factory" && full()) { st.stats.idle++; say(`${b.name} idle: its stock is full (sell or use some of it)`); return; }
-      if (b.kind === "extract" && own && G.bizRoom(biz) <= 0) { st.stats.idle++; say(`${b.name} idle: its stock is full (sell or use some of it)`); return; }
-      let run = G.inputsFor(st, p, b);
+      const full = own && G.bizRoom(biz) < Math.min(b.outputs[b.makes], S.businessSpace);
+      if (full) { st.stats.idle++; say(`${b.name} idle: its stock is full (sell or use some of it)`); return; }
+      const run = G.inputsFor(st, p, b);
       if (run.missing.length) { st.stats.idle++; say(`${b.name} idle: needs ${run.missing.map(([c, n]) => `${n} more ${G.COM[c].name}`).join(", ")}`); return; }
-      // A factory runs again while it has the inputs and room, up to settings.factoryRuns times a round
       const made = {}, subs = {};
-      let runs = 0, lost = 0;
-      do {
-        Object.entries(run.use).forEach(([c, q]) => { G.take(st, p, c, q); biz.spent = (biz.spent || 0) + q * st.prices[c]; if (!(c in b.inputs)) subs[c] = (subs[c] || 0) + q; });
-        Object.entries(b.outputs).forEach(([c, q]) => {
-          let n = yieldOf(q);
-          if (n <= 0 || (own && G.useless(c))) return;
-          if (own) { const fit = Math.max(0, Math.min(n, G.bizRoom(biz))); lost += n - fit; n = fit; if (n) G.addBiz(biz, c, n); }
-          else G.add(p, c, n);
-          if (n) { made[c] = (made[c] || 0) + n; biz.earned = (biz.earned || 0) + n * st.prices[c]; }
-        });
-        runs++;
-      } while (b.kind === "factory" && runs < (S.factoryRuns || 1) && !full() && !(run = G.inputsFor(st, p, b)).missing.length);
-      biz.runs = (biz.runs || 0) + runs;
-      st.stats.overflow += lost;
-      say(`${b.name} made ${Object.entries(made).map(([c, n]) => `${n} ${G.COM[c].name}`).join(" + ") || "nothing"}${runs > 1 ? ` (ran ${runs} times)` : ""}${Object.keys(subs).length ? `, using ${Object.entries(subs).map(([c, n]) => `${n} ${G.COM[c].name}`).join(" + ")} instead` : ""}${lost ? `; ${lost} more didn't fit` : ""}`);
+      Object.entries(run.use).forEach(([c, q]) => { G.take(st, p, c, q); if (!(c in b.inputs)) subs[c] = q; });
+      Object.entries(b.outputs).forEach(([c, n]) => { if (own) G.addBiz(biz, c, n); else G.add(p, c, n); made[c] = n; });
+      biz.runs = (biz.runs || 0) + 1;
+      say(`${b.name} made ${Object.entries(made).map(([c, n]) => `${n} ${G.COM[c].name}`).join(" + ")}${Object.keys(subs).length ? `, using ${Object.entries(subs).map(([c, n]) => `${n} ${G.COM[c].name}`).join(" + ")} instead` : ""}`);
     });
-    // Over the limit? Throw things away, in the order each player chose
+    // Over the limit? The oldest units are pushed out
     st.players.forEach(p => {
       const lost = G.makeRoom(st, p);
-      if (lost.length) (report[p.id] ||= []).push(`stockpile full: ${S.fifo ? "pushed out the oldest" : "threw away"} ${lost.map(([c, n]) => `${n} ${G.COM[c].name}`).join(", ")}`);
+      if (lost.length) (report[p.id] ||= []).push(`stockpile full: pushed out the oldest ${lost.map(([c, n]) => `${n} ${G.COM[c].name}`).join(", ")}`);
     });
     Object.entries(report).forEach(([pid, msgs]) => msgs.forEach(m => G.log(st, m, +pid)));
   };
 
-  // Throw away (or sell off, if overflowSale > 0) whatever doesn't fit.
-  // Order: the player's own "throw away first" list, then the cheapest goods. Returns what went.
-  G.discardOrder = (st, p) => {
-    const mine = (p.discard || []).filter(c => p.stock[c]);
-    // Then waste, then the cheapest (last traded price × amount held: the biggest pile of a never-traded good goes first)
-    const rest = Object.keys(p.stock).filter(c => !mine.includes(c)).sort((a, b) => (G.COM[b].type === "waste") - (G.COM[a].type === "waste")
-      || (st.prices[a] || 0) - (st.prices[b] || 0) || p.stock[b] - p.stock[a]);
-    return [...mine, ...rest];
-  };
+  // First in, first out: when the stockpile (counting goods on offer) is over its rows, the oldest
+  // units are pushed out, whatever they are. Returns what went: [[good, qty], …]
   G.makeRoom = (st, p) => {
-    const lost = [];
     let over = G.used(p) + G.offered(st, p) - p.space;
-    if (over > 0 && S.fifo && p.lots) {
-      // First in, first out: push out the oldest units (removing a good always takes its oldest first)
-      const units = Object.entries(p.lots).flatMap(([c, L]) => L.flatMap(([q, made]) => Array(q).fill([c, made])))
-        .sort((a, b) => a[1] - b[1]);
-      const out = {};
-      for (const [c] of units) { if (over <= 0) break; out[c] = (out[c] || 0) + 1; over--; }
-      Object.entries(out).forEach(([c, n]) => { G.add(p, c, -n); st.stats.overflow += n; lost.push([c, n]); });
-    }
-    for (const c of G.discardOrder(st, p)) {
-      if (over <= 0) break;
-      const n = Math.min(over, p.stock[c]);
-      G.add(p, c, -n); over -= n; st.stats.overflow += n; lost.push([c, n]);
-    }
-    return lost;
+    if (over <= 0) return [];
+    const units = Object.entries(p.stock).flatMap(([c, q]) => {
+      const lots = p.lots?.[c] || [], n = lots.reduce((s, l) => s + l[0], 0);
+      return [...lots, ...(n < q ? [[q - n, st.round]] : [])].flatMap(([k, made]) => Array(k).fill([c, made]));
+    }).sort((a, b) => a[1] - b[1]);
+    const out = {};
+    for (const [c] of units) { if (over <= 0) break; out[c] = (out[c] || 0) + 1; over--; }
+    Object.entries(out).forEach(([c, n]) => { G.add(p, c, -n); st.stats.overflow += n; });
+    return Object.entries(out);
   };
-
-  // Set your "throw away first" list (any time)
-  G.actions.setDiscard = (st, p, { list }) => {
-    G.need(Array.isArray(list) && list.every(c => G.COM[c]), "Pick commodities.");
-    p.discard = list.slice(0, 50);
-    return null; // private: not logged
-  };
-
 })();

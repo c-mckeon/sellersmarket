@@ -46,10 +46,6 @@
   };
   // Where each raw material can be produced
   const sourcesOf = G.sourcesOf;
-  G.distanceOf = (id, from) => {
-    const d = G.distances(from);
-    return Math.max(0, ...G.rawsOf(id).map(raw => { const src = sourcesOf(raw); return src.length ? Math.min(...src.map(t => d[t] ?? 99)) : 0; }));
-  };
   // Goods that can't be made at all on this map (a raw material with no source) never appear
   G.contractGoods = () => C.goods.filter(id => G.rawsOf(id).every(raw => { const s = sourcesOf(raw); return s.length; }));
 
@@ -119,7 +115,7 @@
     st.contracts = st.contracts.filter(k => !k.takers.length && !stale.includes(k));
     while (st.contracts.length < C.open) { const k = G.newContract(st); st.contracts.push(k); }
   };
-  G.onSetup.push(st => { st.players.forEach(p => p.home = p.pos); refill(st); });
+  G.onSetup.push(refill);
   G.refillContracts = refill;
 
   // What a contract makes: a name and emoji for the thing its goods could build. Cosmetic only: the main

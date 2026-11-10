@@ -3,8 +3,8 @@
 //   E.run("SMG.bestBid(st, 'wood')")                           // run code inside the engine
 const fs = require("fs"), path = require("path"), vm = require("vm");
 const root = path.join(__dirname, "..");
-const FILES = ["js/commodities.js", "js/market.js", "js/broker.js", "js/cards.js", "js/map.js", "maps/europe.js", "js/territories.js", "js/businesses.js",
-  "game/settings.js", "game/core.js", "game/market.js", "game/production.js", "game/depreciation.js", "game/map.js", "game/contracts.js", "game/cards.js", "game/finance.js", "game/bots.js", "game/pipeline.js"];
+const FILES = ["js/commodities.js", "js/map.js", "maps/europe.js", "js/territories.js", "js/businesses.js",
+  "game/settings.js", "game/core.js", "game/market.js", "game/production.js", "game/depreciation.js", "game/map.js", "game/contracts.js", "game/bots.js", "game/pipeline.js"];
 
 module.exports = (overrides = {}) => {
   const ctx = vm.createContext({ console, Math, JSON, Object, Array, Number, String, Set, Map, WeakMap, Intl, Infinity, Error });

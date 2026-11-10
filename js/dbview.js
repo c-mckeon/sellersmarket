@@ -1,87 +1,37 @@
 // ---------- Database tab: a simulated SQL database ----------
-const slug = s => s.toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_|_$/g, "");
-const r2 = x => Math.round(x * 100) / 100;
 
-// Fill every table from the site's data and the example game.
+// Fill every table from the site's data and a short game played by four bots.
 function buildDbRows() {
-  const R = {};
-  const sectorOf = {};
-  Object.entries(SECTORS).forEach(([k, s]) => s.items.forEach(i => sectorOf[i] = k));
-  const bizId = name => slug(name);
-
-  R.sectors = Object.entries(SECTORS).map(([k, s]) => [k, s.name, EF.tickers[k]]);
-  R.commodities = COMMODITIES.map(c => [c.id, c.name, c.type, sectorOf[c.id], r2(basePrice(c.id)), PR[c.id].s0, PR[c.id].e]);
-  R.business_types = BIZ.map(b => [bizId(b.name), b.name, b.kind]);
+  const G = SMG, R = {};
+  R.commodities = COMMODITIES.map(c => [c.id, c.name, c.type, G.lifeOf(c.id)]);
+  R.business_types = G.BIZ.map(b => [b.id, b.name, b.kind]);
   R.recipe_inputs = [];
   R.recipe_outputs = [];
-  BIZ.forEach(b => {
-    if (b.kind === "extract") { R.recipe_outputs.push([bizId(b.name), b.makes, b.out, false]); return; }
-    Object.entries(b.recipe.in).forEach(([c, q]) => R.recipe_inputs.push([bizId(b.name), c, q]));
-    Object.entries(b.recipe.out).forEach(([c, q], i) => R.recipe_outputs.push([bizId(b.name), c, q, i > 0]));
+  G.BIZ.forEach(b => {
+    Object.entries(b.inputs).forEach(([c, q]) => R.recipe_inputs.push([b.id, c, q]));
+    Object.entries(b.outputs).forEach(([c, q], i) => R.recipe_outputs.push([b.id, c, q, i > 0]));
   });
-  R.territories = TERRITORIES.map(t => [t.id, t.name, !!t.sea, coastal(t.id), TERRITORY_INFO[t.id].note]);
+  R.territories = TERRITORIES.map(t => [t.id, t.name, !!t.sea, G.coastal(t.id), TERRITORY_INFO[t.id].note]);
   R.territory_businesses = [];
   TERRITORIES.forEach(t => (TERRITORY_INFO[t.id].biz || []).forEach(b => R.territory_businesses.push([t.id, b])));
   R.territory_neighbours = [];
-  TERRITORIES.forEach(t => (TERRITORY_NEIGHBOURS[t.id] || []).forEach(n => R.territory_neighbours.push([t.id, n])));
-  R.cards = CARDS.map((c, i) => [i + 1, c.name, c.cat, c.rarity, c.text]);
-  R.card_effects = [];
-  const effectIds = {};
-  CARDS.forEach((c, i) => c.fx.forEach(f => {
-    const id = R.card_effects.length + 1;
-    (effectIds[c.name] ||= []).push(id);
-    R.card_effects.push([id, i + 1, f[0], f[1], f[2], f[3], f[4] ?? null]);
-  }));
+  TERRITORIES.forEach(t => G.neighbours(t.id).forEach(n => R.territory_neighbours.push([t.id, n])));
 
-  // The example game
-  const base = baseRate(0.02);
-  R.games = [[1, "Test game", ME.round, "day", 0.02, base]];
-  const pid = { you: 1, ana: 2, ben: 3, cleo: 4 };
-  const cash = { you: ME.cash, ana: 410, ben: 280, cleo: 515 };
-  R.players = Object.entries(PLAYERS).map(([k, p]) => [pid[k], 1, p.name, p.color, cash[k], PAWNS[k], 40]);
-  const stock = {
-    you: ME.stock,
-    ana: { iron_ore: 6, coal: 5, iron: 2, steel: 3, slag: 2, limestone: 3 },
-    ben: { sand: 8, limestone: 2, glass: 3, clay: 4, ceramic: 2, concrete: 4 },
-    cleo: { iron_ore: 5, coal: 3, iron: 2, steel: 1, sawdust: 2, paper: 2 },
-  };
-  R.holdings = [];
-  Object.entries(stock).forEach(([k, st]) => Object.entries(st).forEach(([c, q]) => R.holdings.push([pid[k], c, q])));
-  R.businesses = [];
-  PLOTS.forEach(([tid, who, name], i) => R.businesses.push([i + 1, 1, pid[who], bizId(name), tid, 1 + (i % 6)]));
-  // Two rounds of price history
-  let seed = 11;
-  const rnd = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
-  R.market_prices = [];
-  [ME.round - 1, ME.round].forEach(round => COMMODITIES.forEach(c => {
-    const s = PR[c.id].s0 * Math.exp((rnd() - 0.5) * 1.2), d = r2(0.8 + rnd() * 0.4);
-    R.market_prices.push([1, round, c.id, r2(s), d, r2(priceOf(c.id, s, d))]);
-  }));
-  const priceNow = id => R.market_prices.find(r => r[1] === ME.round && r[2] === id)[5];
-  R.trades = [
-    [1, 1, 7, 1, "wheat", "buy", 1, priceNow("wheat")],
-    [2, 1, 7, 1, "flour", "buy", 1, priceNow("flour")],
-    [3, 1, 7, 1, "bread", "sell", 3, priceNow("bread")],
-    [4, 1, 7, 2, "coal", "buy", 4, priceNow("coal")],
-    [5, 1, 7, 3, "sand", "buy", 6, priceNow("sand")],
-    [6, 1, 7, 4, "paper", "sell", 2, priceNow("paper")],
-  ];
-  R.loans = [[1, 1, 300, 250, 0.035, 3], [2, 2, 800, 640, 0.035, 2]];
-  R.bonds = [[1, 1, 1, 10, 0.025, 3], [2, 4, 2, 5, 0.03, 5]];
-  R.futures = [[1, 1, "coal", "long", 50, 5.5, 10, 27.5], [2, 3, "wheat", "short", 30, 7, 9, 21]];
-  R.etf_holdings = [[3, "metals", 5, 104.2], [2, "construction", 3, 98.7]];
-  const cardId = n => CARDS.findIndex(c => c.name === n) + 1;
-  R.player_cards = [
-    [1, 1, cardId("Drought"), "hand", 6], [2, 1, cardId("Insurance payout"), "hand", 7],
-    [3, 2, cardId("Strike"), "played", 5], [4, 2, cardId("Steel tariff"), "hand", 7],
-    [5, 3, cardId("Pipeline sabotage"), "hand", 6], [6, 4, cardId("Drought"), "played", 6],
-    [7, 4, cardId("Bank run"), "hand", 7],
-  ];
-  const bakery = R.businesses.find(b => b[3] === "bakery")[0];
-  R.active_effects = [
-    ...effectIds["Drought"].map((e, i) => [i + 1, 1, 6, e, null, "water", null, null, 7, 9]),
-    [3, 1, 3, effectIds["Strike"][0], null, null, bakery, null, 7, 7],
-  ];
+  // The example game: four bots play 8 rounds
+  const seed = 11, names = ["Ana", "Ben", "Cleo", "Dev"], colours = ["#2f6db5", "#8a4fc0", "#2e8b57", "#d4682a"];
+  const st = G.newGame({ seed, rounds: 8, players: G.spreadStarts(4, { seed }).map((x, i) => ({ name: names[i], colour: colours[i], bot: true, ...x })) });
+  R.games = [[1, st.round, st.rounds, st.phase]];
+  R.players = st.players.map(p => [p.id, 1, p.name, p.colour, Math.round(p.cash), p.points, p.pos]);
+  R.stockpile = [];
+  st.players.forEach(p => {
+    const units = Object.entries(p.lots || {}).flatMap(([c, L]) => L.flatMap(([q, made]) => Array(q).fill([c, made]))).sort((a, b) => a[1] - b[1]);
+    units.forEach(([c, made], i) => R.stockpile.push([p.id, i + 1, c, made]));
+  });
+  R.businesses = st.businesses.map(b => [b.id, 1, b.owner, b.type, b.territory, b.built]);
+  R.contracts = st.contracts.map(k => [k.id, 1, k.points, k.drawn]);
+  R.contract_goods = st.contracts.flatMap(k => Object.entries(k.goods).map(([c, q]) => [k.id, c, q]));
+  R.orders = st.book.map(o => [o.id, o.pid, o.good, o.side, o.price, o.qty]);
+  R.trades = st.history.flatMap(h => Object.entries(h.trades).map(([c, t]) => [h.round, c, t.price, t.qty]));
   return R;
 }
 

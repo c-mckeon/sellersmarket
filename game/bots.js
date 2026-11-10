@@ -66,7 +66,6 @@
     // Enough for every factory to run as many times as it can in a round
     // (nobody selling an input it lacks, but a stand-in is on offer? want the stand-in instead)
     G.myBusinesses(st, p.id).forEach(biz => { const b = G.BIZ_BY[biz.type]; Object.entries(b.inputs).forEach(([c, q]) => {
-      q *= S.factoryRuns || 1;
       const sub = !p.stock[c] && !G.bestAsk(st, c) && G.substitutesFor(b, c).find(([x]) => G.bestAsk(st, x) || p.stock[x]);
       if (sub) addTo(want, sub[0], q * sub[1]); else addTo(want, c, q);
     }); });
@@ -100,7 +99,6 @@
     Object.entries({ ...p.stock }).forEach(([c, q]) => {
       const spare = q - (want[c] || 0);
       if (spare <= 0) { delete p.mem.ask[c]; return; }
-      if (G.COM[c].type === "waste" && !RECIPES.some(r => r.in[c])) { G.act(st, p.id, "dump", { id: c, qty: spare }); return; }
       const age = p.mem.ask[c] = (p.mem.ask[c] ?? -1) + 1;
       const bid = G.bestBid(st, c), urgent = end || (G.goingOff && G.goingOff(st, p, c) > 0) || spare > S.businessSpace;
       let price = G.guess(st, c) * Math.max(end ? 0.1 : B.askMin, B.askStart - B.askStep * age);
@@ -165,7 +163,7 @@
   const moveOrBuild = (st, p) => {
     // Free building fills the stockpile: stop once what its businesses make would crowd out what it buys
     const output = G.myBusinesses(st, p.id).reduce((n, b) => n + G.BIZ_BY[b.type].outputs[G.BIZ_BY[b.type].makes], 0);
-    if (!S.unlimitedSpace && output + 2 > (B.outputShare || 0.5) * (p.realSpace || p.space)) { p.plan = null; return; }
+    if (output + 2 > B.outputShare * p.space) { p.plan = null; return; }
     const links = missingLinks(st, p);
     const here = bestHere(st, p, p.pos, links);
     if (here && here.s > 0.5) { G.act(st, p.id, "build", { type: here.b.id }); p.plan = null; return; }

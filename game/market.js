@@ -54,12 +54,11 @@
     return b.value || !b.missing.length ? { value: Math.round(b.value), missing: b.missing } : null;
   };
   // ---------- Helpers ----------
-  G.myOrders = (st, pid) => st.book.filter(o => o.pid === pid);
   // Goods you have on offer still sit in your stockpile; buy orders reserve space for what they bring
   G.offered = (st, p) => st.book.filter(o => o.pid === p.id && o.side === "sell").reduce((s, o) => s + o.qty, 0);
   G.reserved = (st, p) => st.book.filter(o => o.pid === p.id && o.side === "buy").reduce((s, o) => s + o.qty, 0);
   G.lockedCash = (st, p) => st.book.filter(o => o.pid === p.id && o.side === "buy").reduce((s, o) => s + o.price * o.qty, 0);
-  G.spaceLeft = (st, p) => S.unlimitedSpace ? Infinity : p.space - G.used(p) - G.offered(st, p) - G.reserved(st, p);
+  G.spaceLeft = (st, p) => p.space - G.used(p) - G.offered(st, p) - G.reserved(st, p);
 
   // Price levels for one good: [{ price, qty }], best first
   G.depth = (st, id, side) => {
@@ -224,14 +223,12 @@
         got.forEach(([k, made]) => G.add(p, id, k, made));
         if (n > known) G.add(p, id, n - known);
         p.cash = cents(p.cash + (o.price - P) * n); // refund what was locked above the clearing price
-        G.book(st, p, "Market purchases", -P * n);
         o.qty -= n; bought[p.id] = (bought[p.id] || 0) + n;
         { const b = (st.stats.bought ||= {})[p.id] ||= {}; b[id] = (b[id] || 0) + n; } // for the simulator: how much was bought
       });
       af.forEach((n, o) => {
         const p = G.player(st, o.pid);
         p.cash = cents(p.cash + P * n);
-        G.book(st, p, "Market sales", P * n);
         o.qty -= n; sold[p.id] = (sold[p.id] || 0) + n;
       });
       st.book = st.book.filter(o => o.qty > 0);

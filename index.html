@@ -132,7 +132,7 @@
 
       <section>
         <h2>Switched off for now</h2>
-        <p class="muted">Action cards, the broker (loans, bonds, futures, ETFs), wages and inflation are designed but not in the game while we test the market. Their pages and code are kept for later.</p>
+        <p class="muted">Action cards, the broker (loans, bonds, futures, ETFs), wages and inflation were designed but aren't in the game while we test the market. They were taken out to keep things simple; their pages and code are in the git history (up to commit 67410c5) for when we want them back.</p>
       </section>
     </div>
   </section>
@@ -206,7 +206,7 @@
       <section>
         <h2>What you can see</h2>
         <ul>
-          <li><b>The book</b>, anonymous: price levels and quantities, never who. Each good's page draws it as a depth chart, asks above and bids below, with the spread between them.</li>
+          <li><b>The book</b>, anonymous: price levels and quantities, never who. Each good's page draws it on a price scale running left to right: asks as red bars above a centre line, bids as green bars below, the spread shaded between them, faint grey blobs where orders sat in recent rounds, and a dot for the last sale.</li>
           <li><b>Trades</b>: the last price and volume, a price history, and a <b>quote board</b> of every active good that flashes yellow when one trades. You can replay how the book moved over the last few rounds, auction by auction.</li>
           <li><b>Cost basis</b> of a made good: its raw materials at their last traded prices. Raw materials have no price until they first trade; the market has to find it.</li>
           <li><b>Demand</b>: how many open contracts ask for each good, and <b>Opportunities</b>: goods others are bidding for that nobody sells, with the margin over cost basis.</li>
@@ -223,111 +223,6 @@
         </ul>
       </section>
     </div>
-  </section>
-
-  <section id="view-broker" class="view">
-    <div class="intro">
-      <h1>Broker dynamics</h1>
-      <p>The money side of the game, kept simple for now. Every rate is <b>per round</b> (one game day). Change any input to see the maths update.</p>
-    </div>
-
-    <div class="bsec">
-      <div class="eqcard">
-        <div class="kicker">1 · Central bank</div>
-        <div class="big">Base rate = inflation + 0.5%</div>
-        <p class="lead">The central bank sets the base rate: what it costs to borrow from the government. Every other rate is the base rate plus a bit.</p>
-        <dl>
-          <div><dt>Inflation</dt><dd>How fast prices are rising each round (2% to start).</dd></div>
-          <div><dt>+ 0.5%</dt><dd>Keeps the rate just above inflation, so saving is always worth a little.</dd></div>
-          <div><dt>Reviews</dt><dd>Changed every 5 rounds. Never below 0.25% or above 10%.</dd></div>
-        </dl>
-      </div>
-      <div class="panel calc" id="calcBase"></div>
-    </div>
-
-    <div class="bsec">
-      <div class="eqcard">
-        <div class="kicker">2 · Government loans</div>
-        <div class="big">Borrowing limit = 50% of what you own</div>
-        <p class="lead">Borrow from the government against your stockpile, your businesses and your bonds. If you can't pay, the bank takes them.</p>
-        <dl>
-          <div><dt>Limit</dt><dd>Half the value of everything you own. Own 7,500 of stuff, borrow up to 3,750.</dd></div>
-          <div><dt>Rate</dt><dd>Base rate + 1% a round.</dd></div>
-          <div><dt>Overnight</dt><dd>You pay the interest plus 5% of the loan back, so a loan is gone in about 20 rounds.</dd></div>
-          <div><dt>Margin call</dt><dd>If prices fall and your loan ends up over your limit, pay the difference by next morning, or the bank sells your things 20% under market.</dd></div>
-        </dl>
-      </div>
-      <div class="panel calc" id="calcLoan"></div>
-    </div>
-
-    <div class="bsec">
-      <div class="eqcard">
-        <div class="kicker">3 · Leverage</div>
-        <div class="big">Profit = (your money × leverage) × price change − interest</div>
-        <p class="lead">Buy more than you can afford, with the broker lending the rest. Gains and losses are multiplied.</p>
-        <dl>
-          <div><dt>Leverage</dt><dd>1× to 5×. At 3×, 1,000 of yours buys 3,000 worth; the broker lends 2,000.</dd></div>
-          <div><dt>Interest</dt><dd>Base rate + 2% a round on the borrowed part.</dd></div>
-          <div><dt>Sold out</dt><dd>Once you've lost 75% of your own money, the broker sells everything. At 3× that happens after a 25% price fall (75% ÷ 3).</dd></div>
-        </dl>
-      </div>
-      <div class="panel calc" id="calcLev"></div>
-    </div>
-
-    <div class="bsec">
-      <div class="eqcard">
-        <div class="kicker">4 · Futures</div>
-        <div class="big">Futures price = today's price × (1 + base rate × rounds)</div>
-        <p class="lead">Agree a price today to buy (long) or sell (short) on a later round. Lock in a price you need, or bet on where it's going.</p>
-        <dl>
-          <div><dt>Why higher</dt><dd>The seller could have sold today and earned interest on the money instead, so the later price includes that interest.</dd></div>
-          <div><dt>Deposit</dt><dd>Put down 10% of the contract up front.</dd></div>
-          <div><dt>Settling</dt><dd>Up to 10 rounds ahead. No goods move: you're paid (or pay) the difference. Long: (price on the day − futures price) × units. Short: the other way round.</dd></div>
-        </dl>
-      </div>
-      <div class="panel calc" id="calcFut"></div>
-    </div>
-
-    <div class="bsec">
-      <div class="eqcard">
-        <div class="kicker">5 · Government bonds</div>
-        <div class="big">Each overnight you're paid 100 × the rate you locked in</div>
-        <p class="lead">Lend the government 100 for 5, 10 or 20 rounds. You lock in the base rate on the day you buy, get paid it every overnight, and get your 100 back at the end.</p>
-        <dl>
-          <div><dt>Selling early</dt><dd>100 + (your rate − today's base rate) × 100 × rounds left.</dd></div>
-          <div><dt>The catch</dt><dd>If rates rise after you buy, new bonds pay more than yours, so yours sells for less than 100. Hold to the end and you still get 100.</dd></div>
-        </dl>
-      </div>
-      <div class="panel calc" id="calcBond"></div>
-    </div>
-
-    <div class="bsec">
-      <div class="eqcard">
-        <div class="kicker">6 · Sector ETFs</div>
-        <div class="big">ETF price = 100 × average of (price ÷ base price)</div>
-        <p class="lead">One fund for each sector. A unit tracks every good in that sector at once, so you can bet on "construction" without picking cement or concrete, and without filling your stockpile.</p>
-        <dl>
-          <div><dt>Starts at 100</dt><dd>When every good in the sector is at its base price, the ETF is 100. If they're on average 20% above base, it's 120.</dd></div>
-          <div><dt>Live</dt><dd>Uses the current prices from the Market dynamics tab. Shuffle the stockpiles there and these move too.</dd></div>
-          <div><dt>Fee</dt><dd>0.5% when you buy. Units take no stockpile space.</dd></div>
-          <div><dt>Wastes</dt><dd>Left out, since their prices are fees.</dd></div>
-        </dl>
-        <div class="etfboard" id="etfBoard"></div>
-      </div>
-      <div class="panel calc" id="calcEtf"></div>
-    </div>
-
-    <details class="explainer">
-      <summary>Glossary</summary>
-      <div class="xgrid">
-        <div class="x"><h4>Round</h4><p>One game day. All rates here are per round. Interest, loan repayments and bond payments happen overnight.</p></div>
-        <div class="x"><h4>Inflation</h4><p>How fast prices rise on average each round. The same number drives prices on the Market dynamics tab.</p></div>
-        <div class="x"><h4>Collateral</h4><p>What the bank can take if you don't pay: your stockpile, businesses and bonds.</p></div>
-        <div class="x"><h4>Margin call</h4><p>A demand to pay down a loan, or top up a deposit, because prices moved against you.</p></div>
-        <div class="x"><h4>Long / short</h4><p>Long means you profit when the price rises. Short means you profit when it falls.</p></div>
-        <div class="x"><h4>ETF</h4><p>Exchange-traded fund: one thing you can buy that tracks a whole basket of goods.</p></div>
-      </div>
-    </details>
   </section>
 
   <section id="view-commodities" class="view">
@@ -347,92 +242,6 @@
     <input id="search" class="search" type="search" placeholder="Filter, e.g. coal or waste" autocomplete="off">
     <div class="tablewrap"><table id="table"></table></div>
   </section>
-  <section id="view-cards" class="view">
-    <div class="intro">
-      <h1>Action cards</h1>
-      <p>Cards are played in the afternoon and change the market overnight. There are 50 so far, covering commodities, businesses, sectors, whole markets, credit and defaults, and new government regulations. <span class="sketch">Designed, not wired in yet</span></p>
-    </div>
-
-    <article class="howto">
-      <h2>How cards will plug into the maths</h2>
-
-      <div class="hsec">
-        <h3><span>1</span>Cards change numbers, not formulas</h3>
-        <p>Every card is a short list of <b>effects</b>. Each effect says which existing variable it nudges (its <b>hook</b>), what it applies to, by how much, and for how long. The pricing, production and broker formulas stay exactly as they are; they just read the nudged numbers.</p>
-        <div class="example-card"><b>Drought</b>
-          <ul class="fx">
-            <li><span class="hook">Demand</span> <span class="on">Water</span> <b>×2</b> <span class="dur">3 rounds</span></li>
-            <li><span class="hook">Raw supply</span> <span class="on">Water</span> <b>×0.5</b> <span class="dur">3 rounds</span></li>
-          </ul>
-        </div>
-        <p>This keeps the game fair and easy to balance. A new card never needs new maths, just a new list of effects, and any card's impact can be worked out with the calculators on the other tabs.</p>
-      </div>
-
-      <div class="hsec">
-        <h3><span>2</span>Where the effects go</h3>
-        <p>The formulas we already have gain a slot for active card effects. They're shown in <span class="mod">orange</span>; with no cards in play, each one is ×1 or +0 and nothing changes.</p>
-        <div class="formulas">
-          <div><b>Price</b> = Base × (s₀ ÷ s)<sup>e <span class="mod">× card e</span></sup> × Demand <span class="mod">× card demand</span> × Inflation<sub>(rate <span class="mod">+ card inflation</span>)</sub>, then held under any <span class="mod">price cap</span></div>
-          <div><b>Share s</b> = stock after <span class="mod">stockpile shocks</span>, ÷ total space. New raw units each morning = normal supply <span class="mod">× card supply</span></div>
-          <div><b>Business output</b> = recipe output <span class="mod">× card output</span>, running costs <span class="mod">× card costs</span>, value <span class="mod">× card value</span></div>
-          <div><b>Base rate</b> = central bank rate <span class="mod">+ card changes</span>. <b>Borrowing limit</b> = 50% <span class="mod">− card changes</span> of what you own. <b>Loan rate</b> = base + 1% <span class="mod">+ card change</span>. <b>New bond rate</b> = base <span class="mod">+ card change</span></div>
-        </div>
-        <details class="explainer inner">
-          <summary>Every hook a card can use</summary>
-          <div class="tablewrap"><table class="hooks"><thead><tr><th>Hook</th><th>What it changes</th><th class="n">Cards using it</th></tr></thead><tbody id="hookTable"></tbody></table></div>
-        </details>
-      </div>
-
-      <div class="hsec">
-        <h3><span>3</span>When they happen</h3>
-        <p>Cards are played face down in the afternoon. Overnight they're revealed and settled in a fixed order, so the result never depends on who played first:</p>
-        <ol class="order">
-          <li><b>Counters</b>: cards like Insurance payout or Bailout cancel what they target.</li>
-          <li><b>Regulations</b> switch on (or off, once we add repeal cards).</li>
-          <li><b>One-off shocks</b>: stockpiles destroyed or added, loans called in, contracts torn up.</li>
-          <li><b>Markets reprice</b>, using every effect still active.</li>
-          <li><b>Money</b>: the base rate moves, haircuts change (which can trigger margin calls), then interest, coupons and futures settle.</li>
-          <li><b>Timers tick</b>: each effect loses a round, and finished ones are removed.</li>
-        </ol>
-        <p>Next morning, players trade at the new prices.</p>
-      </div>
-
-      <div class="hsec">
-        <h3><span>4</span>Stacking and limits</h3>
-        <p>Effects on the same hook and the same target combine: multipliers multiply (two ×1.5 demand cards make ×2.25), additions add. To stop a pile of cards breaking the economy, the combined multiplier on any one thing is held between <b>×0.25 and ×4</b>, and the base rate still stays between 0.25% and 10%.</p>
-      </div>
-
-      <div class="hsec">
-        <h3><span>5</span>How long they last</h3>
-        <p>Each effect lasts <b>once</b> (it happens overnight and is done), for a set number of <b>rounds</b>, or <b>until repealed</b> (mostly regulations). Effects stay at full strength until they run out. If markets feel too jumpy when they switch off, we can make effects fade out over their last few rounds instead.</p>
-      </div>
-
-      <div class="hsec">
-        <h3><span>6</span>Why play a card: you know first</h3>
-        <p>The player holding a card knows what's coming before anyone else. Holding Drought? Buy water in the morning, play the card that afternoon, and sell the next morning once the price jumps. Or take a futures position on it. Planning a day ahead around your hand is the heart of the strategy. Other players' defence is to read the market and keep counter cards ready.</p>
-      </div>
-
-      <div class="hsec">
-        <h3><span>7</span>Still to decide</h3>
-        <ul class="open">
-          <li>How players get cards: a few drawn each morning, bought, or earned?</li>
-          <li>Whether playing a card costs money, and whether rare cards cost more.</li>
-          <li>How many cards one player can play in an afternoon.</li>
-          <li>Whether cards are revealed with the player's name, or anonymously.</li>
-          <li>How often each rarity turns up (for example common 60%, uncommon 30%, rare 10%).</li>
-        </ul>
-      </div>
-    </article>
-
-    <h2 class="listhead">Sectors</h2>
-    <p class="muted">Some cards hit a whole sector. Each commodity belongs to one.</p>
-    <div class="sectors" id="sectorList"></div>
-
-    <h2 class="listhead">The 50 cards</h2>
-    <div class="cfilter" id="cardFilter"></div>
-    <div class="cardgrid" id="cardGrid"></div>
-  </section>
-
   <section id="view-database" class="view">
     <div class="intro">
       <h1>Database</h1>
@@ -459,18 +268,11 @@
 <script src="js/commodities.js?v=__V__"></script>
 <script src="js/app.js?v=__V__"></script>
 <script src="js/businesses.js?v=__V__"></script>
-<script src="js/market.js?v=__V__"></script>
-<script src="js/marketview.js?v=__V__"></script>
-<script src="js/broker.js?v=__V__"></script>
-<script src="js/cards.js?v=__V__"></script>
-<script src="js/brokerview.js?v=__V__"></script>
 <script src="maps/europe.js?v=__V__"></script>
 <script src="js/map.js?v=__V__"></script>
 <script src="js/territories.js?v=__V__"></script>
-<script src="js/hud.js?v=__V__"></script>
+<script src="js/mapsvg.js?v=__V__"></script>
 <script src="js/territoriesview.js?v=__V__"></script>
-<script src="js/dbschema.js?v=__V__"></script>
-<script src="js/dbview.js?v=__V__"></script>
 <script src="game/settings.js?v=__V__"></script>
 <script src="game/core.js?v=__V__"></script>
 <script src="game/market.js?v=__V__"></script>
@@ -478,13 +280,12 @@
 <script src="game/depreciation.js?v=__V__"></script>
 <script src="game/map.js?v=__V__"></script>
 <script src="game/contracts.js?v=__V__"></script>
-<script src="game/cards.js?v=__V__"></script>
-<script src="game/finance.js?v=__V__"></script>
 <script src="game/bots.js?v=__V__"></script>
 <script src="game/pipeline.js?v=__V__"></script>
 <script src="game/icons.js?v=__V__"></script>
 <script src="game/ui.js?v=__V__"></script>
 <script src="js/rulesview.js?v=__V__"></script>
-<script src="js/cardsview.js?v=__V__"></script>
+<script src="js/dbschema.js?v=__V__"></script>
+<script src="js/dbview.js?v=__V__"></script>
 </body>
 </html>

@@ -38,7 +38,7 @@
     root.innerHTML = `
       <div class="gsetup">
         <h1>New game</h1>
-        <p class="muted">Pick who's playing. Each player starts with ${S.startCash} cash, ${S.unlimitedSpace ? "an unlimited stockpile for what they buy" : `a ${S.startSpace}-row stockpile (first in, first out)`}, ${S.startBusinesses > 1 ? "two free businesses where they start (the one picked here and the one that uses its output)" : "one free business where they start"}, and ${S.contracts.hand} secret contracts. Deliver contracts to score points; most points after the last round wins, and cash breaks ties. ${S.businessStock ? `What a business makes stays in its own stock (up to ${S.businessSpace} units) until you sell or use it. ` : ""}There's no price list: every price comes from what players bid and ask.</p>
+        <p class="muted">Pick who's playing. Each player starts with ${S.startCash} cash, a ${S.startSpace}-row stockpile (first in, first out), ${S.startBusinesses > 1 ? "two free businesses where they start (the one picked here and the one that uses its output)" : "one free business where they start"}, and ${S.contracts.hand} secret contracts. Deliver contracts to score points; most points after the last round wins, and cash breaks ties. ${S.businessStock ? `What a business makes stays in its own stock (up to ${S.businessSpace} units) until you sell or use it. ` : ""}There's no price list: every price comes from what players bid and ask.</p>
         ${saved && saved.version === 7 && !saved.over ? `<div class="gresume">A game in round ${saved.round} is saved in this browser. <button class="gbtn" id="gResume">Continue it</button></div>` : ""}
         <table class="gplayers"><thead><tr><th></th><th>Name</th><th>Who</th><th>Starts in</th><th>Free businesses</th><th></th></tr></thead><tbody>
         ${setup.players.map((p, i) => {
@@ -114,16 +114,6 @@
     if (o.name === "dump") return `Throw away ${a.qty} ${G.COM[a.id].name}`;
     if (o.name === "move") return `Move to ${G.TERR[a.to].name}`;
     if (o.name === "build") return `Build a ${G.BIZ_BY[a.type].name.toLowerCase()}`;
-    if (o.name === "playCard") return `Play ${G.CARD[a.card].name}`;
-    if (o.name === "setDiscard") return `If full, throw away first: ${a.list.map(c => G.COM[c].name).join(", ") || "cheapest goods"}`;
-    if (o.name === "borrow") return `Borrow ${m(a.amount)}`;
-    if (o.name === "repay") return `Repay ${m(a.amount)}`;
-    if (o.name === "buyBond") return `Buy ${a.count} ${a.length}-round bond${a.count > 1 ? "s" : ""} <em>${m(a.count * 100)}</em>`;
-    if (o.name === "sellBond") return `Sell bond #${a.id}`;
-    if (o.name === "openFuture") return `${a.side === "long" ? "Long" : "Short"} ${a.qty} ${G.COM[a.cid].name}, ${a.rounds} round${a.rounds > 1 ? "s" : ""}`;
-    if (o.name === "closeFuture") return `Close futures #${a.id}`;
-    if (o.name === "buyEtf") return `Buy ${a.units} ${BROKER.etfs.tickers[a.sector]}`;
-    if (o.name === "sellEtf") return `Sell ${a.units} ${BROKER.etfs.tickers[a.sector]}`;
     return o.name;
   };
   let flashMsg = "", qTimer = null, dStop = () => {}; // qTimer: the quote board replay; dStop: stops the order book replay
@@ -409,7 +399,6 @@
   function dashboard(p) {
     const locked = G.lockedCash(vw, p);
     const biz = G.myBusinesses(vw, p.id);
-    const mine = Object.entries(p.stock).sort((a, b) => b[1] - a[1]);
     const pv = middayPreview(p);
     return `
       <div class="dtop">
@@ -417,7 +406,7 @@
         <div><span>Cash</span><b>${m(p.cash)}</b>${locked ? `<small class="muted">+${m(locked)} in buy orders</small>` : ""}</div>
       </div>
       <div class="dsec">
-        <h4>Contracts <em>shared · first to deliver wins · ${p.delivered || 0} made</em></h4>
+        <h4 title="The same 5 contracts for everyone: the first to deliver one gets its points">Contracts <em>first to deliver wins</em></h4>
         ${(vw.contracts || []).map(k => {
           const mineNow = k.takers.includes(p.id);
           const ok = !mineNow && G.canDeliver(vw, p, k), it = G.contractItem(k), goods = Object.entries(k.goods);
@@ -449,8 +438,8 @@
         ${pv && pv.length ? `<div class="dprev"><b>Tonight</b>${pv.map(x => `<span>${esc(x)}</span>`).join("")}</div>` : ""}
       </div>
       <div class="dsec">
-        <h4>Your stockpile <em>${S.unlimitedSpace ? "no limit" : `${Math.min(p.space, G.used(p) + G.offered(vw, p) + G.reserved(vw, p))} of ${p.space} rows`}</em></h4>
-        ${S.unlimitedSpace ? (mine.length ? `<div class="dchips">${mine.map(([c, q]) => `<button class="dgood" data-good="${c}">${q} ${G.COM[c].name}${offBadge(p, c)}</button>`).join("")}</div>` : `<p class="dnone">Empty.</p>`) : stockList(p)}
+        <h4>Your stockpile <em>${Math.min(p.space, G.used(p) + G.offered(vw, p) + G.reserved(vw, p))} of ${p.space} rows</em></h4>
+        ${stockList(p)}
       </div>
       <div class="dsec">
         <h4>Players</h4>
@@ -599,43 +588,21 @@
       </svg><div class="ptip" hidden></div></div>`;
   }
 
-  // The order book as a depth chart: sell orders as bars to the right above the centre line, buy orders
-  // to the left below it, best prices nearest the middle, and the bid/ask spread as a band between them.
-  // Each bar is the running total from the best price outwards (how much you could trade going that
-  // far), so the book's shape shows how deep it is. Rows are price levels in order, evenly spaced.
-  function depthChart(q, yours) {
-    const N = 8, asks = q.asks.slice(0, N), bids = q.bids.slice(0, N);
-    if (!asks.length && !bids.length) return `<p class="muted small">No orders on the book yet. Place the first one.</p>`;
-    const cum = list => { let s = 0; return list.map(x => ({ ...x, cum: s += x.qty })); };
-    const A = cum(asks).reverse(), B = cum(bids); // asks: highest price at the top
-    const W = 320, cx = W / 2, rowH = 15, gap = 4, head = 18, bandH = 26, half = cx - 46;
-    const maxCum = Math.max(A[0]?.cum || 0, B.at(-1)?.cum || 0, 1);
-    const aRows = Math.max(A.length, 1), bRows = Math.max(B.length, 1);
-    const yA = i => head + i * (rowH + gap), bandTop = head + aRows * (rowH + gap), bandBot = bandTop + bandH;
-    const yB = i => bandBot + gap + i * (rowH + gap), H = yB(bRows) + head - gap;
-    const w = x => Math.max(2, x.cum / maxCum * half);
-    const tip = (x, side) => `${x.qty} ${side === "sell" ? "for sale" : "wanted"} at ${m(x.price)}${yours(side, x.price) ? ` (${yours(side, x.price)} yours)` : ""} · ${x.cum} in all at ${m(x.price)} or ${side === "sell" ? "less" : "more"}`;
-    const row = (x, y, side) => {
-      const bw = w(x), mine = yours(side, x.price), sell = side === "sell";
-      const bx = sell ? cx : cx - bw;
-      return `<g class="drow ${side}" data-tip="${tip(x, side)}">
-        <rect class="hit" x="0" y="${y - gap / 2}" width="${W}" height="${rowH + gap}"/>
-        <rect class="bar" x="${bx.toFixed(1)}" y="${y}" width="${bw.toFixed(1)}" height="${rowH}" rx="3"/>
-        <text class="px" x="${sell ? cx - 6 : cx + 6}" y="${y + rowH - 4}" text-anchor="${sell ? "end" : "start"}">${m(x.price)}</text>
-        <text class="qt" x="${sell ? bx + bw + 4 : bx - 4}" y="${y + rowH - 4}" text-anchor="${sell ? "start" : "end"}">${x.qty}${mine ? " ●" : ""}</text></g>`;
-    };
-    const spread = q.spread != null ? `Spread ${m(q.ask - q.bid)} · ${Math.round(q.spread * 100)}%` : `${asks.length ? "No bids" : "No asks"}${q.last ? ` · last ${m(q.last.price)}` : ""}`;
-    return `<div class="depth"><svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Order book. Asks: ${asks.map(x => `${x.qty} at ${m(x.price)}`).join(", ") || "none"}. Bids: ${bids.map(x => `${x.qty} at ${m(x.price)}`).join(", ") || "none"}.">
-      <text class="lbl" x="${cx + 6}" y="12">Asks</text>
-      ${A.map((x, i) => row(x, yA(i), "sell")).join("") || `<text class="none" x="${cx + 8}" y="${yA(0) + rowH - 4}">Nobody selling</text>`}
-      <rect class="band" x="4" y="${bandTop}" width="${W - 8}" height="${bandH}"/>
-      <line class="edge sell" x1="4" x2="${W - 4}" y1="${bandTop}" y2="${bandTop}"/><line class="edge buy" x1="4" x2="${W - 4}" y1="${bandBot}" y2="${bandBot}"/>
-      <text class="sp" x="10" y="${bandTop + bandH / 2 + 4}">↕ ${spread}</text>
-      ${B.map((x, i) => row(x, yB(i), "buy")).join("") || `<text class="none" x="${cx - 8}" y="${yB(0) + rowH - 4}" text-anchor="end">Nobody buying</text>`}
-      <text class="lbl" x="${cx - 6}" y="${H - 4}" text-anchor="end">Bids</text>
-      <line class="axis" x1="${cx}" x2="${cx}" y1="${head - 4}" y2="${H - head + 4}"/>
-    </svg><div class="ptip" hidden></div></div>`;
+  // The order book, on a price scale running left to right (the same scale as the replay):
+  // asks as red bars rising from the centre line, bids as green bars hanging below it, one bar per price.
+  // Faint grey blobs behind them are where orders sat in earlier rounds (a soft curve round each past
+  // order, added up), the shaded band is the gap between the best bid and ask, and the dot on the centre
+  // line is the last sale.
+  function bookChart(id, yours) {
+    const D = depthFrames(id, bookRounds(), nowBook(vw, id));
+    const now = D.frames.at(-1);
+    if (!Object.keys(now.segs).length && !D.ghosts.n && now.last == null) return `<p class="muted small">No orders on the book yet. Place the first one.</p>`;
+    const tip = x => { const side = x.side === "a" ? "sell" : "buy", mine = yours(side, x.p);
+      return `${x.w} ${side === "sell" ? "for sale" : "wanted"} at ${m(x.p)}${mine ? ` (${mine} yours)` : ""}`; };
+    return `<div class="depth">${drawBook(D, still(now, themeColours()), Object.values(now.segs).map(x => ({ ...x, tip: tip(x) })))}<div class="ptip" hidden></div></div>`;
   }
+  // The book now, as price levels: { b: [[price, qty]…], a: […] }
+  const nowBook = (state, id) => ({ b: G.depth(state, id, "buy").slice(0, 10).map(x => [x.price, x.qty]), a: G.depth(state, id, "sell").slice(0, 10).map(x => [x.price, x.qty]) });
 
   // ----- Order book replay: the last 4 rounds of one good's book, animated smoothly -----
   // One bar per price (the amount at that price): asks to the right, bids to the left.
@@ -646,7 +613,9 @@
   // The full book kept for an auction (st.bookLog; older games kept it on the history entry)
   const bookOf = h => st.bookLog?.[h.n] || h.depth;
   const bookRoundsKept = () => st.history.filter(bookOf).length;
-  function depthFrames(id, rounds = 4) {
+  // How many rounds the book chart and its replay cover (the same, so they share one price scale)
+  const bookRounds = () => Math.max(1, Math.min(ui.dRounds || 8, bookRoundsKept()));
+  function depthFrames(id, rounds = 4, now = nowBook(st, id)) {
     const frames = [];
     const seg = (side, p, w, x0 = 0, col = side, op = 1) => ({ side, p, w, x0, col, op });
     const book = (lv, keyOf = (s, p) => s + p) => { const segs = {}; lv.b.forEach(([p, q]) => segs[keyOf("b", p)] = seg("b", p, q)); lv.a.forEach(([p, q]) => segs[keyOf("a", p)] = seg("a", p, q)); return segs; };
@@ -680,7 +649,10 @@
       frames.push({ label: `${when}: traded ${tr.qty} at ${m(tr.price)}`, segs: gone, trade: tr.price, sold: tr.price, hold: 100 });
       frames.push({ label: `${when}: after the auction`, segs: book(d.post) });
     });
-    frames.push({ label: "Now", segs: book({ b: G.depth(st, id, "buy").slice(0, 10).map(x => [x.price, x.qty]), a: G.depth(st, id, "sell").slice(0, 10).map(x => [x.price, x.qty]) }) });
+    frames.push({ label: "Now", segs: book(now) });
+    // Where orders sat in those rounds (each auction's book as the orders came in), for the grey blobs
+    const ghosts = { a: [], b: [], n: 0 };
+    shown.forEach(h => { const d = bookOf(h)[id]; if (!d) return; ghosts.n++; d.pre.a.forEach(x => ghosts.a.push(x)); d.pre.b.forEach(x => ghosts.b.push(x)); });
     // Skip moments when this good had no orders at all (they'd just be a blank chart), but keep the
     // first empty one after some orders so the last bars can shrink away
     const has = f => Object.keys(f.segs).length || f.trade != null;
@@ -692,10 +664,11 @@
     // One fixed price scale for the whole replay, covering every bid, ask and sale in it, so nothing ever
     // leaves the chart and you can see how far prices have moved
     let maxQ = 1;
-    const all = frames.flatMap(f => { Object.values(f.segs).forEach(x => maxQ = Math.max(maxQ, x.x0 + x.w)); return [...Object.values(f.segs).map(x => x.p), f.trade, f.last]; }).filter(x => x != null);
+    const all = [...frames.flatMap(f => { Object.values(f.segs).forEach(x => maxQ = Math.max(maxQ, x.x0 + x.w)); return [...Object.values(f.segs).map(x => x.p), f.trade, f.last]; }),
+      ...ghosts.a.map(x => x[0]), ...ghosts.b.map(x => x[0])].filter(x => x != null);
     const a = all.length ? Math.min(...all) : 0, z = all.length ? Math.max(...all) : 12, wid = Math.max(12, (z - a) * 1.12), mid = (a + z) / 2;
     frames.forEach(f => { f.lo = mid - wid / 2; f.hi = mid + wid / 2; });
-    return { frames, maxQ, empty: frames.length < 2 || frames.every(f => !Object.keys(f.segs).length) };
+    return { frames, maxQ, ghosts, empty: frames.length < 2 || frames.every(f => !Object.keys(f.segs).length) };
   }
 
   // Colours come from the page's theme (light or dark), so the replay matches the rest of the market
@@ -708,50 +681,68 @@
     new Set([...Object.keys(f0.segs), ...Object.keys(f1.segs)]).forEach(k => {
       const a = f0.segs[k] || { ...f1.segs[k], w: 0 }, b = f1.segs[k] || { ...f0.segs[k], w: 0 };
       const ca = C[a.col], cb = C[b.col];
-      segs[k] = { side: b.side, p: mix(a.p, b.p, t), w: mix(a.w, b.w, t), x0: mix(a.x0, b.x0, t), op: mix(a.op, b.op, t), rgb: ca.map((x, i) => mix(x, cb[i], t)) };
+      segs[k] = { side: b.side, fill: k[0] === "t", p: mix(a.p, b.p, t), w: mix(a.w, b.w, t), x0: mix(a.x0, b.x0, t), op: mix(a.op, b.op, t), rgb: ca.map((x, i) => mix(x, cb[i], t)) };
     });
     return { segs, lo: mix(f0.lo, f1.lo, t), hi: mix(f0.hi, f1.hi, t), trade: f1.trade ?? f0.trade ?? null, tradeOp: mix(f0.trade != null ? 1 : 0, f1.trade != null ? 1 : 0, t),
       last: f0.last != null && f1.last != null ? mix(f0.last, f1.last, t) : f1.last ?? f0.last ?? null };
   };
   const still = (f, C) => blend(f, f, 1, C);
-  function drawDepthAnim(D, s) {
-    const W = 320, H = 250, top = 22, bot = 14, cx = W / 2, half = cx - 34, bh = 9;
-    const Yraw = p => top + (s.hi - p) / (s.hi - s.lo || 1) * (H - top - bot), k = half / D.maxQ;
-    const Y = p => Math.min(H - bot, Math.max(top, Yraw(p)));               // far-off prices are pinned to the edge
-    const pinned = p => Yraw(p) < top - 0.5 || Yraw(p) > H - bot + 0.5;
+  // Draws one moment of the book (see bookChart). hits: bars to give hover tips (the live chart only).
+  function drawBook(D, s, hits = []) {
+    const W = 320, H = 210, L = 8, R = 8, top = 16, bot = 26, cy = top + (H - top - bot) / 2, half = (H - top - bot) / 2 - 2;
+    const span = s.hi - s.lo || 1, plotW = W - L - R;
+    const Xraw = p => L + (p - s.lo) / span * plotW;
+    const X = p => Math.min(W - R, Math.max(L, Xraw(p)));                    // far-off prices are pinned to the edge
+    const pinned = p => Xraw(p) < L - 0.5 || Xraw(p) > W - R + 0.5;
+    const k = half / D.maxQ, bw = Math.max(2.5, Math.min(12, plotW / span * 0.7));
     const segs = Object.values(s.segs).filter(x => x.w > 0.02 && x.op > 0.02);
-    // Best bid and ask still standing (unfilled parts only): the spread band between them
-    const live = side => segs.filter(x => x.side === side && x.rgb && x.op > 0.5);
-    const bid = Math.max(-Infinity, ...live("b").map(x => x.p)), ask = Math.min(Infinity, ...live("a").map(x => x.p));
     let g = "";
-    // Light gridlines at round prices, labelled at the left edge; they glide with the scale
-    const span = s.hi - s.lo, step = [1, 2, 5, 10, 20, 25, 50, 100, 200, 250, 500, 1000, 2000, 5000].find(x => span / x <= 5) || 10000;
+    // Price gridlines, labelled along the bottom; they glide with the scale
+    const step = [1, 2, 5, 10, 20, 25, 50, 100, 200, 250, 500, 1000, 2000, 5000].find(x => span / x <= 6) || 10000;
     for (let v = Math.ceil(s.lo / step) * step; v <= s.hi; v += step) {
-      const y = Yraw(v); if (y < top - 1 || y > H - bot + 1) continue;
-      g += `<line class="grid" x1="30" x2="${W - 4}" y1="${y.toFixed(1)}" y2="${y.toFixed(1)}"/><text class="gl" x="26" y="${(y + 3).toFixed(1)}" text-anchor="end">${m(v)}</text>`;
+      const x = Xraw(v); if (x < L - 1 || x > W - R + 1) continue;
+      g += `<line class="grid" x1="${x.toFixed(1)}" x2="${x.toFixed(1)}" y1="${top}" y2="${H - bot}"/><text class="gl" x="${x.toFixed(1)}" y="${H - bot + 12}" text-anchor="middle">${m(v)}</text>`;
     }
-    if (isFinite(bid) && isFinite(ask) && ask > bid) g += `<rect class="band" x="4" y="${Y(ask).toFixed(1)}" width="${W - 8}" height="${(Y(bid) - Y(ask)).toFixed(1)}"/>`;
-    // The last sale: a solid line that glides to each new trade price (labelled unless a trade is happening)
-    if (s.last != null) g += `<line class="lline" x1="30" x2="${W - 4}" y1="${Y(s.last).toFixed(1)}" y2="${Y(s.last).toFixed(1)}"/>${s.tradeOp < 0.5 ? `<text class="llbl" x="${W - 6}" y="${(Y(s.last) - 4).toFixed(1)}" text-anchor="end">last ${m(Math.round(s.last))}</text>` : ""}`;
-    if (s.trade != null && s.tradeOp > 0.02) g += `<line class="tline" opacity="${s.tradeOp.toFixed(2)}" x1="4" x2="${W - 4}" y1="${Y(s.trade).toFixed(1)}" y2="${Y(s.trade).toFixed(1)}"/>
-      <text class="tlbl" opacity="${s.tradeOp.toFixed(2)}" x="${W - 6}" y="${(Y(s.trade) - 6).toFixed(1)}" text-anchor="end">${m(s.trade)}</text>`;
+    // Past orders: a soft curve round each one, added up over the rounds shown
+    const G0 = D.ghosts;
+    if (G0 && G0.n) {
+      const sd = Math.max(span / 40, 0.5), N = 160;
+      const dens = (list, p) => list.reduce((t, [pp, q]) => t + q * Math.exp(-((p - pp) ** 2) / (2 * sd * sd)), 0);
+      const curve = side => Array.from({ length: N + 1 }, (_, i) => dens(G0[side], s.lo + i / N * span));
+      const C2 = { a: curve("a"), b: curve("b") }, peak = Math.max(1e-9, ...C2.a, ...C2.b);
+      // Only their shape matters: the busiest past price reaches 70% of the way to the edge
+      const kg = 0.7 * half / peak;
+      [["a", -1], ["b", 1]].forEach(([side, dir]) => {
+        if (!G0[side].length) return;
+        let d = `M${L},${cy}`;
+        C2[side].forEach((v, i) => { d += ` L${(L + i / N * plotW).toFixed(1)},${(cy + dir * v * kg).toFixed(1)}`; });
+        g += `<path class="ghost" d="${d} L${W - R},${cy} Z"/>`;
+      });
+    }
+    // The gap between the best bid and ask still standing
+    const live = side => segs.filter(x => x.side === side && x.op > 0.5 && !x.fill);
+    const bid = Math.max(-Infinity, ...live("b").map(x => x.p)), ask = Math.min(Infinity, ...live("a").map(x => x.p));
+    if (isFinite(bid) && isFinite(ask) && ask > bid) g += `<rect class="band" x="${X(bid).toFixed(1)}" y="${top}" width="${(X(ask) - X(bid)).toFixed(1)}" height="${H - top - bot}"/>`;
+    // A trade happening (replay): a line at the clearing price
+    if (s.trade != null && s.tradeOp > 0.02) g += `<line class="tline" opacity="${s.tradeOp.toFixed(2)}" x1="${X(s.trade).toFixed(1)}" x2="${X(s.trade).toFixed(1)}" y1="${top}" y2="${H - bot}"/>
+      <text class="tlbl" opacity="${s.tradeOp.toFixed(2)}" x="${X(s.trade).toFixed(1)}" y="${top - 4}" text-anchor="middle">${m(s.trade)}</text>`;
+    // The bars: asks up, bids down; a part about to fill sits beyond the part that stays (x0)
     segs.forEach(x => {
-      const y = Y(x.p) - bh / 2, w = x.w * k, off = x.x0 * k, fill = `rgb(${x.rgb.map(Math.round).join(",")})`;
-      const bx = x.side === "a" ? cx + off : cx - off - w;
-      g += `<rect x="${bx.toFixed(1)}" y="${y.toFixed(1)}" width="${w.toFixed(1)}" height="${bh}" rx="2" fill="${fill}" opacity="${(x.op * (pinned(x.p) ? 0.35 : 1)).toFixed(2)}"/>`;
+      const h = x.w * k, off = x.x0 * k, fill = `rgb(${x.rgb.map(Math.round).join(",")})`;
+      const y = x.side === "a" ? cy - off - h : cy + off;
+      g += `<rect x="${(X(x.p) - bw / 2).toFixed(1)}" y="${y.toFixed(1)}" width="${bw.toFixed(1)}" height="${h.toFixed(1)}" rx="1.5" fill="${fill}" opacity="${(x.op * (pinned(x.p) ? 0.35 : 1)).toFixed(2)}"/>`;
     });
-    // Price labels for standing levels, faded in with their bars
-    const seen = new Set();
-    segs.filter(x => x.op > 0.5 && !pinned(x.p)).forEach(x => {
-      const key = x.side + Math.round(x.p); if (seen.has(key)) return; seen.add(key);
-      g += `<text class="px" x="${x.side === "a" ? cx - 5 : cx + 5}" y="${(Y(x.p) + 3.5).toFixed(1)}" text-anchor="${x.side === "a" ? "end" : "start"}" opacity="${Math.min(1, x.w).toFixed(2)}">${m(Math.round(x.p))}</text>`;
-    });
-    return `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Order book replay"><text class="lbl" x="${cx - 6}" y="12" text-anchor="end">Bids</text><text class="lbl" x="${cx + 6}" y="12">Asks</text>
-      <line class="axis" x1="${cx}" x2="${cx}" y1="${top - 6}" y2="${H - bot + 4}"/>${g}</svg>`;
+    // Hover targets (live chart)
+    hits.forEach(x => { const h = Math.max(8, x.w * k);
+      g += `<rect class="hit" data-tip="${esc(x.tip)}" x="${(X(x.p) - Math.max(bw, 8) / 2).toFixed(1)}" y="${(x.side === "a" ? cy - h : cy).toFixed(1)}" width="${Math.max(bw, 8).toFixed(1)}" height="${h.toFixed(1)}"/>`; });
+    // The centre line, and the last sale as a dot on it
+    g += `<line class="axis" x1="${L}" x2="${W - R}" y1="${cy}" y2="${cy}"/>`;
+    if (s.last != null) g += `<circle class="ldot" cx="${X(s.last).toFixed(1)}" cy="${cy}" r="4.5"><title>Last sale ${m(Math.round(s.last))}</title></circle>`;
+    return `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Order book: asks above the line, bids below, by price"><text class="lbl" x="${L}" y="11">Asks ↑</text><text class="lbl" x="${L}" y="${H - 2}">Bids ↓</text>${s.last != null ? `<text class="llbl" x="${W - R}" y="11" text-anchor="end">● last ${m(Math.round(s.last))}</text>` : ""}${g}</svg>`;
   }
   // Play: each moment blends into the next over 0.65s, then holds. Returns a stop function.
   function playDepth(box, label, id, rounds, done) {
-    const D = depthFrames(id, rounds), C = themeColours();
+    const D = depthFrames(id, rounds, nowBook(vw, id)), C = themeColours();
     if (D.empty) { label.textContent = `Nothing to replay: nobody bid for or offered ${G.COM[id].name.toLowerCase()} in the last ${rounds} round${rounds === 1 ? "" : "s"}.`; label.classList.add("dnow"); done(); return () => {}; }
     label.classList.add("dnow");
     const MOVE = 325, HOLD = 375, F = D.frames;
@@ -762,7 +753,7 @@
     const tick = now => {
       if (t0 == null) t0 = now;
       const el = Math.max(0, now - t0), move = k === 0 ? 0 : MOVE, hold = F[k].hold ?? HOLD;
-      box.innerHTML = drawDepthAnim(D, k > 0 && el < move ? blend(F[k - 1], F[k], ease(el / move), C) : still(F[k], C));
+      box.innerHTML = drawBook(D, k > 0 && el < move ? blend(F[k - 1], F[k], ease(el / move), C) : still(F[k], C));
       label.textContent = `${F[k].label} (${k + 1}/${F.length})`;
       if (el >= move + hold) { if (++k >= F.length) return done(); t0 = now; }
       raf = requestAnimationFrame(tick);
@@ -791,10 +782,10 @@
         <div><span>Made by</span><b>${makers.length ? names(makers) : "nobody else"}</b></div>
         <div><span>Could use it</span><b>${users.length ? names(users) : "nobody yet"}</b></div>
       </div>
-      <p class="small muted tused">${[wanted(p, id) ? `wanted by ${wanted(p, id)} player${wanted(p, id) === 1 ? "'s" : "s'"} contracts` : "", contractGood(id) ? "contracts can ask for it" : ""].filter(Boolean).map(x => x + " · ").join("")}used by ${usedBy.join(", ") || "no factory"}${S.depreciation?.on ? ` · ${G.lifeOf(id) ? `lasts ${G.lifeOf(id)} rounds` : "never goes off"}` : ""}</p>
+      <p class="small muted tused">${[wanted(p, id) ? `in ${wanted(p, id)} open contract${wanted(p, id) === 1 ? "" : "s"}` : "", contractGood(id) ? "contracts can ask for it" : ""].filter(Boolean).map(x => x + " · ").join("")}used by ${usedBy.join(", ") || "no factory"}${S.depreciation?.on ? ` · ${G.lifeOf(id) ? `lasts ${G.lifeOf(id)} rounds` : "never goes off"}` : ""}</p>
       <div class="tcharts">
-        <div><h4 title="Bars add up from the best price outwards; the number is the amount at that price. ● = includes yours.">Order book <span class="hint">ⓘ</span></h4><div class="depthbox">${depthChart(q, yours)}</div>
-          <div class="drctl">${bookRoundsKept() ? `<button class="gbtn ghost" id="dPlay">▶ Replay</button><label class="drr">last <input type="number" id="dRounds" min="1" max="${bookRoundsKept()}" value="${Math.min(ui.dRounds || bookRoundsKept(), bookRoundsKept())}"> <span class="muted">of ${bookRoundsKept()} rounds</span></label><span id="dLabel" class="muted small"></span>` : `<button class="gbtn ghost" disabled>▶ Replay</button><span class="muted small">Replays build up from here on: each auction from now is recorded.</span>`}</div></div>
+        <div><h4 title="Price runs left to right. Red bars above the line are asks, green bars below are bids: the taller, the more at that price. Grey blobs: where orders sat in recent rounds. The dot is the last sale. Hover a bar for details.">Order book <span class="hint">ⓘ</span></h4><div class="depthbox">${bookChart(id, yours)}</div>
+          <div class="drctl">${bookRoundsKept() ? `<button class="gbtn ghost" id="dPlay">▶ Replay</button><label class="drr">last <input type="number" id="dRounds" min="1" max="${bookRoundsKept()}" value="${bookRounds()}"> <span class="muted">of ${bookRoundsKept()} rounds</span></label><span id="dLabel" class="muted small"></span>` : `<button class="gbtn ghost" disabled>▶ Replay</button><span class="muted small">Replays build up from here on: each auction from now is recorded.</span>`}</div></div>
         <div><h4>Price history</h4>${priceChart(id)}</div>
       </div>
       <div class="${myOrders.length ? "gtwo" : ""}">
@@ -943,11 +934,11 @@
     dStop(); dStop = () => {};
     const dPlay = root.querySelector("#dPlay");
     // How many rounds back to replay (remembered while you look at other goods)
-    root.querySelector("#dRounds")?.addEventListener("change", e => { ui.dRounds = Math.max(1, Math.min(bookRoundsKept(), Math.floor(+e.target.value) || bookRoundsKept())); e.target.value = ui.dRounds; });
+    root.querySelector("#dRounds")?.addEventListener("change", e => { ui.dRounds = Math.max(1, Math.min(bookRoundsKept(), Math.floor(+e.target.value) || bookRoundsKept())); render(); });
     dPlay?.addEventListener("click", () => {
       if (dPlay.dataset.on) { dStop(); dStop = () => {}; delete dPlay.dataset.on; dPlay.textContent = "▶ Replay"; return; }
       dPlay.dataset.on = 1; dPlay.textContent = "■ Stop";
-      dStop = playDepth(root.querySelector(".depthbox"), root.querySelector("#dLabel"), ui.good, Math.min(ui.dRounds || bookRoundsKept(), bookRoundsKept()), () => { delete dPlay.dataset.on; dPlay.textContent = "▶ Replay again"; dStop = () => {}; });
+      dStop = playDepth(root.querySelector(".depthbox"), root.querySelector("#dLabel"), ui.good, bookRounds(), () => { delete dPlay.dataset.on; dPlay.textContent = "▶ Replay again"; dStop = () => {}; });
     });
     // Quote board replay: ▶ steps through the auctions, one every 0.7s; the slider jumps to any of them
     clearInterval(qTimer); qTimer = null;

@@ -56,7 +56,6 @@ function renderTerritory() {
   const options = BIZ.filter(b => canBuild(b, tid));
   const ext = options.filter(b => b.kind === "extract"), fac = options.filter(b => b.kind === "factory");
   const tags = isSea(tid) ? ["Sea"] : ["Land", coastal(tid) ? "Coastal" : "Inland"];
-  const exampleHere = PLOTS.filter(p => p[0] === tid).map(p => `${p[1] === "you" ? "your" : PLAYERS[p[1]].name + "'s"} ${p[2].toLowerCase()}`);
   const row = b => `<tr><td>${b.name}</td><td class="n">${makesText(b)}</td><td class="muted small">${inputsText(b)}</td></tr>`;
   const table = list => `<table class="ht"><thead><tr><th>Business</th><th class="n">Makes a round</th><th>Uses</th></tr></thead><tbody>${list.map(row).join("")}</tbody></table>`;
 
@@ -66,8 +65,7 @@ function renderTerritory() {
     <p class="desc">${info.note}</p>
     ${ext.length ? `<h4>Mines, pits and farms</h4>${table(ext)}` : ""}
     ${fac.length ? `<h4>Factories</h4>${table(fac)}` : ""}
-    ${!options.length ? `<p class="none">Nothing can be built here.${isSea(tid) ? " It's a shipping lane." : ""}</p>` : ""}
-    ${exampleHere.length ? `<p class="hint">In the example game: ${exampleHere.join(", ")}.</p>` : ""}`;
+    ${!options.length ? `<p class="none">Nothing can be built here.${isSea(tid) ? " It's a shipping lane." : ""}</p>` : ""}`;
 }
 
 function renderTerritoryTables() {
