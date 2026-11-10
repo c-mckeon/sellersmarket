@@ -5,7 +5,7 @@ const coastal = tid => !isSea(tid) && (TERRITORY_NEIGHBOURS[tid] || []).some(isS
 
 const bizSlug = s => s.toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_|_$/g, "");
 
-// Every business type in one list. Every business makes 2 of its product a round; building one costs cash.
+// Every business type in one list. Every business makes 1 of its product a round; building one costs cash.
 const BIZ = [
   ...EXTRACTORS.map(([name, makes, out]) => ({ id: bizSlug(name), name, makes, out, kind: "extract" })),
   ...RECIPES.map(r => ({ id: bizSlug(r.at), name: r.at, makes: r.main, out: r.out[r.main], kind: "factory", recipe: r })),

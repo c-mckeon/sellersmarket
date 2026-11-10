@@ -1,7 +1,7 @@
 // Sellers Market game engine: production, each night after the auction.
 //
 // Each business runs once, in the order it was built:
-//   - Extraction (mines, pits, farms, water works): makes its output (2). No inputs.
+//   - Extraction (mines, pits, farms, water works): makes its output (1). No inputs.
 //   - Factories: if the owner's stockpile holds every input, they're used up and the outputs made.
 //     Short of an input? A stand-in from settings.substitutes can take its place (wood burned as charcoal
 //     instead of coal…), so most raw goods have more than one use. See G.inputsFor.

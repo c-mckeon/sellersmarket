@@ -12,7 +12,7 @@ const DB_SCHEMA = [
     cols: [["id", "text", "pk"], ["name", "text"], ["kind", "text", "", "extract or factory"], ["cost", "integer", "", "cash to build one"]] },
   { name: "recipe_inputs", group: "Design data", desc: "What a business uses up each round. One row per input, so a recipe with 3 inputs has 3 rows.",
     cols: [["business_type_id", "text", "pk fk:business_types"], ["commodity_id", "text", "pk fk:commodities"], ["qty", "integer"]] },
-  { name: "recipe_outputs", group: "Design data", desc: "What a business makes each round (2 of its main product), including by-products.",
+  { name: "recipe_outputs", group: "Design data", desc: "What a business makes each round (1 of its main product), including by-products.",
     cols: [["business_type_id", "text", "pk fk:business_types"], ["commodity_id", "text", "pk fk:commodities"], ["qty", "integer"], ["is_byproduct", "boolean"]] },
   { name: "territories", group: "Design data", desc: "The 60 areas of the map.",
     cols: [["id", "text", "pk"], ["name", "text"], ["is_sea", "boolean"], ["is_coastal", "boolean"], ["note", "text"]] },

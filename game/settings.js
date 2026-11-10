@@ -15,7 +15,7 @@ const GAME_SETTINGS = {
 
   // Each round, besides trading, each player may move to one neighbouring territory OR build one business.
   // Building costs 120-170 cash (js/businesses.js); each territory allows only certain businesses (js/territories.js). Every business
-  // makes 2 of its product a round (js/businesses.js, js/commodities.js).
+  // makes 1 of its product a round (js/businesses.js, js/commodities.js).
 
   // ---------- The market (game/market.js) ----------
   // One sealed auction a round, at night. Every good clears at a single price set by the players' own bids and asks.

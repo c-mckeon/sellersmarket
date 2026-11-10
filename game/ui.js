@@ -169,7 +169,7 @@
     if (o.name === "cancelOrder") { const x = st.book.find(y => y.id === a.order); return x ? `Cancel ${x.side === "buy" ? "bid for" : "offer of"} ${x.qty} ${G.COM[x.good].name} at ${m(x.price)}` : "Cancel an order"; }
     if (o.name === "bid") { const k = (st.contracts || []).find(x => x.id === a.contract); return `Bid ${m(a.amount)} for ${k ? `${G.contractItem(k).icon} ${esc(G.contractItem(k).name)}` : "a contract"}`; }
     if (o.name === "deliver") { const k = (G.player(st, ui.seat).contracts || []).find(x => x.id === a.contract); if (!k) return "Deliver a contract"; const it = G.contractItem(k); return `Deliver ${it.icon} ${esc(it.name)} for ${m(k.price)}`; }
-    if (o.name === "dump") return `Throw away ${a.qty} ${G.COM[a.id].name}`;
+    if (o.name === "dump") return `Bin ${a.qty} ${G.COM[a.id].name}`;
     if (o.name === "move") return `Move to ${G.TERR[a.to].name}`;
     if (o.name === "build") return `Build a ${G.BIZ_BY[a.type].name.toLowerCase()}`;
     return o.name;
@@ -345,6 +345,9 @@
     return new Set(st.history.filter(h => h.n > seen).flatMap(h => Object.keys(h.trades)));
   };
 
+  // Your own orders for a good, by price and side: [{ side, price, qty }] (drawn as blue bars)
+  const myLevels = id => { const lv = {}; vw.book.filter(o => o.pid === ui.seat && o.good === id).forEach(o => { const key = o.side + o.price; (lv[key] ||= { side: o.side, price: o.price, qty: 0 }).qty += o.qty; }); return Object.values(lv); };
+
   // ----- Quote board: a small order book per good, price running bottom to top -----
   // The same moments as the big order book replay, lined up so every card moves together: four per
   // auction (orders in, bids meet asks, traded, what's left; a good that didn't trade just holds), then now.
@@ -413,6 +416,9 @@
       g += `<rect x="${bx.toFixed(1)}" y="${y.toFixed(1)}" width="${w.toFixed(1)}" height="${bh.toFixed(1)}" rx="1" fill="${fill}" opacity="${op}"/>`;
       if (cut && w > 0) g += `<line class="cut" x1="${(x.side === "a" ? cx + half - 1.5 : cx - half + 1.5).toFixed(1)}" x2="${(x.side === "a" ? cx + half - 1.5 : cx - half + 1.5).toFixed(1)}" y1="${(y - 1.5).toFixed(1)}" y2="${(y + bh + 1.5).toFixed(1)}" opacity="${op}"/>`;
     });
+    // Your own orders: blue bars on their side, over the book
+    (s.mine || []).forEach(o => { const w = Math.min(half, o.qty * k), y = Y(o.price) - bh / 2;
+      g += `<rect class="mine" x="${(o.side === "sell" ? cx : cx - w).toFixed(1)}" y="${y.toFixed(1)}" width="${w.toFixed(1)}" height="${bh.toFixed(1)}" rx="1"/>`; });
     g += `<line class="axis" x1="${cx}" x2="${cx}" y1="${T}" y2="${H - B}"/>`;
     if (s.last != null) g += `<circle class="ldot" cx="${cx}" cy="${Y(s.last).toFixed(1)}" r="3.5"/>`;
     return `<svg viewBox="0 0 ${W} ${H}" aria-hidden="true">${g}</svg>`;
@@ -435,7 +441,7 @@
   const cardHTML = (id, d, k, flash) => {
     const f = d.per[id].frames[k], w = cardWords(id, f);
     return `<button class="qcard${flash ? " flash" : ""}" data-good="${id}">
-      <span class="qc-h">${w.h}</span><span class="qc-svg">${drawMini(d.per[id], still(f, themeColours()))}</span><span class="qc-n">${w.n}</span></button>`;
+      <span class="qc-h">${w.h}</span><span class="qc-svg">${drawMini(d.per[id], { ...still(f, themeColours()), mine: k === d.frames.length - 1 ? myLevels(id) : [] })}</span><span class="qc-n">${w.n}</span></button>`;
   };
 
   function quoteBoard(fresh, open = "") {
@@ -466,7 +472,7 @@
       const el = grid.querySelector(`.qcard[data-good="${id}"]`);
       if (!el) return;
       const F = d.per[id].frames, f = F[k];
-      el.querySelector(".qc-svg").innerHTML = drawMini(d.per[id], k > 0 && t < 1 ? blend(F[k - 1], f, t, C) : still(f, C));
+      el.querySelector(".qc-svg").innerHTML = drawMini(d.per[id], { ...(k > 0 && t < 1 ? blend(F[k - 1], f, t, C) : still(f, C)), mine: k === d.frames.length - 1 && t >= 1 ? myLevels(id) : [] });
       if (t === 1 || !el.dataset.k || +el.dataset.k !== k) {
         const w = cardWords(id, f);
         el.querySelector(".qc-h").innerHTML = w.h; el.querySelector(".qc-n").innerHTML = w.n;
@@ -518,9 +524,9 @@
     const out = [];
     for (let i = 0; i < p.space; i++) {
       const r = rows[i];
-      if (r) out.push(`<li class="${r.offer ? "offer" : ""}"><span class="sl-n">${i + 1}</span><button class="sl-good" data-good="${r.c}" title="Open ${G.COM[r.c].name} in the market">${G.COM[r.c].name}${r.offer ? ` <small>on offer</small>` : ""}</button>${life(r)}</li>`);
-      else if (i < rows.length + reserved) out.push(`<li class="resv"><span class="sl-n">${i + 1}</span><span class="sl-good">kept free for a buy order</span><span></span></li>`);
-      else out.push(`<li class="empty"><span class="sl-n">${i + 1}</span><span class="sl-good">empty</span><span></span></li>`);
+      if (r) out.push(`<li class="${r.offer ? "offer" : ""}"><span class="sl-n">${i + 1}</span><button class="sl-good" data-good="${r.c}" title="Open ${G.COM[r.c].name} in the market">${G.COM[r.c].name}${r.offer ? ` <small>on offer</small>` : ""}</button>${life(r)}${r.offer ? `<span></span>` : G.isWaste(r.c) ? `<button class="sl-bin" disabled title="Waste can't be binned: pay someone to take it, or keep it until it goes off">🗑</button>` : `<button class="sl-bin" data-bin="${r.c}" title="Bin one ${G.COM[r.c].name.toLowerCase()}">🗑</button>`}</li>`);
+      else if (i < rows.length + reserved) out.push(`<li class="resv"><span class="sl-n">${i + 1}</span><span class="sl-good">kept free for a buy order</span><span></span><span></span></li>`);
+      else out.push(`<li class="empty"><span class="sl-n">${i + 1}</span><span class="sl-good">empty</span><span></span><span></span></li>`);
     }
     const over = rows.length - p.space;
     return `<ol class="dstock">${out.join("")}</ol>
@@ -568,6 +574,16 @@
       </div>`;
   }
 
+  // Your orders on the book (and new ones you're about to send), each with ✕ to cancel
+  function myOrdersBar(p) {
+    const isNew = o => !st.book.some(x => x.id === o.id);
+    const mine = vw.book.filter(o => o.pid === p.id).sort((a, b) => G.COM[a.good].name.localeCompare(G.COM[b.good].name) || a.price - b.price);
+    const text = o => G.isWaste(o.good) ? (o.side === "buy" ? `Take ${o.qty} ${G.COM[o.good].name} for ≥ ${m(o.price)}` : `Pay ≤ ${m(o.price)} to dump ${o.qty} ${G.COM[o.good].name}`)
+      : `${o.side === "buy" ? "Bid" : "Ask"} ${o.qty} ${G.COM[o.good].name} @ ${m(o.price)}`;
+    return `<div class="myorders"><b>Your orders on the book</b>${mine.length ? mine.map(o => `<span class="mo ${o.side}${isNew(o) ? " new" : ""}"><button class="glink" data-good="${o.good}">${text(o)}</button>${isNew(o) ? "<em>new</em>" : ""}<button class="mox" data-cancel="${o.id}" data-new="${isNew(o) ? 1 : ""}" title="Cancel it${o.side === "buy" ? " (frees the cash)" : " (the goods come back)"}">✕</button></span>`).join("")
+      : `<span class="muted small">None. Unfilled orders stay on the book until they fill or you cancel them.</span>`}</div>`;
+  }
+
   // ================= The market =================
   // A summary of the last auction and what's trading, then the quote board: every good, each with its
   // own small order book; click one to open it.
@@ -597,6 +613,7 @@
               <td class="n ${chg > 0 ? "up" : chg < 0 ? "dn" : ""}">${chg != null ? pct(chg) : "–"}</td><td class="n">${vol}</td>
               <td class="n">${q.bid != null ? m(q.bid) : "–"} / ${q.ask != null ? m(q.ask) : "–"}</td></tr>`; }).join("")}
         </tbody></table>` : `<p class="muted">Nothing has traded yet. The first trades set the first prices.</p>`}`)}
+      ${myOrdersBar(p)}
       ${quoteBoard(fresh, sel ? ticket(p, sel, want) : "")}`;
   }
 
@@ -635,7 +652,7 @@
     const tip = x => { const side = x.side === "a" ? "sell" : "buy", mine = yours(side, x.p);
       if (G.isWaste(id)) return side === "sell" ? `${x.w} to get rid of, paying up to ${m(x.p)} each${mine ? ` (${mine} yours)` : ""}` : `${x.w} would be taken for ${m(x.p)} each or more${mine ? ` (${mine} yours)` : ""}`;
       return `${x.w} ${side === "sell" ? "for sale" : "wanted"} at ${m(x.p)}${mine ? ` (${mine} yours)` : ""}`; };
-    return `<div class="depth">${drawBook(D, still(now, themeColours()), Object.values(now.segs).map(x => ({ ...x, tip: tip(x) })))}<div class="ptip" hidden></div></div>`;
+    return `<div class="depth">${drawBook(D, { ...still(now, themeColours()), mine: myLevels(id) }, Object.values(now.segs).map(x => ({ ...x, tip: tip(x) })))}<div class="ptip" hidden></div></div>`;
   }
   // The book now, as price levels: { b: [[price, qty]…], a: […] }
   const nowBook = (state, id) => ({ b: G.depth(state, id, "buy").slice(0, 10).map(x => [x.price, x.qty]), a: G.depth(state, id, "sell").slice(0, 10).map(x => [x.price, x.qty]) });
@@ -806,6 +823,9 @@
     // Hover targets (live chart)
     hits.forEach(x => { const w = Math.max(10, x.w * k), h = Math.max(bh, 8);
       g += `<rect class="hit" data-tip="${esc(x.tip)}" x="${(x.side === "a" ? cx : cx - w).toFixed(1)}" y="${(Y(x.p) - h / 2).toFixed(1)}" width="${w.toFixed(1)}" height="${h.toFixed(1)}"/>`; });
+    // Your own orders: blue bars on their side, over the book
+    (s.mine || []).forEach(o => { const w = Math.min(half, o.qty * k), y = Y(o.price) - bh / 2;
+      g += `<rect class="mine" x="${(o.side === "sell" ? cx : cx - w).toFixed(1)}" y="${y.toFixed(1)}" width="${w.toFixed(1)}" height="${bh.toFixed(1)}" rx="1.5"/>`; });
     // The centre line, and the last sale as a dot on it
     g += `<line class="axis" x1="${cx}" x2="${cx}" y1="${T}" y2="${H - B}"/>`;
     if (s.last != null) g += `<circle class="ldot" cx="${cx}" cy="${Y(s.last).toFixed(1)}" r="5"><title>Last sale ${m(Math.round(s.last))}</title></circle>`;
@@ -1124,6 +1144,7 @@
       morph(card && pageRect(card), root.querySelector(".qopen"));
     }));
     root.querySelector("#gTicketClose")?.addEventListener("click", closeGood);
+    root.querySelectorAll("[data-bin]").forEach(b => b.addEventListener("click", e => { e.stopPropagation(); doAct("dump", { id: b.dataset.bin, qty: 1 }); }));
     root.querySelectorAll("[data-bidfor]").forEach(b => b.addEventListener("click", () => {
       const inp = root.querySelector(`[data-bidinput="${b.dataset.bidfor}"]`), v = Math.round(+inp?.value);
       if (!v) return flash("Type a bid: what you'd want to be paid for it."), render();

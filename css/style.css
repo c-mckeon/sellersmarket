@@ -673,7 +673,7 @@ details.gnews[open] { display: grid; }
 
 /* Stockpile: one row per unit, first in at the top */
 .dstock { list-style: none; margin: 0; padding: 0; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; font-size: 12.5px; }
-.dstock li { display: grid; grid-template-columns: 20px 1fr auto; gap: 6px; align-items: center; padding: 1px 8px; min-height: 22px; border-top: 1px solid var(--line); }
+.dstock li { display: grid; grid-template-columns: 20px 1fr auto 18px; gap: 6px; align-items: center; padding: 1px 8px; min-height: 22px; border-top: 1px solid var(--line); }
 .dstock li:first-child { border-top: none; }
 .dstock .sl-n { color: var(--muted); font-size: 11px; text-align: right; font-variant-numeric: tabular-nums; }
 .dstock .sl-good { font: inherit; text-align: left; background: none; border: none; padding: 0; color: var(--ink); cursor: pointer; }
@@ -774,3 +774,19 @@ details.gnews[open] { display: grid; }
 .qopen .depthbox svg { max-height: 230px; width: auto; max-width: 100%; margin: 0 auto; }
 .qopen .pchart svg { max-height: 130px; }
 @media (min-width: 900px) { .qopen .tcharts { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); } }
+
+/* Your orders, above the quote board */
+.myorders { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin: 8px 0; font-size: 13px; }
+.myorders > b { margin-right: 4px; }
+.mo { display: inline-flex; align-items: center; gap: 4px; border: 1px solid var(--line); border-left: 4px solid #2f6db5; border-radius: 6px; padding: 2px 4px 2px 8px; background: var(--surface); }
+.mo .glink { font-size: 13px; color: var(--ink); }
+.mo.new { border-style: dashed; border-left-style: solid; }
+.mo em { font-size: 11px; color: var(--accent); font-style: normal; }
+.mox { all: unset; cursor: pointer; padding: 0 5px; color: var(--muted); font-weight: 700; }
+.mox:hover { color: var(--waste); }
+/* Your orders on the order book charts */
+.qc-svg .mine, .depthbox .mine { fill: #2f6db5; opacity: .85; }
+/* Bin a unit from the stockpile */
+.sl-bin { all: unset; cursor: pointer; font-size: 12px; opacity: .45; text-align: center; }
+.sl-bin:hover { opacity: 1; }
+.sl-bin:disabled { cursor: not-allowed; opacity: .15; }

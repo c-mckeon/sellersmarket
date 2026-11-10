@@ -2,19 +2,19 @@
 //
 // Extraction businesses (mines, pits, farms, water works) dig up or grow a raw material from nothing.
 // Factories are the recipes on the Commodities tab (js/commodities.js).
-// Every business makes 2 of its product a round. Building one costs cash (BUSINESS_COST below), and each
+// Every business makes 1 of its product a round. Building one costs cash (BUSINESS_COST below), and each
 // territory only allows certain businesses: see `biz` in js/territories.js.
 
 // Extraction businesses: [name, makes, output per round]
 const EXTRACTORS = [
-  ["Farm",              "wheat",     2],
-  ["Water works",       "water",     2],
-  ["Logging camp",      "wood",      2],
-  ["Sand pit",          "sand",      2],
-  ["Clay pit",          "clay",      2],
-  ["Limestone quarry",  "limestone", 2],
-  ["Coal mine",         "coal",      2],
-  ["Iron mine",         "iron_ore",  2],
+  ["Farm",              "wheat",     1],
+  ["Water works",       "water",     1],
+  ["Logging camp",      "wood",      1],
+  ["Sand pit",          "sand",      1],
+  ["Clay pit",          "clay",      1],
+  ["Limestone quarry",  "limestone", 1],
+  ["Coal mine",         "coal",      1],
+  ["Iron mine",         "iron_ore",  1],
 ];
 
 // What each business costs to build, in cash: 120 to 170. Mines, pits and farms are cheapest; factories
