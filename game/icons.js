@@ -29,14 +29,9 @@ const ICONS = {
 // Which symbol each business gets
 const BIZ_ICON = {
   farm: "wheat", water_works: "drop", logging_camp: "tree", sand_pit: "pick", clay_pit: "pick", limestone_quarry: "pick",
-  coal_mine: "pick", iron_mine: "pick", copper_mine: "pick", gold_mine: "coin", bauxite_mine: "pick", oil_well: "derrick",
-  offshore_oil_rig: "rig", lithium_works: "flask", rare_earth_mine: "pick", rubber_plantation: "tree",
-  flour_mill: "mill", sawmill: "tree", blast_furnace: "flame", copper_smelter: "flame", gold_refinery: "coin",
-  aluminium_smelter: "flame", glassworks: "flame", kiln: "flame", oil_refinery: "derrick", plastics_plant: "flask",
-  vulcaniser: "tyre", lithium_plant: "flask", rare_earth_separator: "flask", arc_furnace: "flame", cement_kiln: "bricks",
-  paper_mill: "paper", bakery: "bread", steelworks: "factory", wire_mill: "gear", magnet_works: "magnet", chip_fab: "chip",
-  battery_plant: "battery", solar_plant: "sun", concrete_plant: "bricks", tyre_factory: "tyre", motor_factory: "gear",
-  circuit_board_plant: "chip", phone_assembly: "phone", car_plant: "car", turbine_works: "turbine",
+  coal_mine: "pick", iron_mine: "pick",
+  flour_mill: "mill", sawmill: "tree", blast_furnace: "flame", glassworks: "flame", kiln: "flame", cement_kiln: "bricks",
+  paper_mill: "paper", bakery: "bread", steelworks: "factory", concrete_plant: "bricks",
 };
 
 // An icon as SVG, centred on (x, y), `size` across

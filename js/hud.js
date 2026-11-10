@@ -12,11 +12,11 @@ const PLAYERS = {
 const PLOTS = [
   ["ukraine", "you", "Flour mill"], ["paris", "you", "Bakery"], ["sweden", "you", "Sawmill"],
   ["ruhr", "ana", "Blast furnace"], ["berlin", "ana", "Steelworks"], ["bohemia", "ana", "Cement kiln"],
-  ["danube", "ben", "Oil refinery"], ["lowlands", "ben", "Plastics plant"], ["munich", "ben", "Motor factory"],
-  ["spain", "cleo", "Copper smelter"], ["london", "cleo", "Chip fab"], ["finland", "cleo", "Battery plant"],
+  ["lowlands", "ben", "Glassworks"], ["warsaw", "ben", "Kiln"], ["munich", "ben", "Concrete plant"],
+  ["spain", "cleo", "Blast furnace"], ["finland", "cleo", "Paper mill"], ["london", "cleo", "Steelworks"],
 ];
 // Where each player's pawn stands
-const PAWNS = { you: "paris", ana: "ruhr", ben: "danube", cleo: "spain" };
+const PAWNS = { you: "paris", ana: "ruhr", ben: "lowlands", cleo: "spain" };
 
 // Draws the map. Returns the SVG as text plus where each name ends (for markers).
 function europeMapSVG(fid) {
@@ -119,7 +119,7 @@ const ME = {
   ],
   loans: [{ what: "Government loan", balance: 250 }],
   bonds: [{ count: 1, length: 10, rate: 0.025, left: 4 }],
-  futures: [{ id: "crude_oil", side: "long", qty: 50, price: 8.5, left: 3 }],
+  futures: [{ id: "coal", side: "long", qty: 50, price: 5.5, left: 3 }],
 };
 
 function drawHud() {
@@ -188,7 +188,7 @@ function drawHud() {
       <div class="hr"><span>Loan rate</span><b>${P(base + LN.extra)}</b></div>
       <div class="hr"><span>New bonds pay</span><b>${P(base)} a round</b></div>
       <div class="hr"><span>Wheat futures, 5 rounds</span><b>${m(futuresPrice(price("wheat"), 5, base))}</b></div>
-      <div class="hr"><span>Crude oil futures, 3 rounds</span><b>${m(futuresPrice(price("crude_oil"), 3, base))}</b></div>
+      <div class="hr"><span>Coal futures, 3 rounds</span><b>${m(futuresPrice(price("coal"), 3, base))}</b></div>
       <div class="etfmini">${Object.keys(SECTORS).map(k => { const ids = etfMembers(k); const v = 100 * ids.reduce((s, id) => s + price(id) / basePrice(id), 0) / ids.length; return `<span><b>${EF.tickers[k]}</b>${v.toFixed(1)}</span>`; }).join("")}</div>
     </section>`;
 

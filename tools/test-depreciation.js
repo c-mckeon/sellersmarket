@@ -1,6 +1,6 @@
 // Checks depreciation (game/depreciation.js):  node tools/test-depreciation.js
 // Goods go off after their life, oldest first, wherever they are, and keep their age when traded.
-const E = require("./engine")({ "depreciation.goods.wood": 3 });
+const E = require("./engine")({ "depreciation.goods.wood": 3, "depreciation.goods.steel": 0 });
 const G = E.G;
 let fails = 0, passes = 0;
 const eq = (name, got, want) => { if (JSON.stringify(got) === JSON.stringify(want)) passes++; else { fails++; console.log("FAIL", name, "got", JSON.stringify(got), "want", JSON.stringify(want)); } };
@@ -48,8 +48,8 @@ const night = (st, round) => { st.round = round; G.clock = round; G.expire(st); 
 }
 { // Goods that never go off
   const st = fresh(), p = st.players[0];
-  G.clock = 1; G.add(p, "gold", 2); night(st, 50);
-  eq("gold never goes off", p.stock.gold, 2);
+  G.clock = 1; G.add(p, "steel", 2); night(st, 50);
+  eq("a good with life 0 never goes off", p.stock.steel, 2);
 }
 console.log(fails ? `${fails} failed, ${passes} passed` : `all ${passes} passed`);
 process.exit(fails ? 1 : 0);

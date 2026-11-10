@@ -43,8 +43,8 @@ function buildDbRows() {
   const stock = {
     you: ME.stock,
     ana: { iron_ore: 6, coal: 5, iron: 2, steel: 3, slag: 2, limestone: 3 },
-    ben: { crude_oil: 8, fuel: 2, plastic: 3, magnets: 2, wire: 4, chemical_waste: 2 },
-    cleo: { copper_ore: 5, coal: 3, copper: 2, silicon: 2, gold: 1, chips: 4, lithium: 2, aluminium: 1 },
+    ben: { sand: 8, limestone: 2, glass: 3, clay: 4, ceramic: 2, concrete: 4 },
+    cleo: { iron_ore: 5, coal: 3, iron: 2, steel: 1, sawdust: 2, paper: 2 },
   };
   R.holdings = [];
   Object.entries(stock).forEach(([k, st]) => Object.entries(st).forEach(([c, q]) => R.holdings.push([pid[k], c, q])));
@@ -69,13 +69,13 @@ function buildDbRows() {
     [2, 1, 7, 1, "flour", "buy", 1, priceNow("flour")],
     [3, 1, 7, 1, "bread", "sell", 3, priceNow("bread")],
     [4, 1, 7, 2, "coal", "buy", 4, priceNow("coal")],
-    [5, 1, 7, 3, "crude_oil", "buy", 6, priceNow("crude_oil")],
-    [6, 1, 7, 4, "chips", "sell", 2, priceNow("chips")],
+    [5, 1, 7, 3, "sand", "buy", 6, priceNow("sand")],
+    [6, 1, 7, 4, "paper", "sell", 2, priceNow("paper")],
   ];
   R.loans = [[1, 1, 300, 250, 0.035, 3], [2, 2, 800, 640, 0.035, 2]];
   R.bonds = [[1, 1, 1, 10, 0.025, 3], [2, 4, 2, 5, 0.03, 5]];
-  R.futures = [[1, 1, "crude_oil", "long", 50, 8.5, 10, 42.5], [2, 3, "wheat", "short", 30, 7, 9, 21]];
-  R.etf_holdings = [[3, "electronics", 5, 104.2], [2, "construction", 3, 98.7]];
+  R.futures = [[1, 1, "coal", "long", 50, 5.5, 10, 27.5], [2, 3, "wheat", "short", 30, 7, 9, 21]];
+  R.etf_holdings = [[3, "metals", 5, 104.2], [2, "construction", 3, 98.7]];
   const cardId = n => CARDS.findIndex(c => c.name === n) + 1;
   R.player_cards = [
     [1, 1, cardId("Drought"), "hand", 6], [2, 1, cardId("Insurance payout"), "hand", 7],

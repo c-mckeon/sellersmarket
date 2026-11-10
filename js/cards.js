@@ -5,13 +5,10 @@
 // Sectors: every commodity belongs to exactly one.
 const SECTORS = {
   food:         { name: "Food & farming",     items: ["wheat", "water", "flour", "bread"] },
-  forestry:     { name: "Forestry & paper",   items: ["wood", "lumber", "sawdust", "paper", "latex"] },
-  mining:       { name: "Mining & quarrying", items: ["sand", "clay", "limestone", "coal", "iron_ore", "copper_ore", "gold_ore", "bauxite", "lithium_brine", "rare_earth_ore", "tailings"] },
-  metals:       { name: "Metals",             items: ["iron", "steel", "copper", "aluminium", "gold", "wire", "slag"] },
-  energy:       { name: "Energy & chemicals", items: ["crude_oil", "fuel", "plastic", "rubber", "chemical_waste", "fly_ash"] },
+  forestry:     { name: "Forestry & paper",   items: ["wood", "lumber", "sawdust", "paper"] },
+  mining:       { name: "Mining & quarrying", items: ["sand", "clay", "limestone", "coal", "iron_ore"] },
+  metals:       { name: "Metals",             items: ["iron", "steel", "slag"] },
   construction: { name: "Construction",       items: ["cement", "concrete", "glass", "ceramic"] },
-  electronics:  { name: "Electronics",        items: ["silicon", "chips", "circuit_board", "smartphone", "lithium", "rare_earths", "battery", "magnets", "solar_panel"] },
-  machinery:    { name: "Machinery & vehicles", items: ["motor", "tyres", "electric_car", "wind_turbine"] },
 };
 
 // Hooks: the existing variables a card can change.

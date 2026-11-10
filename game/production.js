@@ -38,7 +38,7 @@
     return { use, missing };
   };
 
-  // Waste nothing can use (tailings, chemical waste) isn't kept anywhere
+  // Waste nothing can use isn't kept anywhere (none at the moment: slag and sawdust both have uses)
   const uselessMemo = {};
   G.useless = c => uselessMemo[c] ??= G.COM[c].type === "waste" && !RECIPES.some(r => r.in[c]) && !(S.substitutes || []).some(r => r.use === c);
   // Room left in a business's own stock (settings.businessSpace)

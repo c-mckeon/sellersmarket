@@ -17,7 +17,7 @@
     heavy: () => list(S.build.heavy.goods.map(name)),
     lifetimes: () => { if (!S.depreciation?.on) return "goods never go off (switched off)";
       const d = S.depreciation, life = id => d.goods?.[id] ?? d.byType?.[G.COM[id].type] ?? d.life ?? 0;
-      const show = ["bread", "wheat", "flour", "water", "wood", "lumber", "iron", "steel", "glass", "gold"];
+      const show = ["bread", "wheat", "flour", "water", "wood", "lumber", "iron", "steel", "glass"];
       return show.map(id => `${name(id)} ${life(id) ? `${life(id)} rounds` : "never"}`).join(", "); },
     regions: () => { const by = {};
       TERRITORIES.filter(t => !t.sea).forEach(t => Object.keys(TERRITORY_INFO[t.id].res || {}).forEach(r => { if (r !== "wheat" && r !== "water") (by[r] ||= []).push(t.name); }));

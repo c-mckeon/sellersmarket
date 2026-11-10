@@ -116,7 +116,7 @@
         <ul>
           <li>Once a round, at midday, each business runs. Mines, farms and wells make their output (more where the deposit is richer). Factories need every input; they take them from anything you own, your businesses first.</li>
           <li><b>Stand-ins:</b> a factory short of an input can use another good instead, e.g. <span data-s="substitutes"></span>. Goods a contract of yours asks for are never used as stand-ins.</li>
-          <li>What a business makes stays in <b>its own stock</b>, up to <span data-s="businessSpace"></span> units, until you sell, deliver or use it. When it's full it makes only what fits. Waste nothing can use (tailings, chemical waste) isn't kept.</li>
+          <li>What a business makes stays in <b>its own stock</b>, up to <span data-s="businessSpace"></span> units, until you sell, deliver or use it. When it's full it makes only what fits.</li>
         </ul>
       </section>
 
@@ -154,17 +154,17 @@
   <section id="view-territories" class="view">
     <div class="intro">
       <h1>Territories</h1>
-      <p>Each of the 60 territories has its own character: what's in the ground, whether it's on the coast, and how expensive it is to build there. Each raw material is found in one region, so players have to trade across the map. Mines and wells can only go where their resource is; farms, water works and most factories can go on any land.</p>
+      <p>Each of the 60 territories has its own character: what's in the ground, whether it's on the coast, and how expensive it is to build there. Each raw material is found in only a few regions, so players have to trade across the map. Mines and wells can only go where their resource is; farms, water works and most factories can go on any land.</p>
     </div>
 
     <div class="eqcard">
       <div class="big">Building materials = base cost × territory cost level × (1 + 25% × businesses already there) × (1 + <span data-s="build.ownedCostStep" data-f="pct"></span> × businesses you own) ÷ <span data-s="build.valuePerCrate"></span></div>
       <dl>
-        <div><dt>Base cost</dt><dd>Set for each kind of business. A farm is 100, a gold mine 260, an offshore oil rig 450. A factory costs 150, 250, 400 or 700, depending on how advanced its product is.</dd></div>
+        <div><dt>Base cost</dt><dd>Set for each kind of business. A water works is 80, a farm 100, an iron mine 150. A factory costs 150, 250 or 400, depending on how advanced its product is.</dd></div>
         <div><dt>Cost level</dt><dd>Land and wages differ. London is ×2.0 and Paris ×1.8; Ukraine is ×0.7 and North Africa ×0.6.</dd></div>
         <div><dt>Crowding</dt><dd>Every business already in a territory, anyone's, makes the next one 25% dearer. The first is ×1, the fifth is ×2. Popular spots fill up and get expensive, which spreads players out.</dd></div>
         <div><dt>Richness</dt><dd>Mines, farms and wells produce more where the deposit is richer: ★ ×1, ★★ ×1.5, ★★★ ×2. Northern England's iron mines out-produce Brittany's.</dd></div>
-        <div><dt>Where</dt><dd>Mines and wells only where the resource is; farms and water works anywhere on land. Oil refineries and plastics plants need the coast or a local oil field. Every other factory can go on any land. At sea you can only build oil rigs, where there's offshore oil.</dd></div>
+        <div><dt>Where</dt><dd>Mines, pits and quarries only where the resource is; farms and water works anywhere on land. Factories can go on any land. Nothing can be built at sea.</dd></div>
         <div><dt>Paid in</dt><dd>Building materials, not cash: <span data-s="materials"></span>. Big factories need half in heavy materials.</dd></div>
       </dl>
       <p class="muted small">In the game, more settings apply (tuned by simulation): every cost is ×1.5, each business you already own makes your next one 30% dearer, every business pays wages overnight of 3% of its cost, and mines, farms and wells make 20% more than listed here.</p>
@@ -184,7 +184,7 @@
     <div class="tablewrap"><table id="ttable" class="clickrows"></table></div>
 
     <h2 class="listhead">All businesses</h2>
-    <p class="muted">Click one to see where it can go on the map. No rubber grows in Europe, so latex can only be imported.</p>
+    <p class="muted">Click one to see where it can go on the map.</p>
     <div class="tablewrap"><table id="btable" class="clickrows"></table></div>
   </section>
 

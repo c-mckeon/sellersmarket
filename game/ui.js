@@ -793,7 +793,7 @@
   // Building materials: what you have to build with, and what's stopping you
   const cheapestOf = list => list.map(c => ({ c, px: (G.bestAsk(vw, c)?.price ?? st.lastTrade[c]?.price ?? 999) / S.build.materials[c] })).sort((a, b) => a.px - b.px)[0].c;
   const buyLink = list => { const c = cheapestOf(list), a = G.bestAsk(vw, c); return `<button class="glink blink" data-good="${c}">${G.COM[c].name.toLowerCase()}${a ? ` (ask ${m(a.price)})` : ""}</button>`; };
-  // "Lumber, iron… count 1 each; steel and aluminium 2; wood, clay… ½", from the settings
+  // "Lumber, iron… count 1 each; steel 2; wood, clay… ½", from the settings
   const matRule = () => { const by = {}; Object.entries(S.build.materials).forEach(([c, v]) => (by[v] ||= []).push(G.COM[c].name.toLowerCase()));
     return Object.entries(by).sort((a, b) => b[0] - a[0]).map(([v, l]) => `${l.join(", ")} count ${v == 0.5 ? "½" : v}${l.length > 1 && v == 1 ? " each" : ""}`).join("; "); };
   function materialsBox(p) {
@@ -859,7 +859,7 @@
         <div><h4>${sea ? "Can be drilled here" : "Can be mined or drilled here"}</h4>
           ${special.length ? `<ul class="tc-list">${special.map(row).join("")}</ul>` : `<p class="muted small">${sea ? "Nothing: open water." : "No mines here. Only farms and water works."}</p>`}</div>
         ${sea ? "" : `<div><h4>Grown or pumped anywhere</h4><ul class="tc-list">${common.map(row).join("")}</ul>
-          <p class="muted small">Factories can go on any land${G.coastal(tid) || (info.res || {}).crude_oil ? "" : " (except oil refineries and plastics plants: they need the coast or an oil field)"}.</p></div>`}
+          <p class="muted small">Factories can go on any land.</p></div>`}
       </div>
       ${here.length ? `<p class="small tc-here"><b>Businesses here:</b> ${here.map(b => `${b.owner === p.id ? "your" : esc(G.player(vw, b.owner).name) + "'s"} ${G.BIZ_BY[b.type].name.toLowerCase()}`).join(", ")}</p>` : ""}
     </div>`;

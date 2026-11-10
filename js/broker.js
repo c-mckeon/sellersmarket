@@ -51,6 +51,6 @@ const BROKER = {
   etfs: {
     start: 100,
     fee: 0.005, // 0.5% charged when you buy
-    tickers: { food: "FOOD", forestry: "TIMB", mining: "MINE", metals: "METL", energy: "ENRG", construction: "BILD", electronics: "TECH", machinery: "MACH" },
+    tickers: { food: "FOOD", forestry: "TIMB", mining: "MINE", metals: "METL", construction: "BILD" },
   },
 };

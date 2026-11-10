@@ -8,7 +8,7 @@ const CAT = {
   regulation: { name: "Regulations",       color: "--night" },
 };
 const nameOf = t => BY_ID[t] ? BY_ID[t].name
-  : t.startsWith("sector:") ? SECTORS[t.slice(7)].name + " sector"
+  : t.startsWith("sector:") ? (SECTORS[t.slice(7)]?.name ?? t.slice(7)) + " sector"
   : t === "all" ? "everything" : t;
 
 function fxText([hook, on, op, v, rounds]) {

@@ -36,7 +36,7 @@
   // How an effect reads in plain words
   G.fxText = ([hook, target, op, v, rounds]) => {
     const H = HOOKS[hook] ? HOOKS[hook].name : hook;
-    const on = G.COM[target] ? G.COM[target].name : target.startsWith("sector:") ? SECTORS[target.slice(7)].name : target === "all" ? "everything" : target;
+    const on = G.COM[target] ? G.COM[target].name : target.startsWith("sector:") ? (SECTORS[target.slice(7)]?.name ?? target.slice(7)) : target === "all" ? "everything" : target;
     const amount = op === "×" ? `×${v}` : op === "+" ? (Math.abs(v) < 1 && hook !== "e" && hook !== "tax" ? `${v > 0 ? "+" : "−"}${+(Math.abs(v) * 100).toFixed(2)}%` : `${v > 0 ? "+" : "−"}${Math.abs(v)}`)
       : op === "%" ? `${+(v * 100).toFixed(1)}%` : op === "=" ? (v < 1 ? `set to ${v * 100}%` : `set to ${v}`) : op === "×base" ? `max ${v}× base`
       : op === "repay" ? `repay ${v * 100}%` : op === "units" ? `${v} units a round` : op === "cancel" ? "cancelled" : `${op} ${v}`;
@@ -71,7 +71,7 @@
   };
 
   // ---------- Overnight: reveal and apply ----------
-  const commoditiesFor = (t, pl) => G.COM[t] ? [t] : t.startsWith("sector:") ? SECTORS[t.slice(7)].items
+  const commoditiesFor = (t, pl) => G.COM[t] ? [t] : t.startsWith("sector:") ? (SECTORS[t.slice(7)]?.items || [])
     : t === "all" ? COMMODITIES.map(c => c.id) : (t === "chosen commodity" || t === "shorts on it") ? [pl.commodity] : [];
   const businessesFor = (st, t, pl) => t === "your business" ? [pl.ownBusiness] : t === "target business" ? [pl.targetBusiness]
     : t === "all businesses" ? st.businesses.map(b => b.id) : [];

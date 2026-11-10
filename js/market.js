@@ -15,9 +15,9 @@
 // Wastes nobody can use have a negative base (a disposal fee). For them the
 // fee grows as more piles up: Scarcity flips to (s / s0) ^ e.
 //
-// Worked example, wheat: base 6, s0 = 4.09%, e = 1
-//   4.09% of all stock → 6 × (4.09 / 4.09) = 6
-//   0.82%             → 6 × (4.09 / 0.82) = 30
+// Worked example, wheat: base 6, s0 = 5.59%, e = 1
+//   5.59% of all stock → 6 × (5.59 / 5.59) = 6
+//   1.12%             → 6 × (5.59 / 1.12) = 30
 
 const MARKET = {
   inflationPerRound: 0.02, // 2% a round
@@ -35,65 +35,31 @@ const MARKET = {
   // e:    elasticity. 1.0 for bulk staples, higher for specialised goods with no substitutes.
   pricing: {
     // Raw resources
-    wheat:          { base: 6,   s0: 4.09,   e: 1.0 },
-    water:          { base: 2,   s0: 12.28,  e: 1.0 },
-    coal:           { base: 5,   s0: 4.91,  e: 1.0 },
-    sand:           { base: 2,   s0: 12.28,  e: 1.0 },
-    wood:           { base: 4,   s0: 6.14,  e: 1.0 },
-    iron_ore:       { base: 6,   s0: 4.09,  e: 1.0 },
-    crude_oil:      { base: 10,  s0: 2.46,  e: 1.0 },
-    limestone:      { base: 3,   s0: 8.19,  e: 1.0 },
-    clay:           { base: 2,   s0: 12.28,  e: 1.0 },
-    copper_ore:     { base: 8,   s0: 3.07,  e: 1.0 },
-    bauxite:        { base: 6,   s0: 4.09,  e: 1.0 },
-    latex:          { base: 7,   s0: 3.51,  e: 1.0 },
-    lithium_brine:  { base: 8,   s0: 3.07,  e: 1.4 },
-    gold_ore:       { base: 20,  s0: 1.23,  e: 1.4 },
-    rare_earth_ore: { base: 15,  s0: 1.64,  e: 1.4 },
+    wheat:          { base: 6,   s0: 5.59, e: 1.0 },
+    water:          { base: 2,   s0: 16.79, e: 1.0 },
+    coal:           { base: 5,   s0: 6.71, e: 1.0 },
+    sand:           { base: 2,   s0: 16.79, e: 1.0 },
+    wood:           { base: 4,   s0: 8.40, e: 1.0 },
+    iron_ore:       { base: 6,   s0: 5.59, e: 1.0 },
+    limestone:      { base: 3,   s0: 11.20, e: 1.0 },
+    clay:           { base: 2,   s0: 16.79, e: 1.0 },
 
-    // Wastes: recyclable ones are worth a little; the rest cost money to get rid of
-    slag:           { base: 1,   s0: 0.8,  e: 1.0 },
-    fly_ash:        { base: 1,   s0: 0.8,  e: 1.0 },
-    sawdust:        { base: 1.5, s0: 0.8,  e: 1.0 },
-    tailings:       { base: -2,  s0: 0.8,  e: 1.0 },
-    chemical_waste: { base: -5,  s0: 0.8,  e: 1.0 },
+    // By-products: both can be recycled, so they're worth a little
+    slag:           { base: 1,   s0: 1.09, e: 1.0 },
+    sawdust:        { base: 1.5, s0: 1.09, e: 1.0 },
 
     // Processed materials
-    flour:          { s0: 0.98,  e: 1.0 },
-    lumber:         { s0: 0.67,  e: 1.0 },
-    iron:           { s0: 0.53,  e: 1.2 },
-    fuel:           { s0: 0.43,  e: 1.0 },
-    glass:          { s0: 1.33,  e: 1.2 },
-    plastic:        { s0: 0.82,  e: 1.2 },
-    copper:         { s0: 0.39,  e: 1.2 },
-    aluminium:      { s0: 0.33,  e: 1.2 },
-    ceramic:        { s0: 0.65,  e: 1.2 },
-    rubber:         { s0: 0.51,  e: 1.2 },
-    silicon:        { s0: 0.57,  e: 1.2 },
-    lithium:        { s0: 0.35,  e: 1.4 },
-    gold:           { s0: 0.17,  e: 1.4 },
-    rare_earths:    { s0: 0.24,  e: 1.4 },
+    flour:          { s0: 1.34, e: 1.0 },
+    lumber:         { s0: 0.92, e: 1.0 },
+    iron:           { s0: 0.72, e: 1.2 },
+    glass:          { s0: 1.82, e: 1.2 },
+    ceramic:        { s0: 0.89, e: 1.2 },
 
-    // Components and basic goods
-    bread:          { s0: 0.72,  e: 1.0 },
-    steel:          { s0: 0.25,  e: 1.2 },
-    cement:         { s0: 0.86,  e: 1.0 },
-    paper:          { s0: 0.43,  e: 1.0 },
-    wire:           { s0: 0.34,  e: 1.2 },
-    magnets:        { s0: 0.2,  e: 1.4 },
-    battery:        { s0: 0.09,  e: 1.4 },
-    solar_panel:    { s0: 0.14,  e: 1.4 },
-    chips:          { s0: 0.39,  e: 1.4 },
-
-    // Assemblies
-    concrete:       { s0: 0.85,  e: 1.0 },
-    tyres:          { s0: 0.18,  e: 1.2 },
-    motor:          { s0: 0.05, e: 1.6 },
-    circuit_board:  { s0: 0.1, e: 1.6 },
-
-    // Advanced goods
-    smartphone:     { s0: 0.04,  e: 1.6 },
-    electric_car:   { s0: 0.01,  e: 1.6 },
-    wind_turbine:   { s0: 0.01,  e: 1.6 },
+    // Goods and building materials
+    bread:          { s0: 0.98, e: 1.0 },
+    steel:          { s0: 0.34, e: 1.2 },
+    cement:         { s0: 1.18, e: 1.0 },
+    paper:          { s0: 0.59, e: 1.0 },
+    concrete:       { s0: 1.16, e: 1.0 },
   },
 };

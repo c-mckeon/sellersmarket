@@ -7,7 +7,7 @@
 //   crates = base cost × territory cost level × (1 + 25% × businesses already there)
 //            × (1 + 15% × businesses you own) ÷ value per crate
 //   paid in any building materials (settings.build.materials: lumber, iron, ceramic, cement, glass…);
-//   big factories need half of it in heavy ones (steel, glass, concrete, aluminium).
+//   big factories need half of it in heavy ones (steel, glass, concrete).
 //   The game picks which of your materials to use: see G.payFor.
 
 (() => {

@@ -36,10 +36,9 @@ const GAME_SETTINGS = {
     pointsPerUnit: 0.5,    // points per raw-material unit delivered
     distanceBonus: 0.15,   // +15% points for every step the goods' nearest source is away from you
     distancePower: 2,      // how strongly contracts lean to faraway goods: chance ∝ (1 + distance) ^ this
-    // The goods that contracts ask for: a small core economy that 4 players can actually run (9 made goods
-    // from 6 regional raw materials, plus wheat and water from anywhere). Everything else (copper, oil,
-    // gold, lithium, rare earths, bauxite and what's made from them) can still be made, but no contract
-    // asks for it. Waste and raw goods never go in this list (rawShare and raws below cover raw ones).
+    // The goods that contracts ask for: 9 made goods from 6 regional raw materials, plus wheat and water
+    // from anywhere. (Concrete is left out: it's a building material.) Waste and raw goods never go in
+    // this list (rawShare and raws below cover raw ones).
     // Simulations: 13 made + 8 raw → 9 + 6 took players who never deliver from 75% to 42%.
     rawShare: 0.5,         // chance that each good on a contract is a raw one (wood, clay, coal…) instead: raw goods come
                            // from one faraway region, so these usually have to be bought from whoever mines them
@@ -59,10 +58,10 @@ const GAME_SETTINGS = {
     ownedCostStep: 0.3,    // each business you already own makes your next one 30% dearer (so players specialise and trade)
     // Building materials, and how many crates one unit counts for
     // (raw wood, clay, sand and limestone count half: you can always build, slowly, from what your own mines make)
-    materials: { lumber: 1, iron: 1, ceramic: 1, cement: 1, glass: 1, concrete: 0.5, steel: 2, aluminium: 2,
+    materials: { lumber: 1, iron: 1, ceramic: 1, cement: 1, glass: 1, concrete: 0.5, steel: 2,
                  wood: 0.5, clay: 0.5, sand: 0.5, limestone: 0.5 },
     // Big factories (tier 3 and up) need at least this share of their crates in heavy materials
-    heavy: { fromTier: 3, share: 0.5, goods: ["steel", "glass", "concrete", "aluminium"] },
+    heavy: { fromTier: 3, share: 0.5, goods: ["steel", "glass", "concrete"] },
   },
 
   // ---------- Depreciation (game/depreciation.js) ----------
@@ -74,11 +73,8 @@ const GAME_SETTINGS = {
     byType: { raw: 8, made: 8, waste: 4 },
     goods: {
       wheat: 4, water: 3, flour: 4, bread: 2,               // food and water spoil quickly
-      latex: 4, crude_oil: 6, fuel: 6,
-      iron: 12, steel: 15, copper: 12, aluminium: 15, gold: 0, // metals keep
-      glass: 12, ceramic: 12, concrete: 12, wire: 12, magnets: 12,
-      chips: 10, circuit_board: 10, battery: 10, solar_panel: 12, motor: 12,
-      tyres: 12, smartphone: 12, electric_car: 15, wind_turbine: 15,
+      iron: 12, steel: 15,                                  // metals keep
+      glass: 12, ceramic: 12, concrete: 12,
     },
   },
 
@@ -89,18 +85,11 @@ const GAME_SETTINGS = {
   // goods more than one use, so there's usually someone who could buy what you make.
   substitutes: [
     { for: "coal",      use: "wood",       ratio: 2 },                          // charcoal, in any furnace or kiln
-    { for: "coal",      use: "crude_oil",  ratio: 1 },                          // oil-fired
     { for: "sawdust",   use: "wood",       ratio: 1, at: ["paper_mill"] },      // pulp from logs
     { for: "flour",     use: "wheat",      ratio: 2, at: ["bakery"] },          // wholegrain, milled on site
-    { for: "crude_oil", use: "wheat",      ratio: 3, at: ["oil_refinery"] },    // biofuel
-    { for: "crude_oil", use: "wheat",      ratio: 3, at: ["plastics_plant"] },  // bioplastic
     { for: "sawdust",   use: "wheat",      ratio: 2, at: ["paper_mill"] },      // straw pulp
     { for: "limestone", use: "clay",       ratio: 1, at: ["cement_kiln"] },     // clay cement
-    { for: "clay",      use: "bauxite",    ratio: 1, at: ["kiln"] },            // bauxite refractories
     { for: "iron",      use: "iron_ore",   ratio: 3, at: ["steelworks"] },      // direct reduction
-    { for: "gold_ore",  use: "copper_ore", ratio: 2, at: ["gold_refinery"] },   // gold from copper slimes
-    { for: "slag",      use: "fly_ash",    ratio: 1, at: ["cement_kiln"] },
-    { for: "fly_ash",   use: "slag",       ratio: 1, at: ["concrete_plant"] },
   ],
   extractOutput: 1.0,      // multiplies what every mine, farm and well makes (1 = as listed on the Territories tab)
 
