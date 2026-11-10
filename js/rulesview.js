@@ -9,6 +9,7 @@
   const special = {
     startGoods: () => list(Object.entries(S.startGoods).map(([c, q]) => `${q} ${name(c)}`)),
     contractGoods: () => list(S.contracts.goods.map(name)),
+    failFee: () => { const f = S.contracts.failFee; return [f.base ? `${f.base}` : "", f.share ? `${Math.round(f.share * 100)}% of your bid` : ""].filter(Boolean).join(" + ") || "nothing"; },
     contractRaws: () => list((S.contracts.raws || G.contractRaws()).map(name)),
     substitutes: () => list((S.substitutes || []).slice(0, 4).map(r => `${r.ratio} ${name(r.use)} for 1 ${name(r.for)}`)) + " (and more)",
     lifetimes: () => { if (!S.depreciation?.on) return "goods never go off (switched off)";

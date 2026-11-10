@@ -175,7 +175,7 @@ const SMG = (() => {
     config.players.forEach((c, i) => {
       st.players.push({ id: i + 1, name: c.name, colour: c.colour, bot: !!c.bot, strategy: c.strategy || "best",
         cash: S.startCash, space: S.startSpace, pos: c.start, stock: { ...S.startGoods },
-        points: 0, delivered: 0, acted: false });
+        contracts: [], delivered: 0, acted: false });
     });
     // Free starting businesses, where each player starts: the one they picked plus its partner,
     // so everyone begins with a small chain (see G.starterPartner)
@@ -293,9 +293,9 @@ const SMG = (() => {
   };
 
   // ---------- Score ----------
-  // Points win. Cash (including cash locked in buy orders) breaks ties.
+  // Most money wins: cash, including cash locked in orders.
   G.totalCash = (st, p) => p.cash + G.lockedCash(st, p);
-  G.ranking = st => [...st.players].sort((a, b) => b.points - a.points || G.totalCash(st, b) - G.totalCash(st, a));
+  G.ranking = st => [...st.players].sort((a, b) => G.totalCash(st, b) - G.totalCash(st, a));
 
   return G;
 })();

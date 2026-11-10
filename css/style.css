@@ -718,3 +718,51 @@ details.gnews[open] { display: grid; }
 .gwait { font-size: 13px; font-weight: 700; color: var(--accent); }
 .qc-svg .cut { stroke: var(--surface); stroke-width: 1.5; }
 .dsellbiz { font-size: 11.5px; margin-left: 4px; }
+
+/* Contract board: bid for a contract */
+.kc.kbid .kc-goods { margin: 4px 0; }
+.kc-bidrow { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.kc-bidrow input { width: 76px; font: inherit; font-size: 12.5px; padding: 3px 6px; border: 1px solid var(--line); border-radius: 6px; background: var(--surface); color: var(--ink); }
+.kc-bidrow span { flex: 1; }
+
+/* Contracts: work orders pinned to a cork board */
+.pinboard { display: grid; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); gap: 22px 18px; padding: 26px 20px 22px; margin: 6px 0 16px; border-radius: 10px;
+  border: 10px solid #8a5a2e; box-shadow: inset 0 2px 8px rgba(0,0,0,.35);
+  background-color: #c79a5c;
+  background-image: radial-gradient(rgba(90,55,20,.35) 1px, transparent 1.6px), radial-gradient(rgba(255,235,190,.35) 1px, transparent 1.6px), radial-gradient(rgba(120,75,30,.25) 2px, transparent 2.6px);
+  background-size: 7px 7px, 11px 11px, 23px 23px; background-position: 0 0, 3px 5px, 9px 2px; }
+.note { position: relative; transform: rotate(var(--tilt)); background: #fffdf2; color: #2b2a26; padding: 18px 16px 12px;
+  font-family: "Courier New", Courier, monospace; font-size: 13px; line-height: 1.35;
+  box-shadow: 0 1px 1px rgba(0,0,0,.15), 0 6px 14px rgba(40,25,5,.35);
+  background-image: repeating-linear-gradient(transparent 0 21px, rgba(70,110,170,.12) 21px 22px); }
+.note::before { content: ""; position: absolute; top: -7px; left: 50%; width: 16px; height: 16px; margin-left: -8px; border-radius: 50%;
+  background: radial-gradient(circle at 35% 30%, #ff8a80, #c62828 60%, #7f1515); box-shadow: 0 3px 4px rgba(0,0,0,.4); }
+.note.held::before { background: radial-gradient(circle at 35% 30%, #9fd3ff, #1e6fc4 60%, #0d3d75); }
+.note:hover { z-index: 2; transform: rotate(0deg) scale(1.02); transition: transform .15s; }
+.note header { display: grid; border-bottom: 2px solid #2b2a26; padding-bottom: 4px; margin-bottom: 6px; }
+.note header small { font-size: 10.5px; text-transform: uppercase; letter-spacing: .08em; color: #6b665a; }
+.note header b { font-size: 11.5px; letter-spacing: .06em; }
+.note h3 { margin: 4px 0 6px; font-size: 16px; font-family: Georgia, "Times New Roman", serif; }
+.note .nlist { list-style: none; margin: 0 0 8px; padding: 0; }
+.note .nlist li { display: flex; justify-content: space-between; border-bottom: 1px dotted #b9b2a0; padding: 1px 0; }
+.note .nlist li.ok { color: #2e7d32; }
+.note .nlist .glink { font-family: inherit; font-size: inherit; color: inherit; padding: 0; }
+.note dl { margin: 0 0 8px; display: grid; gap: 1px; }
+.note dl div { display: flex; justify-content: space-between; gap: 8px; }
+.note dt { color: #6b665a; } .note dd { margin: 0; font-weight: 700; text-align: right; }
+.note dd.bad { color: #b8323a; }
+.note footer { display: grid; gap: 4px; margin-top: 6px; }
+.note .sig { font-family: "Brush Script MT", "Segoe Script", "Lucida Handwriting", cursive; font-size: 22px; color: #1f3f7a; line-height: 1; transform: rotate(-3deg); width: max-content; border-bottom: 1px solid #2b2a26; padding: 0 18px 2px 2px; }
+.note footer small { color: #6b665a; font-size: 10.5px; }
+.note .nbid { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; margin-top: 4px; }
+.note .nbid span { flex-basis: 100%; }
+.note .nbid input { width: 100px; font-family: inherit; font-size: 13px; padding: 4px 6px; border: none; border-bottom: 2px solid #2b2a26; background: transparent; color: #1f3f7a; }
+.note .gbtn { padding: 5px 12px; font-family: inherit; font-size: 12.5px; }
+.note .gbtn:disabled { opacity: .45; }
+.note .stamp { position: absolute; right: 12px; bottom: 44px; width: 78px; height: 78px; opacity: .55; mix-blend-mode: multiply; pointer-events: none; }
+.note .bigstamp { position: absolute; right: 12px; bottom: 58px; padding: 3px 8px; border: 3px double currentColor; border-radius: 4px; font: 800 14px/1.1 "Courier New", monospace;
+  text-transform: uppercase; letter-spacing: .08em; opacity: .7; mix-blend-mode: multiply; pointer-events: none; }
+.gtabs2 button small { font-size: 11px; background: var(--accent); color: #fff; border-radius: 999px; padding: 0 6px; margin-left: 3px; }
+.dcon { display: grid; grid-template-columns: 1fr auto auto; gap: 2px 8px; align-items: center; font-size: 13px; padding: 4px 0; border-bottom: 1px solid var(--line); }
+.dcon .kc-make { grid-column: 1 / -1; justify-self: end; }
+.dcon.ok span:first-child { color: var(--raw); font-weight: 700; }

@@ -70,7 +70,9 @@ for (let g = 0; g < games; g++) {
   const traded = {}, vol = {};
   st.history.forEach(h => Object.entries(h.trades).forEach(([id, t]) => { traded[id] = (traded[id] || 0) + 1; vol[id] = (vol[id] || 0) + t.qty; }));
   out.push({
-    points: st.players.map(p => p.points), delivered: st.players.map(p => p.delivered || 0),
+    delivered: st.players.map(p => p.delivered || 0), failed: st.players.map(p => p.failed || 0),
+    earned: st.players.map(p => p.earned || 0), fees: st.players.map(p => p.fees || 0),
+    boardMade: (st.nextContractId || 0), won: st.stats.won || 0, winning: st.stats.winning || [],
     cash: st.players.map(p => G.totalCash(st, p)),
     biz: st.players.map(p => G.myBusinesses(st, p.id).length),
     stats: st.stats, auctions: st.history.length, traded, vol, mon: st.mon,
@@ -82,7 +84,7 @@ for (let g = 0; g < games; g++) {
   });
 }
 
-const res = out;
+const res = out, GAME_START = E.S.startCash;
 const flat = k => res.flatMap(r => r[k]);
 const avg = a => a.length ? a.reduce((s, x) => s + x, 0) / a.length : 0;
 const q = (a, p) => { const s = [...a].sort((x, y) => x - y); return s.length ? s[Math.min(s.length - 1, Math.floor(p * s.length))] : 0; };
@@ -98,9 +100,14 @@ const liquid = Object.entries(goodsTraded).map(([id, x]) => [id, x / res.length]
 const mons = res.map(r => r.mon);
 const summary = {
   settings: overrides, games, players,
-  "points per player (median / 10th / 90th pct)": `${q(flat("points"), .5)} / ${q(flat("points"), .1)} / ${q(flat("points"), .9)}`,
-  "winner's points (median)": q(res.map(r => Math.max(...r.points)), .5),
-  "contracts delivered per player (median / max)": `${q(flat("delivered"), .5)} / ${Math.max(...flat("delivered"))}`,
+  ["money at end (10th / median / 90th pct; start " + GAME_START + ")"]: `${f(q(flat("cash"), .1))} / ${f(q(flat("cash"), .5))} / ${f(q(flat("cash"), .9))}`,
+  "winner's money (median)": f(q(res.map(r => Math.max(...r.cash)), .5)),
+  "contracts that got a winner (share of all put on the board)": f(100 * res.reduce((s, r) => s + r.won, 0) / Math.max(1, res.reduce((s, r) => s + r.boardMade, 0))) + "%",
+  "bids per contract won (median)": q(res.flatMap(r => r.winning.map(w => w.bids)), .5),
+  "winning bid ÷ cap (10th / median / 90th pct)": (a => `${f(q(a, .1), 2)} / ${f(q(a, .5), 2)} / ${f(q(a, .9), 2)}`)(res.flatMap(r => r.winning.map(w => w.price / w.cap))),
+  "winning bid by goods asked for (median)": [1, 2, 3, 4].map(n => `${n}: ${f(q(res.flatMap(r => r.winning.filter(w => Object.keys(w.goods).length === n).map(w => w.price)), .5))}`).join(" · "),
+  "contracts delivered / failed per player (median)": `${q(flat("delivered"), .5)} / ${q(flat("failed"), .5)} (max delivered ${Math.max(...flat("delivered"))})`,
+  "earned from contracts / paid in legal fees per player (median)": `${f(q(flat("earned"), .5))} / ${f(q(flat("fees"), .5))}`,
   "players who never delivered": f(100 * flat("delivered").filter(x => !x).length / flat("delivered").length) + "%",
   "round of the first delivery (median; – = none)": (() => { const a = mons.map(m => m.firstDelivery ?? Infinity); const x = q(a, .5); return x === Infinity ? "–" : x; })(),
   "has a possible buyer: mines etc. (not water) / all": `${f(100 * mons.reduce((s, m) => s + m.outRaw, 0) / mons.reduce((s, m) => s + m.nRaw, 0))}% / ${f(100 * mons.reduce((s, m) => s + m.outAll, 0) / mons.reduce((s, m) => s + m.nAll, 0))}%`,
@@ -112,7 +119,6 @@ const summary = {
   "most often cornered": Object.entries(corneredGoods).sort((a, b) => b[1] - a[1]).slice(0, 6).map(([id, n]) => `${id} ${n}`).join(", ") || "–",
   "short supply (share of goods someone else wants)": f(100 * mons.reduce((s, m) => s + m.short, 0) / Math.max(1, mons.reduce((s, m) => s + m.contested, 0))) + "%",
   "most often short": Object.entries(shortGoods).sort((a, b) => b[1] - a[1]).slice(0, 6).map(([id, n]) => `${id} ${n}`).join(", ") || "–",
-  "cash at end (10th / median / 90th pct)": `${f(q(flat("cash"), .1))} / ${f(q(flat("cash"), .5))} / ${f(q(flat("cash"), .9))}`,
   "businesses per player (median / max)": `${q(flat("biz"), .5)} / ${Math.max(...flat("biz"))}`,
   "businesses idle (share of runs)": f(100 * avg(res.map(r => r.stats.idle / Math.max(1, r.stats.runs)))) + "%",
   "goods thrown away (overflow) per game": f(avg(res.map(r => r.stats.overflow))),

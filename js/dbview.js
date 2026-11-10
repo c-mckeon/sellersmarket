@@ -21,15 +21,17 @@ function buildDbRows() {
   const seed = 11, names = ["Ana", "Ben", "Cleo", "Dev"], colours = ["#2f6db5", "#8a4fc0", "#2e8b57", "#d4682a"];
   const st = G.newGame({ seed, rounds: 8, players: G.spreadStarts(4, { seed }).map((x, i) => ({ name: names[i], colour: colours[i], bot: true, ...x })) });
   R.games = [[1, st.round, st.rounds, st.phase]];
-  R.players = st.players.map(p => [p.id, 1, p.name, p.colour, Math.round(p.cash), p.points, p.pos]);
+  R.players = st.players.map(p => [p.id, 1, p.name, p.colour, Math.round(p.cash), p.pos]);
   R.stockpile = [];
   st.players.forEach(p => {
     const units = Object.entries(p.lots || {}).flatMap(([c, L]) => L.flatMap(([q, made]) => Array(q).fill([c, made]))).sort((a, b) => a[1] - b[1]);
     units.forEach(([c, made], i) => R.stockpile.push([p.id, i + 1, c, made]));
   });
   R.businesses = st.businesses.map(b => [b.id, 1, b.owner, b.type, b.territory, b.built]);
-  R.contracts = st.contracts.map(k => [k.id, 1, k.points, k.drawn]);
-  R.contract_goods = st.contracts.flatMap(k => Object.entries(k.goods).map(([c, q]) => [k.id, c, q]));
+  const held = st.players.flatMap(p => (p.contracts || []).map(k => ({ ...k, owner: p.id })));
+  R.contracts = [...st.contracts.map(k => [k.id, 1, k.cap, k.drawn, null, null, null]), ...held.map(k => [k.id, 1, k.cap, k.won, k.owner, k.price, k.due])];
+  R.contract_goods = [...st.contracts, ...held].flatMap(k => Object.entries(k.goods).map(([c, q]) => [k.id, c, q]));
+  R.bids = st.contracts.flatMap(k => k.bids.map(b => [k.id, b.pid, b.amount, b.round]));
   R.orders = st.book.map(o => [o.id, o.pid, o.good, o.side, o.price, o.qty]);
   R.trades = st.history.flatMap(h => Object.entries(h.trades).map(([c, t]) => [h.round, c, t.price, t.qty]));
   return R;

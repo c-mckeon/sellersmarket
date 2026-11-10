@@ -2,17 +2,19 @@
 // Deliberately simple: enough to play against and to run simulations (tools/sim.js).
 //
 // Every round a bot:
-//   1. cancels its old orders and delivers a contract if it can (the contracts are shared: first come, first paid)
-//   2. works out what it wants (goods for the two contracts it's closest to and its factories' inputs)
-//      and what it can spare (everything else)
+//   1. cancels its old orders, delivers any contract it holds and can, and bids for contracts on the
+//      board: what it reckons the goods would cost it, plus a margin, undercutting the lowest bid while
+//      that still pays
+//   2. works out what it wants (goods for the contracts it holds and its factories' inputs) and what it
+//      can spare (everything else)
 //   3. sells spares: from its guess of the price, falling the longer they go unsold; if a buyer is already
 //      bidding near that, at their bid; goods going off tonight or piling up go at the best bid there is
-//   4. buys wants, up to what each is worth to it: a contract good is worth its share of the contract's
-//      points at the bot's cash value of a point (its cash over the rounds left, so it spends more
-//      freely near the end); if someone asks no more than that it pays their ask, otherwise it creeps up
+//   4. buys wants, up to what each is worth to it: a contract good is worth its share of what the contract
+//      pays plus the legal fees it would save; if someone asks no more than that it pays their ask,
+//      otherwise it creeps up
 //        guess = last traded price, else the cost basis, else its own rough estimate (never shown)
 // It also builds (or heads somewhere it can build) something that feeds its contracts, that others are
-// bidding for, or that the open contracts ask for.
+// bidding for, or that the contracts ask for.
 
 (() => {
   const G = SMG, S = GAME_SETTINGS;
@@ -26,15 +28,16 @@
     askStep: 0.1,          // …−10% for every round it goes unsold…
     askMin: 0.4,           // …down to 40%
     cashPerPhase: 0.6,     // spend at most this share of cash in one auction
-    pointsPerRound: 0.7,   // how many points a bot expects to score a round: sets what a point is worth in cash
+    bidMargin: 0.4,        // a bot's first bid for a contract: what it reckons the goods cost it, +40%…
+    bidFloor: 0.1,         // …and it undercuts the lowest bid down to cost +10%
     inputPremium: 1.5,     // what a factory input is worth: × its going price
     reach: 4,              // how many moves away a bot will travel to build
-    outputShare: 0.5,
-    buildReserve: 250,
+    outputShare: 0.5,      // stop building once its businesses make this share of its stockpile each round
+    buildReserve: 250,     // cash a bot keeps for trading: it only builds if this much is left afterwards
     wasteRoom: 4,          // a bot pays to get rid of waste when it has fewer free rows than this (and takes it with twice as many)
     wasteFeeMax: 6,        // the most a bot pays a unit to get rid of waste (and the first fee it asks to take some)
-    sellIdle: 4,
-    feedFactories: true,   // a bot puts its factories' inputs first, and builds what they're missing           // short of cash, a bot sells a factory that has stood idle this many rounds     // cash a bot keeps for trading: it only builds if this much is left afterwards      // stop building once its businesses make this share of its stockpile each round
+    sellIdle: 4,           // short of cash, a bot sells a factory that has stood idle this many rounds
+    feedFactories: true,   // a bot puts its factories' inputs first, and builds what they're missing
     demandWeight: 1,       // how much a bot favours building what the open contracts ask for
   }, S.bots || {});
 
@@ -53,19 +56,48 @@
 
   const addTo = (m, c, q) => { if (q > 0) m[c] = (m[c] || 0) + q; };
 
-  // The open contracts (not yet delivered by anyone)
-  const open = st => (st.contracts || []).filter(k => !k.takers.length);
-  // The two contracts this bot is going for: the ones it's closest to finishing (by raw content), then the best paid
-  G.targets = (st, p) => {
-    const progress = k => Object.entries(k.goods).reduce((s, [c, q]) => s + Math.min(q, p.stock[c] || 0) * G.rawUnits(c), 0)
-      / Object.entries(k.goods).reduce((s, [c, q]) => s + q * G.rawUnits(c), 0);
-    return open(st).sort((a, b) => progress(b) + b.points / 50 - progress(a) - a.points / 50).slice(0, 2);
+  // The contracts this bot is working on: the ones it holds, soonest due first
+  G.targets = (st, p) => [...(p.contracts || [])].sort((a, b) => a.due - b.due);
+  // …and for deciding what to build, also the board contracts it's bidding for
+  const aims = (st, p) => [...G.targets(st, p), ...(st.contracts || []).filter(k => k.bids.some(b => b.pid === p.id))];
+
+  // What it reckons a contract's goods would cost it: what it already has costs nothing more, goods its own
+  // businesses make at their cost basis (or a bit under the going price), the rest at the going price.
+  // Infinity if it neither makes some good nor can see it on sale.
+  const costToMake = (st, p, k) => Object.entries(k.goods).reduce((sum, [c, q]) => {
+    const need = Math.max(0, q - (p.stock[c] || 0));
+    if (!need) return sum;
+    const own = G.myBusinesses(st, p.id).some(b => G.BIZ_BY[b.type].outputs[c]);
+    // Only goods it makes itself or can see on sale: a contract it can't get the goods for costs legal fees
+    if (!own && !G.bestAsk(st, c)) return Infinity;
+    const cb = G.costBasis(st, c), each = own ? (cb && !cb.missing.length && cb.value ? cb.value : G.guess(st, c) * 0.7) : G.guess(st, c);
+    return sum + need * Math.max(1, each);
+  }, 0);
+  // Bid for contracts on the board, as many as it has room for
+  const bidContracts = (st, p) => {
+    const C = S.contracts;
+    let room = C.maxHeld - (p.contracts || []).length;
+    if (room <= 0) return;
+    const options = (st.contracts || [])
+      .filter(k => st.round + G.bidRoundsLeft(st, k) + 2 <= st.rounds) // time to deliver before the game ends
+      .map(k => ({ k, cost: costToMake(st, p, k) })).filter(o => isFinite(o.cost) && o.cost < o.k.cap)
+      .sort((a, b) => (b.k.cap - b.cost) / Math.max(1, b.cost) - (a.k.cap - a.cost) / Math.max(1, a.cost));
+    for (const { k, cost } of options) {
+      if (room <= 0) break;
+      const low = G.lowestBid(k), mine = k.bids.find(b => b.pid === p.id), floor = Math.ceil(cost * (1 + B.bidFloor));
+      if (low && low.pid === p.id) { room--; continue; } // already the lowest
+      let amount = Math.min(k.cap, Math.round(cost * (1 + B.bidMargin)));
+      if (low) amount = Math.min(amount, low.amount - 1);
+      if (amount < floor) continue;                      // undercutting wouldn't pay
+      if (mine && amount >= mine.amount) { room--; continue; }
+      if (G.act(st, p.id, "bid", { contract: k.id, amount }).ok) room--;
+    }
   };
 
   // What a bot wants to have in its stockpile right now
   const wantsOf = (st, p) => {
     const want = {};
-    // The two contracts it's closest to finishing
+    // The contracts it holds
     G.targets(st, p)
       .forEach(k => Object.entries(k.goods).forEach(([c, q]) => addTo(want, c, q)));
     // Enough for every factory to run as many times as it can in a round
@@ -77,12 +109,10 @@
     return want;
   };
 
-  // What a good is worth to this bot, per unit. A contract good is worth its share of the contract's points
-  // (by raw-material content) at the bot's value of a point: its cash spread over the rounds left, so it
-  // spends more freely as the game nears its end (cash left over only breaks ties). Anything else (factory
-  // inputs) is worth a bit more than its going price.
+  // What a good is worth to this bot, per unit. A good for a contract it holds is worth its share (by
+  // raw-material content) of what the contract pays plus the legal fees delivering saves. Anything else
+  // (factory inputs) is worth a bit more than its going price.
   const worthOf = (st, p, c) => {
-    const vpp = Math.max(5, (p.cash + G.lockedCash(st, p)) / Math.max(4, (st.rounds - st.round + 1) * B.pointsPerRound));
     let w = G.guess(st, c) * B.inputPremium;
     // Inputs for its own factories come first: worth what the factory's output is worth
     if (B.feedFactories && G.myBusinesses(st, p.id).some(x => G.BIZ_BY[x.type].inputs[c]))
@@ -90,15 +120,16 @@
     G.targets(st, p).forEach(k => {
       if (!k.goods[c]) return;
       const raw = Object.entries(k.goods).reduce((s, [g, q]) => s + q * Math.max(0.2, G.rawUnits(g)), 0);
-      w = Math.max(w, k.points * vpp * Math.max(0.2, G.rawUnits(c)) / raw);
+      w = Math.max(w, (k.price + G.failFee(k.price)) * Math.max(0.2, G.rawUnits(c)) / raw);
     });
     return w;
   };
   const trade = (st, p) => {
     p.mem ||= { bid: {}, ask: {} };
     G.act(st, p.id, "cancelAll", {});
-    // Deliver whatever we can, best first
-    open(st).sort((a, b) => b.points - a.points).forEach(k => { if (G.canDeliver(st, p, k)) G.act(st, p.id, "deliver", { contract: k.id }); });
+    // Deliver whatever it can, best paid first; then bid for more
+    [...(p.contracts || [])].sort((a, b) => b.price - a.price).forEach(k => { if (G.canDeliver(st, p, k)) G.act(st, p.id, "deliver", { contract: k.id }); });
+    bidContracts(st, p);
 
     const want = wantsOf(st, p);
     const end = st.round >= st.rounds - 2;
@@ -160,7 +191,7 @@
       const r = RECIPES.find(x => Object.keys(x.out)[0] === c);
       if (r) Object.keys(r.in).forEach(i => walk(i, depth + 1));
     };
-    G.targets(st, p).forEach(k => Object.keys(k.goods).forEach(c => walk(c, 0)));
+    aims(st, p).forEach(k => Object.keys(k.goods).forEach(c => walk(c, 0)));
     // Inputs its own factories are missing are links too (an idle factory makes nothing for anyone)
     if (B.feedFactories) G.myBusinesses(st, p.id).forEach(x => { const b = G.BIZ_BY[x.type];
       if (b.kind === "factory") G.inputsFor(st, p, b).missing.forEach(([c]) => walk(c, 1)); });

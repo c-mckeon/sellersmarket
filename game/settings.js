@@ -2,7 +2,7 @@
 // Change these freely, then check them with tools/sim.js.
 
 const GAME_SETTINGS = {
-  rounds: 30,              // the game ends after this many rounds; most points wins, cash breaks ties
+  rounds: 30,              // the game ends after this many rounds; most money wins
   startCash: 1000,         // the only money there will ever be: for trading and building businesses
   startBusinesses: 2,      // the business you pick, plus the one that goes with it (a farm and a flour mill…)
   startSpace: 20,          // your stockpile: 20 rows, one unit of anything in each
@@ -29,18 +29,20 @@ const GAME_SETTINGS = {
 
   // ---------- Contracts (game/contracts.js) ----------
   contracts: {
-    open: 5,               // shared contracts on the board at all times, open to everyone
-    goodsPerContract: [3, 4], // fewest and most different goods a contract asks for…
-    units: 10,             // …about this many units in all, a few of each
-    life: 8,               // a contract nobody fills in this many rounds is replaced
-    pointsPerUnit: 0.5,    // points per raw-material unit in it (see G.rawUnits)
+    open: 6,               // contracts on the board at all times, open for bids
+    bidRounds: 3,          // bidding stays open this many rounds; then the lowest bid wins
+    deliverRounds: 5,      // the winner has this many rounds to deliver
+    maxHeld: 3,            // contracts a player can hold at once
+    failFee: { base: 50, share: 0.5 }, // not delivered in time: legal fees of base + share × the winning bid
+    goodsPerContract: [1, 4], // fewest and most different goods a contract asks for…
+    unitsPerGood: [2, 4],  // …and how many of each
+    capPerRawUnit: 40,     // the most the client pays: this much per raw-material unit in it (see G.rawUnits)…
+    tierBonus: 0.25,       // …+ this share for each processing step (raw 0, lumber 1, steel 2…)
     // The goods that contracts ask for: 9 made goods from 6 regional raw materials, plus wheat and water
     // from anywhere. (Concrete is left out: it's a building material.) Waste and raw goods never go in
     // this list (rawShare and raws below cover raw ones).
-    // Simulations: 13 made + 8 raw → 9 + 6 took players who never deliver from 75% to 42%.
     rawShare: 0.5,         // chance that each good on a contract is a raw one (wood, clay, coal…) instead: raw goods come
                            // from one faraway region, so these usually have to be bought from whoever mines them
-    tierBonus: 0.25,        // +this share of points per processing step (raw 0, lumber 1, steel 2…)
     goods: ["flour", "lumber", "glass", "ceramic", "iron",   // level 1
             "bread", "paper", "cement", "steel"],          // level 2
     // The raw materials contracts can ask for (and that spread-out starts hand out: G.spreadStarts)
