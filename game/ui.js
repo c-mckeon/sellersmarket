@@ -110,8 +110,7 @@
     const a = o.args || {};
     if (o.name === "placeOrder") return `${a.side === "buy" ? "Bid for" : "Offer"} ${a.qty} ${G.COM[a.id].name} at ${m(+a.price)} <em>${m(a.qty * a.price)}</em>`;
     if (o.name === "cancelOrder") { const x = st.book.find(y => y.id === a.order); return x ? `Cancel ${x.side === "buy" ? "bid for" : "offer of"} ${x.qty} ${G.COM[x.good].name} at ${m(x.price)}` : "Cancel an order"; }
-    if (o.name === "deliver") { const k = G.player(st, ui.seat).contracts.find(x => x.id === a.contract); if (!k) return "Produce a contract"; const it = G.contractItem(k); return `Produce ${it.icon} ${esc(it.name.toLowerCase())}`; }
-    if (o.name === "discardContract") return `Throw away a contract`;
+    if (o.name === "deliver") { const k = (st.contracts || []).find(x => x.id === a.contract); if (!k) return "Deliver a contract"; const it = G.contractItem(k); return `Deliver ${it.icon} ${esc(it.name.toLowerCase())}`; }
     if (o.name === "dump") return `Throw away ${a.qty} ${G.COM[a.id].name}`;
     if (o.name === "move") return `Move to ${G.TERR[a.to].name}`;
     if (o.name === "build") return `Build a ${G.BIZ_BY[a.type].name.toLowerCase()}`;
@@ -227,10 +226,10 @@
   // Depreciation: how many of a good this player loses tonight, and a small ⌛ badge for it
   const spoils = (p, id) => G.goingOff ? G.goingOff(vw, p, id) : 0;
   const offBadge = (p, id) => { const n = spoils(p, id); return n ? ` <span class="offb" title="${n} go off tonight">⌛${n}</span>` : ""; };
-  // Goods this player is after: their contracts and one run of each factory
+  // Goods this player could be after: the open contracts and one run of each factory
   const wantsOf = p => {
     const w = {};
-    p.contracts.forEach(k => Object.entries(k.goods).forEach(([c, q]) => w[c] = Math.max(w[c] || 0, q)));
+    (vw.contracts || []).filter(k => !k.takers.length).forEach(k => Object.entries(k.goods).forEach(([c, q]) => w[c] = Math.max(w[c] || 0, q)));
     Object.entries(needsOf(p)).forEach(([c, q]) => w[c] = (w[c] || 0) + q);
     return w;
   };
@@ -245,9 +244,9 @@
   const usesGood = (b, id) => b.inputs[id] || Object.keys(b.inputs).some(c => G.substitutesFor(b, c).some(([x]) => x === id));
   const makersOf = (p, id) => others(p).filter(x => vw.businesses.some(b => b.owner === x.id && G.BIZ_BY[b.type].outputs[id]));
   const usersOf = (p, id) => others(p).filter(x => vw.businesses.some(b => b.owner === x.id && usesGood(G.BIZ_BY[b.type], id)));
-  // Public demand: how many other players' contracts want a good (never who, how many or for what)
-  const wanted = (p, id) => G.demand(vw, id, p.id);
-  const wantedTag = (p, id) => { const n = wanted(p, id); return n ? `<span class="mtag want" title="Other players holding a contract that asks for it. Contracts stay secret: this is only a count.">wanted by ${n} player${n === 1 ? "'s" : "s'"} contracts</span>` : ""; };
+  // Demand: how many open contracts ask for a good
+  const wanted = (p, id) => G.demand(vw, id);
+  const wantedTag = (p, id) => { const n = wanted(p, id); return n ? `<span class="mtag want" title="Open contracts on the board that ask for it">in ${n} contract${n === 1 ? "" : "s"}</span>` : ""; };
   const contractGood = id => S.contracts.goods.includes(id) || (S.contracts.rawShare > 0 && G.contractRaws().includes(id));
   const names = list => list.map(x => esc(x.name)).join(", ");
 
@@ -327,7 +326,7 @@
       xb: q[0] != null ? X(q[0]) : null, xa: q[1] != null ? X(q[1]) : null, xl: last != null ? X(last) : null };
   };
   const cardHTML = (id, c, flash) => `<button class="qcard${flash ? " flash" : ""}" data-good="${id}">
-      <span class="qc-h"><b>${G.COM[id].name}${(n => n ? ` <small class="qc-want" title="Wanted by ${n} other player${n === 1 ? "'s" : "s'"} contracts">wanted ×${n}</small>` : "")(G.demand(vw, id, ui.seat))}</b><span class="qc-last">${c.tr ? `traded ${c.tr[1]} at ${m(c.tr[0])}` : c.last != null ? `last ${m(c.last)}` : "no trades"}</span></span>
+      <span class="qc-h"><b>${G.COM[id].name}${(n => n ? ` <small class="qc-want" title="In ${n} open contract${n === 1 ? "" : "s"}">in ${n} contract${n === 1 ? "" : "s"}</small>` : "")(G.demand(vw, id, ui.seat))}</b><span class="qc-last">${c.tr ? `traded ${c.tr[1]} at ${m(c.tr[0])}` : c.last != null ? `last ${m(c.last)}` : "no trades"}</span></span>
       <span class="qc-bar"><span class="qc-band${c.crossed ? " cross" : ""}" style="${c.xb != null && c.xa != null ? `left:${Math.min(c.xb, c.xa)}%;width:${Math.abs(c.xa - c.xb).toFixed(1)}%` : "display:none"}"></span>
         <i class="qc-bid" style="${c.xb != null ? `left:${c.xb}%` : "display:none"}"></i><i class="qc-ask" style="${c.xa != null ? `left:${c.xa}%` : "display:none"}"></i>
         <i class="qc-tr" style="${c.xl != null ? `left:${c.xl}%` : "display:none"}"></i></span>
@@ -412,31 +411,27 @@
     const biz = G.myBusinesses(vw, p.id);
     const mine = Object.entries(p.stock).sort((a, b) => b[1] - a[1]);
     const pv = middayPreview(p);
-    const canDiscard = p.discardRound !== st.round;
     return `
       <div class="dtop">
         <div><span>Points</span><b>${p.points}</b></div>
         <div><span>Cash</span><b>${m(p.cash)}</b>${locked ? `<small class="muted">+${m(locked)} in buy orders</small>` : ""}</div>
       </div>
       <div class="dsec">
-        <h4>Contracts <em>${p.delivered || 0} made</em></h4>
-        ${(() => { const all = p.made || [], done = (G.player(st, p.id).made || []).length; // made this turn: shown as cards until you submit
-          return all.slice(done).map(x => `<div class="kc made">
-            <div class="kc-top"><span class="kc-icon">${x.icon}</span><div class="kc-title"><b>${esc(x.name)}</b><small>Made when you submit · undo it in your orders</small></div><span class="kc-pts">+${x.points}<small>pts</small></span></div>
-            <div class="kc-bar"><i style="width:100%"></i></div></div>`).join(""); })()}
-        ${p.contracts.map(k => {
-          const ok = G.canDeliver(vw, p, k), it = G.contractItem(k), goods = Object.entries(k.goods);
-          const need = goods.reduce((s, [, q]) => s + q, 0), got = goods.reduce((s, [c, q]) => s + Math.min(have(p, c), q), 0);
-          return `<div class="kc${ok ? " ready" : ""}">
+        <h4>Contracts <em>shared · first to deliver wins · ${p.delivered || 0} made</em></h4>
+        ${(vw.contracts || []).map(k => {
+          const mineNow = k.takers.includes(p.id);
+          const ok = !mineNow && G.canDeliver(vw, p, k), it = G.contractItem(k), goods = Object.entries(k.goods);
+          const need = goods.reduce((s, [, q]) => s + q, 0), got = mineNow ? need : goods.reduce((s, [c, q]) => s + Math.min(have(p, c), q), 0);
+          const left = S.contracts.life - (vw.round - k.drawn);
+          return `<div class="kc${ok || mineNow ? " ready" : ""}">
             <div class="kc-top"><span class="kc-icon">${it.icon}</span>
-              <div class="kc-title"><b>${esc(it.name)}</b><small>${ok ? "Ready to produce" : `${got} of ${need} goods in hand`}</small></div>
-              <span class="kc-pts">${k.points}<small>pts</small></span>
-              <button class="kc-x" data-discard="${k.id}" ${canDiscard ? "" : "disabled"} title="${canDiscard ? "Throw it away; a new one comes overnight (one a round)" : "You've already thrown one away this round"}">✕</button></div>
+              <div class="kc-title"><b>${esc(it.name)}</b><small>${mineNow ? "Delivered when you submit · paid tonight, unless someone else delivers it too (then you share)" : ok ? "Ready to deliver" : `${got} of ${need} goods in hand · ${left <= 1 ? "leaves the board tonight" : `${left} rounds left`}`}</small></div>
+              <span class="kc-pts">${k.points}<small>pts</small></span></div>
             <div class="kc-bar"><i style="width:${Math.round(got / need * 100)}%"></i></div>
-            <div class="kc-foot"><div class="kc-goods">${goods.map(([c, q]) => { const h = Math.min(have(p, c), q); return `<button class="kc-good${h >= q ? " ok" : ""}" data-good="${c}" title="Open ${G.COM[c].name} in the market">${G.COM[c].name}<b>${h}/${q}</b></button>`; }).join("")}</div>
-              <button class="kc-make" data-deliver="${k.id}" ${ok ? "" : "disabled"} title="${ok ? "Use these goods to make it, for the points" : "You don't have all of it yet (goods on offer don't count)"}">Produce</button></div>
+            <div class="kc-foot"><div class="kc-goods">${goods.map(([c, q]) => { const h = mineNow ? q : Math.min(have(p, c), q); return `<button class="kc-good${h >= q ? " ok" : ""}" data-good="${c}" title="Open ${G.COM[c].name} in the market">${G.COM[c].name}<b>${h}/${q}</b></button>`; }).join("")}</div>
+              ${mineNow ? "" : `<button class="kc-make" data-deliver="${k.id}" ${ok ? "" : "disabled"} title="${ok ? "Deliver it: the first to deliver gets the points" : "You don't have all of it yet (goods on offer don't count)"}">Deliver</button>`}</div>
           </div>`;
-        }).join("") || `<p class="dnone">None. New ones come overnight.</p>`}
+        }).join("") || `<p class="dnone">None right now.</p>`}
         ${(() => { const all = p.made || [], done = (G.player(st, p.id).made || []).length; // the shelf of things made in earlier turns
           return (done ? `<div class="dmade" title="What you've made">${all.slice(0, done).map(x => `<span class="dthing" title="${esc(x.name)}: ${x.points} points, round ${x.round}">${x.icon}</span>`).join("")}</div>` : ""); })()}
       </div>
@@ -533,10 +528,10 @@
     const buyCard = id => {
       const ask = G.bestAsk(vw, id), { s, last, chg } = lastBits(id), makers = makersOf(p, id);
       const need = Math.max(0, (want[id] || 0) - (hold[id] || 0)), bidding = myOrders.filter(o => o.side === "buy" && o.good === id).reduce((x, o) => x + o.qty, 0);
-      const why = [p.contracts.some(k => k.goods[id]) ? "contract" : "", needsOf(p)[id] ? "factory input" : ""].filter(Boolean).join(" + ");
+      const why = [(vw.contracts || []).some(k => !k.takers.length && k.goods[id]) ? "contract" : "", needsOf(p)[id] ? "factory input" : ""].filter(Boolean).join(" + ");
       const supply = (ask ? `<span class="mtag good">Ask ${m(ask.price)} ×${ask.qty}</span>`
         : makers.length ? `<span class="mtag">Nobody selling · ${names(makers)} make${makers.length === 1 ? "s" : ""} it</span>`
-        : `<span class="mtag warn">⚠ Nobody makes it yet</span>`) + (wanted(p, id) ? `<span class="mtag">${wanted(p, id)} other player${wanted(p, id) === 1 ? " wants" : "s want"} it too</span>` : "");
+        : `<span class="mtag warn">⚠ Nobody makes it yet</span>`) + (wanted(p, id) ? `<span class="mtag">in ${wanted(p, id)} open contract${wanted(p, id) === 1 ? "" : "s"}</span>` : "");
       return `<button class="mcard${id === sel ? " sel" : ""}${fresh.has(id) ? " flash" : ""}" data-good="${id}">
         <span class="mc-top"><b>${G.COM[id].name}</b><span class="mc-qty">${need ? `need ${need}` : "✓"}${bidding ? ` <small>bidding ${bidding}</small>` : ""}</span></span>
         <span class="mc-where">${why || "you're bidding"}${hold[id] ? ` · have ${hold[id]}` : ""}</span>
@@ -1025,7 +1020,6 @@
     }));
     // Contracts
     root.querySelectorAll("[data-deliver]").forEach(b => b.addEventListener("click", () => doAct("deliver", { contract: +b.dataset.deliver })));
-    root.querySelectorAll("[data-discard]").forEach(b => b.addEventListener("click", () => { if (confirm("Throw this contract away? A new one comes overnight.")) doAct("discardContract", { contract: +b.dataset.discard }); }));
     // Afternoon
     root.querySelectorAll("[data-move]").forEach(b => b.addEventListener("click", () => { ui.terr = null; doAct("move", { to: b.dataset.move }); }));
     root.querySelector("#gTerrClose")?.addEventListener("click", () => { ui.terr = null; render(); });

@@ -1,5 +1,5 @@
 // Sellers Market: fills the numbers on the Gameplay and Market pages from the game's own settings,
-// so the rules pages always match the game. <span data-s="contracts.hand"></span> shows a setting;
+// so the rules pages always match the game. <span data-s="contracts.open"></span> shows a setting;
 // data-f="pct" shows it as a percentage. A few names are worked out here (lists of goods, regions…).
 
 (() => {

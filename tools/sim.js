@@ -30,7 +30,7 @@ const watch = st => {
   st.businesses.forEach(biz => {
     const g = G.BIZ_BY[biz.type].makes, raw = G.BIZ_BY[biz.type].kind === "extract";
     const ok = st.businesses.some(x => x.owner !== biz.owner && usesOf(G.BIZ_BY[x.type]).has(g))
-      || st.players.some(p => p.id !== biz.owner && p.contracts.some(k => k.goods[g]));
+      || G.demand(st, g) > 0;
     m.nAll++; m.outAll += ok; if (raw && g !== "water") { m.nRaw++; m.outRaw += ok; }
   });
   const traded = st.history.slice(-1).some(h => Object.keys(h.trades).length);

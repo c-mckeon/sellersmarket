@@ -31,7 +31,7 @@
   <section id="view-gameplay" class="view">
     <div class="intro">
       <h1>Gameplay</h1>
-      <p>Sellers Market is a trading game over <b><span data-s="rounds"></span> rounds</b>. You score points by delivering secret <b>contracts</b>; most points wins, and cash only breaks ties. Nothing has a set price: every price comes from what players bid and ask. Raw materials are each found in one region of the map, so to make what your contracts ask for you have to trade with players far away.</p>
+      <p>Sellers Market is a trading game over <b><span data-s="rounds"></span> rounds</b>. You score points by being first to deliver shared <b>contracts</b>; most points wins, and cash only breaks ties. Nothing has a set price: every price comes from what players bid and ask. Raw materials are each found in one region of the map, so to make what your contracts ask for you have to trade with players far away.</p>
     </div>
 
     <div class="cyclegrid one">
@@ -61,7 +61,7 @@
 
       <div class="cg cg-morning">
         <h3>Day <span>players order</span></h3>
-        <p>Everyone enters their orders in secret: buy and sell orders, contracts to deliver, one contract to throw away if you want, and <b>one</b> of these: move your pawn to a neighbouring territory, or build a business where you are. Then they all go through at once. If two players move into the same territory, neither gets in.</p>
+        <p>Everyone enters their orders in secret: buy and sell orders, contracts to deliver, and <b>one</b> of these: move your pawn to a neighbouring territory, or build a business where you are. Then they all go through at once. If two players move into the same territory, neither gets in.</p>
       </div>
 
       <div class="cg cg-night">
@@ -70,7 +70,7 @@
           <li>The sealed auction: each good trades at one price (see <a href="#/mechanics/market">Market dynamics</a>)</li>
           <li>Every business produces 2 of its product: mines dig, factories turn inputs into products</li>
           <li>Goods at the end of their life go off</li>
-          <li>Delivered and thrown-away contracts are replaced</li>
+          <li>Delivered contracts pay out and are replaced, and so are stale ones</li>
         </ol>
       </div>
     </div>
@@ -81,20 +81,18 @@
         <ul>
           <li><b><span data-s="startCash"></span> cash</b>. It's the only money there will ever be: it's used for trading and nothing else.</li>
           <li><b>Two free businesses</b> where you start: a mine (or farm, or well) and the factory that uses its output, e.g. an iron mine and a blast furnace.</li>
-          <li><b><span data-s="contracts.hand"></span> secret contracts</b>.</li>
-          <li>A stockpile of <b><span data-s="startSpace"></span> rows</b>, one unit in each. The setup screen spreads players out, each with a different region's mine.</li>
+                    <li>A stockpile of <b><span data-s="startSpace"></span> rows</b>, one unit in each. The setup screen spreads players out, each with a different region's mine.</li>
         </ul>
       </section>
 
       <section>
         <h2>Contracts and points</h2>
         <ul>
-          <li>A contract asks for 2 or 3 goods in set amounts, about <span data-s="contracts.size"></span> raw materials' worth in all, and never more than <span data-s="contracts.maxUnits"></span> units. Deliver it whole, any time you trade, from anything you own (your stockpile or your businesses' stock; goods in sell orders don't count).</li>
+          <li>There are always <b><span data-s="contracts.open"></span> contracts</b> on the board, the same for everyone. Each asks for 3 or 4 different goods, a few of each: about <span data-s="contracts.units"></span> units in all.</li>
+          <li>It's a <b>race</b>: the first to deliver a whole contract gets its points. Deliver it any time you order, from your stockpile (goods in sell orders don't count). If two players deliver the same one in the same round, they share the points.</li>
           <li>Contracts ask for these made goods: <span data-s="contractGoods"></span>. Each item has a <span data-s="contracts.rawShare" data-f="pct"></span> chance of being a raw material instead: <span data-s="contractRaws"></span>.</li>
-          <li>They lean towards goods made far from where you started, so you'll need other players.</li>
-          <li><b>Points</b> = raw materials in it × <span data-s="contracts.pointsPerUnit"></span> × (1 + <span data-s="contracts.distanceBonus" data-f="pct"></span> for each step its goods come from) × (1 + <span data-s="contracts.tierBonus" data-f="pct"></span> for each processing step). Made goods pay more than raw ones.</li>
-          <li>You can throw one contract away a round; new ones arrive overnight.</li>
-          <li>Each good shows how many other players' contracts want it: a count only, never who or how many.</li>
+          <li><b>Points</b> = raw materials in it × <span data-s="contracts.pointsPerUnit"></span> × (1 + <span data-s="contracts.tierBonus" data-f="pct"></span> for each processing step). Made goods pay more than raw ones.</li>
+          <li>Delivered contracts are replaced at night, and so is any nobody has delivered in <span data-s="contracts.life"></span> rounds.</li>
         </ul>
       </section>
 
@@ -211,8 +209,8 @@
           <li><b>The book</b>, anonymous: price levels and quantities, never who. Each good's page draws it as a depth chart, asks above and bids below, with the spread between them.</li>
           <li><b>Trades</b>: the last price and volume, a price history, and a <b>quote board</b> of every active good that flashes yellow when one trades. You can replay how the book moved over the last few rounds, auction by auction.</li>
           <li><b>Cost basis</b> of a made good: its raw materials at their last traded prices. Raw materials have no price until they first trade; the market has to find it.</li>
-          <li><b>Demand</b>: how many other players' contracts want each good (a count only), and <b>Opportunities</b>: goods others are bidding for that nobody sells, with the margin over cost basis.</li>
-          <li>Who owns which businesses, and so who makes and who could use each good. Contracts and stockpiles stay private.</li>
+          <li><b>Demand</b>: how many open contracts ask for each good, and <b>Opportunities</b>: goods others are bidding for that nobody sells, with the margin over cost basis.</li>
+          <li>Who owns which businesses, and so who makes and who could use each good. The contracts are public; stockpiles stay private.</li>
         </ul>
       </section>
 

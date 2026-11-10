@@ -174,7 +174,7 @@ const SMG = (() => {
     const st = {
       version: 7, seed: config.seed ?? Math.floor(Math.random() * 1e9),
       round: 1, rounds: config.rounds ?? S.rounds, phase: "day", over: false,
-      orders: {},
+      orders: {}, contracts: [],
       players: [], businesses: [], nextBizId: 1,
       effects: [], pending: [], log: [],
       stats: { runs: 0, idle: 0, overflow: 0 },
@@ -183,7 +183,7 @@ const SMG = (() => {
     config.players.forEach((c, i) => {
       st.players.push({ id: i + 1, name: c.name, colour: c.colour, bot: !!c.bot, strategy: c.strategy || "best",
         cash: S.startCash, space: S.startSpace, upgrades: 0, pos: c.start, stock: { ...S.startGoods }, hand: [],
-        points: 0, contracts: [], delivered: 0, acted: false, cardsPlayed: 0 });
+        points: 0, delivered: 0, acted: false, cardsPlayed: 0 });
     });
     // Free starting businesses, where each player starts: the one they picked plus its partner,
     // so everyone begins with a small chain (see G.starterPartner)

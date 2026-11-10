@@ -29,13 +29,11 @@ const GAME_SETTINGS = {
 
   // ---------- Contracts (game/contracts.js) ----------
   contracts: {
-    hand: 3,               // contracts each player holds; refilled overnight
-    goodsPerContract: [2, 3], // fewest and most different goods a contract asks for
-    size: 10,              // how big a contract is, in raw-material units (see G.rawUnits)
-    maxUnits: 12,          // …but never more than this many units in all (the stockpile has 20 rows)
-    pointsPerUnit: 0.5,    // points per raw-material unit delivered
-    distanceBonus: 0.15,   // +15% points for every step the goods' nearest source is away from you
-    distancePower: 2,      // how strongly contracts lean to faraway goods: chance ∝ (1 + distance) ^ this
+    open: 5,               // shared contracts on the board at all times, open to everyone
+    goodsPerContract: [3, 4], // fewest and most different goods a contract asks for…
+    units: 10,             // …about this many units in all, a few of each
+    life: 8,               // a contract nobody fills in this many rounds is replaced
+    pointsPerUnit: 0.5,    // points per raw-material unit in it (see G.rawUnits)
     // The goods that contracts ask for: 9 made goods from 6 regional raw materials, plus wheat and water
     // from anywhere. (Concrete is left out: it's a building material.) Waste and raw goods never go in
     // this list (rawShare and raws below cover raw ones).

@@ -1,19 +1,16 @@
 // Sellers Market game engine: contracts, the only way to score.
 //
-// Each player holds a few secret contracts: "deliver these goods, get these points".
-//   deliver          { contract }   any phase: the goods leave your stockpile (goods on offer don't count)
-//   discardContract  { contract }   once a round
-// Delivered and discarded contracts are replaced overnight.
+// There are always settings.contracts.open contracts on the board, the same for everyone:
+// "deliver these goods, get these points". It's a race: the first player to deliver a whole contract
+// gets its points. (Two or more delivering the same one in the same round split the points, rounded up.)
+//   deliver   { contract }   any time you order: the goods leave your stockpile (goods on offer don't count)
+// At night, delivered contracts pay out and are replaced, and so is any nobody has filled in
+// settings.contracts.life rounds.
 //
-// Contracts lean towards goods made far from home, so everyone has to trade. Some goods can be raw
-// materials (settings.contracts.rawShare), so mines and farms have buyers from the first round.
-//
-//   distance of a good = steps from your home territory to the nearest source of the raw material
-//                        it needs that's furthest away (water and anything that can be made anywhere = 0)
-//   chance of a good   ∝ (1 + distance)²
-//   size               = settings.contracts.size raw-material units, split between its goods
-//   points             = raw units × pointsPerUnit × (1 + distanceBonus × average distance)
-//                        × (1 + tierBonus × average processing steps), so made goods pay more than raw ones
+// A contract asks for 3 or 4 different goods, a few of each (about settings.contracts.units in all).
+// Some goods can be raw materials (settings.contracts.rawShare), so mines and farms have buyers too.
+//   points = raw-material units in it × pointsPerUnit × (1 + tierBonus × average processing steps),
+//   so made goods pay more than raw ones
 
 (() => {
   const G = SMG, S = GAME_SETTINGS, C = S.contracts;
@@ -80,34 +77,48 @@
     return picks.map(({ start, business }) => ({ start, business }));
   };
 
-  G.newContract = (st, p) => {
-    const home = p.home || p.pos;
-    let pool = G.contractGoods().map(id => ({ id, d: G.distanceOf(id, home) }));
-    let raws = (C.rawShare ? G.contractRaws() : []).map(id => ({ id, d: G.distanceOf(id, home) }));
+  G.newContract = st => {
+    // Goods already on the board are less likely, so the contracts ask for different things
+    const onBoard = new Set((st.contracts || []).flatMap(k => Object.keys(k.goods)));
+    const weight = id => onBoard.has(id) ? 0.3 : 1;
+    let pool = G.contractGoods(), raws = C.rawShare ? G.contractRaws() : [];
     const [lo, hi] = C.goodsPerContract;
-    const k = lo + Math.floor(G.rand(st) * (hi - lo + 1));
-    const chosen = [];
-    for (let i = 0; i < k && pool.length; i++) {
-      // Each good on the contract is a raw one with chance settings.contracts.rawShare
-      const from = raws.length && C.rawShare && G.rand(st) < C.rawShare ? raws : pool;
-      const total = from.reduce((s, x) => s + (1 + x.d) ** (C.distancePower ?? 2), 0);
-      let r = G.rand(st) * total, pick = from[0];
-      for (const x of from) { r -= (1 + x.d) ** (C.distancePower ?? 2); if (r <= 0) { pick = x; break; } }
-      chosen.push(pick); pool = pool.filter(x => x !== pick); raws = raws.filter(x => x !== pick);
-    }
+    const n = lo + Math.floor(G.rand(st) * (hi - lo + 1));
     const goods = {};
-    let raw = 0;
-    chosen.forEach(x => goods[x.id] = Math.max(1, Math.round(C.size / chosen.length / G.rawUnits(x.id))));
-    // Never more units than settings.contracts.maxUnits in all, so it fits in a stockpile
-    const units = Object.values(goods).reduce((s, q) => s + q, 0);
-    if (C.maxUnits && units > C.maxUnits) Object.keys(goods).forEach(id => goods[id] = Math.max(1, Math.floor(goods[id] * C.maxUnits / units)));
-    chosen.forEach(x => raw += goods[x.id] * G.rawUnits(x.id));
-    const avgD = chosen.reduce((s, x) => s + x.d, 0) / chosen.length, avgT = chosen.reduce((s, x) => s + G.tier(x.id), 0) / chosen.length;
+    for (let i = 0; i < n && pool.length; i++) {
+      // Each good on the contract is a raw one with chance settings.contracts.rawShare
+      const from = raws.length && G.rand(st) < C.rawShare ? raws : pool;
+      const total = from.reduce((s, id) => s + weight(id), 0);
+      let r = G.rand(st) * total, pick = from[0];
+      for (const id of from) { r -= weight(id); if (r <= 0) { pick = id; break; } }
+      // A few of each: about units ÷ goods, give or take one
+      goods[pick] = Math.max(2, Math.round(C.units / n + (G.rand(st) - 0.5) * 2));
+      pool = pool.filter(x => x !== pick); raws = raws.filter(x => x !== pick);
+    }
+    const ids = Object.keys(goods);
+    const raw = ids.reduce((s, id) => s + goods[id] * G.rawUnits(id), 0), avgT = ids.reduce((s, id) => s + G.tier(id), 0) / ids.length;
     st.nextContractId = (st.nextContractId || 0) + 1;
-    return { id: st.nextContractId, goods, points: Math.max(1, Math.round(raw * C.pointsPerUnit * (1 + C.distanceBonus * avgD) * (1 + (C.tierBonus || 0) * avgT))), drawn: st.round };
+    return { id: st.nextContractId, goods, points: Math.max(1, Math.round(raw * C.pointsPerUnit * (1 + (C.tierBonus || 0) * avgT))), drawn: st.round, takers: [] };
   };
 
-  const refill = st => st.players.forEach(p => { while (p.contracts.length < C.hand) p.contracts.push(G.newContract(st, p)); });
+  // Night: pay out delivered contracts, retire stale ones, and fill the board back up
+  const refill = st => {
+    st.contracts ||= [];
+    st.contracts.filter(k => k.takers.length).forEach(k => {
+      const each = Math.ceil(k.points / k.takers.length), item = G.contractItem(k);
+      k.takers.forEach(pid => {
+        const p = G.player(st, pid);
+        p.points += each; p.delivered = (p.delivered || 0) + 1;
+        (p.made ||= []).push({ ...item, points: each, round: st.round }); // the shelf of things you've made (display only)
+        st.stats.delivered = (st.stats.delivered || 0) + 1;
+        G.log(st, `produced ${/^[AEIOU]/.test(item.name) ? "an" : "a"} ${item.name.toLowerCase()} ${item.icon} for ${each} points${k.takers.length > 1 ? ` (shared with ${k.takers.length - 1} other${k.takers.length > 2 ? "s" : ""})` : ""}`, pid);
+      });
+    });
+    const stale = st.contracts.filter(k => !k.takers.length && st.round - k.drawn + 1 >= C.life);
+    if (stale.length) G.log(st, `Nobody delivered the ${stale.map(k => G.contractItem(k).name.toLowerCase()).join(", ")}: ${stale.length === 1 ? "it's" : "they're"} off the board.`);
+    st.contracts = st.contracts.filter(k => !k.takers.length && !stale.includes(k));
+    while (st.contracts.length < C.open) { const k = G.newContract(st); st.contracts.push(k); }
+  };
   G.onSetup.push(st => { st.players.forEach(p => p.home = p.pos); refill(st); });
   G.refillContracts = refill;
 
@@ -147,33 +158,19 @@
 
   const open = st => G.need(st.phase === "day", "Not right now.");
   G.canDeliver = (st, p, k) => Object.entries(k.goods).every(([c, q]) => G.have(st, p, c) >= q);
-  // Public demand: how many players hold a contract that asks for a good (not who, how many or for what).
-  // except: leave this player out (so you see what others want).
-  G.demand = (st, id, except = null) => st.players.filter(p => p.id !== except && p.contracts.some(k => k.goods[id])).length;
+  // How many open contracts ask for a good (public: everyone sees the board)
+  G.demand = (st, id) => (st.contracts || []).filter(k => !k.takers.length && k.goods[id]).length;
 
   G.actions.deliver = (st, p, { contract }) => {
     open(st);
-    const k = p.contracts.find(x => x.id === contract);
-    G.need(k, "You don't hold that contract.");
+    const k = (st.contracts || []).find(x => x.id === contract);
+    G.need(k, "That contract isn't on the board.");
+    G.need(!k.takers.includes(p.id), "You've already delivered it.");
     const short = Object.entries(k.goods).filter(([c, q]) => G.have(st, p, c) < q);
     G.need(!short.length, `You're short of ${short.map(([c, q]) => `${q - G.have(st, p, c)} ${G.COM[c].name}`).join(", ")} (goods on offer don't count).`);
     Object.entries(k.goods).forEach(([c, q]) => G.take(st, p, c, q));
-    p.points += k.points; p.delivered = (p.delivered || 0) + 1;
+    k.takers.push(p.id); // paid tonight (shared if someone else delivers it this round too)
     { const d = (st.stats.deliveredGoods ||= {})[p.id] ||= {}; Object.entries(k.goods).forEach(([c, q]) => d[c] = (d[c] || 0) + q); } // for the simulator
-    p.contracts = p.contracts.filter(x => x !== k);
-    st.stats.delivered = (st.stats.delivered || 0) + 1;
-    const item = G.contractItem(k);
-    (p.made ||= []).push({ ...item, points: k.points, round: st.round }); // the shelf of things you've made (display only)
-    return `produced ${/^[AEIOU]/.test(item.name) ? "an" : "a"} ${item.name.toLowerCase()} ${item.icon} for ${k.points} points`;
-  };
-
-  G.actions.discardContract = (st, p, { contract }) => {
-    open(st);
-    G.need(p.discardRound !== st.round, "You've already thrown a contract away this round.");
-    const k = p.contracts.find(x => x.id === contract);
-    G.need(k, "You don't hold that contract.");
-    p.contracts = p.contracts.filter(x => x !== k);
-    p.discardRound = st.round;
-    return null;
+    return `delivered the ${G.contractItem(k).name.toLowerCase()} ${G.contractItem(k).icon}`;
   };
 })();

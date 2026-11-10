@@ -18,17 +18,15 @@
 
   // What one run of factory `b` would take from everything player p owns (their stockpile and businesses).
   // Each input comes from the real thing first; any shortfall from its stand-ins, in the listed order.
-  // Goods one of your contracts asks for are never used as stand-ins.
   // Returns { use: { good: qty }, missing: [[input, qty short]] }.
   G.inputsFor = (st, p, b) => {
     const left = G.holdings(st, p), use = {}, missing = [];
-    const keep = new Set(p.contracts.flatMap(k => Object.keys(k.goods)));
     Object.entries(b.inputs).forEach(([c, q]) => {
       const own = Math.min(q, left[c] || 0);
       if (own) { use[c] = (use[c] || 0) + own; left[c] -= own; }
       let short = q - own;
       for (const [s, r] of G.substitutesFor(b, c)) {
-        if (!short || keep.has(s)) continue;
+        if (!short) continue;
         const n = Math.min(short, Math.floor((left[s] || 0) / r));
         if (n) { use[s] = (use[s] || 0) + n * r; left[s] -= n * r; short -= n; }
       }
