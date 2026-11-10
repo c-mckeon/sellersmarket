@@ -53,6 +53,7 @@ const all = (st, orders) => st.players.forEach(p => G.submit(st, p.id, orders[p.
   G.player(st, 1).contracts = Array.from({ length: C.maxHeld }, (_, i) => ({ id: 900 + i, goods: { clay: 1 }, price: 1, won: st.round, due: st.round + 99, cap: 9 }));
   for (let r = 1; r < C.bidRounds; r++) all(st, {});
   eq("P2 gets it", G.player(st, 2).contracts.some(x => x.id === id), true);
+  if (!st.contracts.length) st.contracts.push(G.newContract(st)); // the board can be empty some nights
   eq("full player can't bid", G.act(G.draft(st, 1, []).state, 1, "bid", { contract: st.contracts[0].id, amount: 5 }).ok, false);
 }
 console.log(fails ? `${fails} failed, ${passes} passed` : `all ${passes} passed`);
