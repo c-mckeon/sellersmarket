@@ -345,10 +345,7 @@
   // The same moments as the big order book replay, lined up so every card moves together: four per
   // auction (orders in, bids meet asks, traded, what's left; a good that didn't trade just holds), then now.
   function boardData() {
-    const ids = new Set(st.book.map(o => o.good));
-    st.history.forEach(h => { Object.keys(h.trades).forEach(i => ids.add(i)); Object.keys(h.quotes || {}).forEach(i => ids.add(i)); Object.keys(h.pre || {}).forEach(i => ids.add(i)); });
-    const busy = id => st.history.reduce((s, h) => s + (h.trades[id] ? 2 : 0) + (h.quotes?.[id] ? 1 : 0), 0) + (st.book.some(o => o.good === id) ? 1 : 0);
-    const goods = [...ids].sort((a, b) => busy(b) - busy(a) || G.COM[a].name.localeCompare(G.COM[b].name)).slice(0, 10);
+    const goods = COMMODITIES.map(c => c.id); // all of them, always in the same place
     const hs = st.history.filter(bookOf);
     const frames = [];
     hs.forEach(h => {
@@ -366,16 +363,19 @@
       for (const h of st.history) { if (hs[0] && h.n >= hs[0].n) break; if (h.trades[id]) last = h.trades[id].price; }
       fs.forEach(f => { if (f.sold != null) last = f.sold; f.last = last; });
       const ghosts = ghostsOf(id, hs.slice(-8)), sc = scaleOf(fs, ghosts);
-      per[id] = { frames: fs, ghosts, maxQ: sc.maxQ, lo: sc.lo, hi: sc.hi };
+      const empty = !ghosts.n && fs.every(f => !Object.keys(f.segs).length && f.last == null);
+      per[id] = { frames: fs, ghosts, maxQ: sc.maxQ, lo: sc.lo, hi: sc.hi, empty };
     });
     // One scale for every card, so they can be compared: the same zoom (each card centred on its own
     // prices, as a share of them, since goods' prices differ a lot) and the same bar length per unit.
     // Both are set by a typical card (the 75th percentile), so one odd good doesn't squash the rest:
     // its far prices are pinned to the edge, faintly, and its biggest orders are cut off at the edge.
     const q75 = list => { const v = [...list].sort((a, b) => a - b); return v.length ? v[Math.min(v.length - 1, Math.floor(v.length * 0.75))] : 0; };
-    const mid = id => Math.max(1, (per[id].lo + per[id].hi) / 2);
-    const zoom = Math.max(0.15, q75(goods.map(id => (per[id].hi - per[id].lo) / 2 / mid(id))));  // half the window, as a share of the price
-    const maxQ = Math.max(1, q75(goods.map(id => per[id].maxQ)));
+    // (goods nobody has ever bid for or offered don't count; their cards centre on the cost basis)
+    const seen = goods.filter(id => !per[id].empty);
+    const mid = id => { if (!per[id].empty) return Math.max(1, (per[id].lo + per[id].hi) / 2); const b = G.costBasis(st, id); return Math.max(1, b?.value || 10); };
+    const zoom = Math.max(0.15, q75(seen.map(id => (per[id].hi - per[id].lo) / 2 / mid(id))));  // half the window, as a share of the price
+    const maxQ = Math.max(1, q75(seen.map(id => per[id].maxQ)));
     goods.forEach(id => {
       const c = mid(id), half = Math.max(4, c * zoom);  // at least ±4, so cheap goods still show a spread
       per[id].frames.forEach(f => { f.lo = c - half; f.hi = c + half; });
@@ -418,7 +418,7 @@
     const b = best("b"), a = best("a");
     return {
       h: `<b>${G.COM[id].name}</b><span class="qc-last">${f.sold != null ? `traded at ${m(f.sold)}` : f.last != null ? `last ${m(f.last)}` : "no trades"}</span>`,
-      n: `<span class="a">${a ? `ask ${m(a.p)} <small>×${a.w}</small>` : "no asks"}</span><span class="b">${b ? `bid ${m(b.p)} <small>×${b.w}</small>` : "no bids"}</span>`,
+      n: `<span class="a">${a ? `ask ${m(a.p)} <small>×${a.w}</small>` : "no asks"}</span><span class="b">${b ? `bid ${m(b.p)} <small>×${b.w}</small>` : "no bids"}</span><span class="c" title="What its raw materials cost at their last traded prices${basisNote(id)}">${G.COM[id].type === "raw" ? "raw" : G.COM[id].type === "waste" ? "by-product" : basisText(id) ? `cost ${basisText(id)}` : "cost –"}</span>`,
     };
   };
   const cardHTML = (id, d, k, flash) => {
@@ -569,19 +569,8 @@
   }
 
   // ================= The market =================
-  // Built around three questions: can I sell what I make, can I get what I need, and what's moving?
-  // Goods that matter in this game: what contracts ask for, everything those are made from (and their
-  // by-products), building materials, wheat and water, and anything a player holds or has orders for
-  function goodsInPlay() {
-    const set = new Set([...S.contracts.goods, ...(S.contracts.raws || []), "wheat", "water"]), seen = new Set();
-    const add = id => { if (seen.has(id)) return; seen.add(id); set.add(id);
-      const r = RECIPES.find(x => Object.keys(x.out)[0] === id); if (r) { Object.keys(r.in).forEach(add); Object.keys(r.out).forEach(o => set.add(o)); } };
-    S.contracts.goods.forEach(add);
-    vw.players.forEach(x => Object.keys(G.holdings(vw, x)).forEach(c => set.add(c)));
-    vw.book.forEach(o => set.add(o.good));
-    return set;
-  }
-
+  // A summary of the last auction and what's trading, then the quote board: every good, each with its
+  // own small order book; click one to open it.
   function marketPanel(p) {
     const want = wantsOf(p), hold = G.holdings(vw, p), fresh = freshTrades(); // fresh: goods that traded since you last looked (they flash)
     const sel = ui.good && G.COM[ui.good] ? ui.good : null;
@@ -594,10 +583,6 @@
     recent.forEach(h => Object.entries(h.trades).forEach(([id, t]) => moved[id] = (moved[id] || 0) + t.qty));
 
     const movers = Object.entries(moved).sort((a, b) => b[1] - a[1]);
-    // The full list: goods in play by default (contract goods, what they're made from, building materials,
-    // and anything someone holds or has orders for); the other goods behind a toggle
-    const inPlay = goodsInPlay(), hidden = COMMODITIES.length - inPlay.size;
-    const rows = COMMODITIES.filter(c => (ui.allGoods || inPlay.has(c.id)) && (!ui.search || c.name.toLowerCase().includes(ui.search)));
     return `
       ${fold("stats", "msec", `<h3>Market summary <span class="muted small">last auction, your orders, what's trading</span></h3>`, `<div class="mstats">
         <div><span>Last auction</span><b>${last ? `${Object.keys(last.trades).length} good${Object.keys(last.trades).length === 1 ? "" : "s"}` : "–"}</b><small>${last ? `${Object.values(last.trades).reduce((s, t) => s + t.qty, 0)} units · round ${last.round} ${last.phase}` : "no auctions yet"}</small></div>
@@ -612,17 +597,7 @@
               <td class="n ${chg > 0 ? "up" : chg < 0 ? "dn" : ""}">${chg != null ? pct(chg) : "–"}</td><td class="n">${vol}</td>
               <td class="n">${q.bid != null ? m(q.bid) : "–"} / ${q.ask != null ? m(q.ask) : "–"}</td></tr>`; }).join("")}
         </tbody></table>` : `<p class="muted">Nothing has traded yet. The first trades set the first prices.</p>`}`)}
-      ${quoteBoard(fresh, sel ? ticket(p, sel, want) : "")}
-      <details class="msec mall" ${ui.allOpen ? "open" : ""}><summary><h3>${ui.allGoods ? `All ${COMMODITIES.length} goods` : `Goods in play (${inPlay.size})`}</h3></summary>
-        <div class="grow"><input class="gsearch" id="gSearch" placeholder="Search" value="${esc(ui.search)}">
-          <button class="glink blink" id="gAllGoods">${ui.allGoods ? "Show only goods in play" : `Show the other ${hidden} goods`}</button></div>
-        <table class="gmkt gbook-list"><thead><tr><th>Good</th><th class="n">Bid</th><th class="n">Ask</th><th class="n">Last</th><th class="n" title="Its raw materials at their last traded prices">Cost basis</th><th class="n">Have</th><th class="n">Want</th><th class="n" title="Other players whose contracts ask for it (a count: contracts stay secret)">Wanted by</th><th>Made by</th></tr></thead><tbody>
-        ${rows.map(c => { const q = G.quote(vw, c.id), mk = makersOf(p, c.id);
-          return `<tr data-good="${c.id}" class="${c.id === sel ? "sel" : ""}"><td>${c.name}</td>
-            <td class="n">${q.bid != null ? `${m(q.bid)} <small>×${q.bids[0].qty}</small>` : "–"}</td><td class="n">${q.ask != null ? `${m(q.ask)} <small>×${q.asks[0].qty}</small>` : "–"}</td>
-            <td class="n">${q.last ? m(q.last.price) : "–"}</td><td class="n muted">${basisText(c.id) || "–"}</td><td class="n">${hold[c.id] || ""}</td><td class="n">${want[c.id] || ""}</td><td class="n">${wanted(p, c.id) || ""}</td>
-            <td class="small muted">${[vw.businesses.some(b => b.owner === p.id && G.BIZ_BY[b.type].outputs[c.id]) ? "you" : "", ...mk.map(x => esc(x.name))].filter(Boolean).join(", ")}</td></tr>`; }).join("")}
-        </tbody></table></details>`;
+      ${quoteBoard(fresh, sel ? ticket(p, sel, want) : "")}`;
   }
 
   // A bigger price chart for one good: price line on top, units traded below (two bands, one x-axis).
@@ -1043,8 +1018,6 @@
       if (confirm("Abandon this game and start a new one?")) { st = null; localStorage.removeItem(KEY); render(); }
     });
     root.querySelector("#gLogout")?.addEventListener("click", () => { NET.logout(); render(); });
-    const s = root.querySelector("#gSearch");
-    if (s) s.addEventListener("input", () => { ui.search = s.value.toLowerCase(); ui.allOpen = true; const pos = s.selectionStart; render(); const n = root.querySelector("#gSearch"); n.focus(); n.setSelectionRange(pos, pos); });
     root.querySelectorAll("[data-tab]").forEach(b => b.addEventListener("click", () => { ui.tab = b.dataset.tab; render(); }));
     // Market: pick a good, then the order ticket
     // Any card, row or chip with a good on it opens that good (from the sidebar too, switching to the market)
@@ -1057,8 +1030,6 @@
       morph(card && pageRect(card), root.querySelector(".qopen"));
     }));
     root.querySelector("#gTicketClose")?.addEventListener("click", closeGood);
-    root.querySelector(".mall")?.addEventListener("toggle", e => ui.allOpen = e.target.open);
-    root.querySelector("#gAllGoods")?.addEventListener("click", e => { e.preventDefault(); ui.allGoods = !ui.allGoods; ui.allOpen = true; render(); });
     // Order book replay (last 4 rounds): ▶ starts it, ■ stops it; a redraw of the page stops it too
     dStop(); dStop = () => {};
     const dPlay = root.querySelector("#dPlay");
