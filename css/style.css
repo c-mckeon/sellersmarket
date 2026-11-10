@@ -706,7 +706,8 @@ details.gnews[open] { display: grid; }
 .gphase.day { background: var(--mor); color: #1d1d1b; }
 
 /* Order book: price left to right, asks up, bids down, past orders as grey blobs */
-.depthbox .ghost { fill: var(--muted); }
+.depthbox .ghost { color: var(--muted); }
+.depthbox linearGradient stop, .qc-svg linearGradient stop { stop-color: var(--muted); }
 .depthbox .ldot { fill: var(--accent); stroke: var(--surface); stroke-width: 2; }
 .depthbox .hit { fill: transparent; cursor: default; }
 .depthbox .hit:hover { fill: color-mix(in srgb, var(--ink) 10%, transparent); }
@@ -714,7 +715,7 @@ details.gnews[open] { display: grid; }
 
 /* Quote cards: a small order book, price bottom to top; asks right, bids left */
 .qc-svg svg { width: 100%; height: auto; display: block; }
-.qc-svg .ghost { fill: var(--muted); }
+
 .qc-svg .band { fill: color-mix(in srgb, var(--fin) 16%, transparent); }
 .qc-svg .axis { stroke: var(--muted); stroke-width: 1.2; }
 .qc-svg .tline { stroke: var(--ink); stroke-width: 1.2; stroke-dasharray: 2 2; }

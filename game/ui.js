@@ -320,7 +320,7 @@
     const segs = Object.values(s.segs).filter(x => x.w > 0.02 && x.op > 0.02);
     let g = "";
     // Past orders: grey blobs, older ones lighter (price runs bottom to top here)
-    if (D.ghosts.n) g += ghostPaths(D.ghosts, s.lo, s.hi, 60, 30, t => H - B - t * plotH, (y, v) => `${(cx + v).toFixed(1)},${y.toFixed(1)}`, half, [["a", 1], ["b", -1]]);
+    if (D.ghosts.n) g += ghostPaths(D.ghosts, s.lo, s.hi, 40, 10, t => H - B - t * plotH, (y, v) => `${(cx + v).toFixed(1)},${y.toFixed(1)}`, half, [["a", 1], ["b", -1]], [0, H - B, 0, T]);
     const live = side => segs.filter(x => x.side === side && x.op > 0.5 && !x.fill);
     const bid = Math.max(-Infinity, ...live("b").map(x => x.p)), ask = Math.min(Infinity, ...live("a").map(x => x.p));
     if (isFinite(bid) && isFinite(ask) && ask > bid) g += `<rect class="band" x="3" y="${Y(ask).toFixed(1)}" width="${W - 6}" height="${(Y(bid) - Y(ask)).toFixed(1)}"/>`;
@@ -702,22 +702,36 @@
     hs.forEach(h => { const d = bookOf(h)?.[id]; if (!d) return; g.n++; g.rounds.push(d.pre); d.pre.a.forEach(x => g.a.push(x)); d.pre.b.forEach(x => g.b.push(x)); });
     return g;
   };
-  // The grey blobs as SVG paths: one per past auction, a soft curve round each order in it, the newest
-  // darkest and older ones fading out. Only their shape matters: the busiest one reaches 70% of `half`.
+  // The grey blobs as SVG: a blurry picture of where orders have been, like a low-resolution chromatogram.
+  // Each past order is a wide soft curve; all rounds add into one smooth shape per side, newer rounds
+  // counting more. Its shade blends along the price axis with how recent the orders there were: darker
+  // where they're recent, lighter where they're old. Only the shape matters: its peak reaches 70% of `half`.
   // Kept per price scale, since the scale stays put through a replay.
-  //   along(i/N) → position along the price axis for sample i; out(base, v) → point v away from the centre line
-  function ghostPaths(G0, lo, hi, N, sdDiv, along, out, half, sides) {
+  //   along(t) → position along the price axis (t from 0 at the low end to 1); out(pos, v) → the point v
+  //   away from the centre line; grad: [x1, y1, x2, y2] of the price axis, for the shading
+  let ghostIds = 0;
+  function ghostPaths(G0, lo, hi, N, sdDiv, along, out, half, sides, grad) {
     const key = `${lo}|${hi}|${N}`;
     if (G0.cache?.key === key) return G0.cache.svg;
-    const span = hi - lo || 1, sd = Math.max(span / sdDiv, 0.5);
+    const span = hi - lo || 1, sd = Math.max(span / sdDiv, 1), n = G0.rounds.length;
     const curve = list => Array.from({ length: N + 1 }, (_, i) => { const p = lo + i / N * span; return list.reduce((t, [pp, q]) => t + q * Math.exp(-((p - pp) ** 2) / (2 * sd * sd)), 0); });
-    const curves = G0.rounds.map(r => ({ a: r.a.length ? curve(r.a) : null, b: r.b.length ? curve(r.b) : null }));
-    const peak = Math.max(1e-9, ...curves.flatMap(c => [...(c.a || []), ...(c.b || [])])), kg = 0.7 * half / peak;
+    // Newer rounds weigh more: the oldest counts 30%, the newest 100%
+    const weight = r => 0.3 + 0.7 * (n > 1 ? r / (n - 1) : 1);
+    const total = {}, recent = {};
+    sides.forEach(([side]) => {
+      const sum = Array(N + 1).fill(0), age = Array(N + 1).fill(0);
+      G0.rounds.forEach((r, i) => { if (!r[side].length) return; const c = curve(r[side]), w = weight(i);
+        c.forEach((v, j) => { sum[j] += v * w; age[j] += v * w * (n > 1 ? i / (n - 1) : 1); }); });
+      total[side] = sum; recent[side] = sum.map((v, j) => v > 1e-9 ? age[j] / v : 0);
+    });
+    const peak = Math.max(1e-9, ...sides.flatMap(([side]) => total[side])), kg = 0.7 * half / peak;
     let svg = "";
-    curves.forEach((c, r) => {
-      const op = (0.03 + 0.2 * ((r + 1) / curves.length) ** 1.5).toFixed(3); // oldest ≈ 0.03 … newest 0.23
-      sides.forEach(([side, dir]) => { if (!c[side]) return;
-        svg += `<path class="ghost" fill-opacity="${op}" d="M${out(along(0), 0)} ${c[side].map((v, i) => `L${out(along(i / N), dir * v * kg)}`).join(" ")} L${out(along(1), 0)} Z"/>`; });
+    sides.forEach(([side, dir]) => {
+      if (!G0.rounds.some(r => r[side].length)) return;
+      const id = `gh${++ghostIds}`, stops = 12;
+      svg += `<linearGradient id="${id}" gradientUnits="userSpaceOnUse" x1="${grad[0]}" y1="${grad[1]}" x2="${grad[2]}" y2="${grad[3]}">${Array.from({ length: stops + 1 }, (_, k) => {
+        const j = Math.round(k / stops * N); return `<stop offset="${(k / stops).toFixed(3)}" stop-opacity="${(0.05 + 0.2 * recent[side][j]).toFixed(3)}"/>`; }).join("")}</linearGradient>`;
+      svg += `<path class="ghost" fill="url(#${id})" d="M${out(along(0), 0)} ${total[side].map((v, i) => `L${out(along(i / N), dir * v * kg)}`).join(" ")} L${out(along(1), 0)} Z"/>`;
     });
     G0.cache = { key, svg };
     return svg;
@@ -778,7 +792,7 @@
       g += `<line class="grid" x1="${x.toFixed(1)}" x2="${x.toFixed(1)}" y1="${top}" y2="${H - bot}"/><text class="gl" x="${x.toFixed(1)}" y="${H - bot + 12}" text-anchor="middle">${m(v)}</text>`;
     }
     // Past orders: grey blobs, older ones lighter
-    if (D.ghosts?.n) g += ghostPaths(D.ghosts, s.lo, s.hi, 160, 40, t => L + t * plotW, (x, v) => `${x.toFixed(1)},${(cy + v).toFixed(1)}`, half, [["a", -1], ["b", 1]]);
+    if (D.ghosts?.n) g += ghostPaths(D.ghosts, s.lo, s.hi, 80, 14, t => L + t * plotW, (x, v) => `${x.toFixed(1)},${(cy + v).toFixed(1)}`, half, [["a", -1], ["b", 1]], [L, 0, W - R, 0]);
     // The gap between the best bid and ask still standing
     const live = side => segs.filter(x => x.side === side && x.op > 0.5 && !x.fill);
     const bid = Math.max(-Infinity, ...live("b").map(x => x.p)), ask = Math.min(Infinity, ...live("a").map(x => x.p));
