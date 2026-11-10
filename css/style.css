@@ -144,8 +144,6 @@ td.rec { color: var(--muted); min-width: 260px; }
 
 #mused.over { color: var(--waste); }
 input[type=number] { font: inherit; font-size: 13px; padding: 3px 5px; border: 1px solid var(--line); border-radius: 5px; background: var(--bg); color: var(--ink); }
-.mgrid { display: grid; grid-template-columns: minmax(0, 1fr) 340px; gap: 16px; align-items: start; }
-@media (max-width: 1150px) { .mgrid { grid-template-columns: 1fr; }  }
 
 /* gameplay: day cycle */
 :root { --mor: #d9a21b; --aft: #d4682a; --night: #4b55b8; }
@@ -466,23 +464,10 @@ code { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; fo
 .mstats small { font-size: 12px; color: var(--muted); }
 .msec { margin-top: 14px; }
 .msec h3 { margin: 0 0 8px; font-size: 15px; display: inline-flex; gap: 8px; align-items: baseline; }
-.mgrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)); gap: 8px; }
-.mcard { all: unset; box-sizing: border-box; cursor: pointer; display: grid; gap: 4px; padding: 9px 11px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); }
-.mcard:hover { border-color: var(--ink); }
-.mcard.sel { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
-.mcard:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
-.mc-top { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
-.mc-top b { font-size: 14.5px; }
-.mc-qty { font-size: 17px; font-weight: 800; font-variant-numeric: tabular-nums; }
-.mc-qty small { font-size: 11.5px; font-weight: 600; color: var(--muted); }
-.mc-where { font-size: 12px; color: var(--muted); }
-.mc-mid { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
-.mc-px { font-variant-numeric: tabular-nums; font-size: 14px; white-space: nowrap; }
-.mc-px small, .mmovers td.up, .mmovers td.dn { font-size: 12px; font-weight: 700; }
-.mc-px .up, .mmovers .up { color: var(--raw); } .mc-px .dn, .mmovers .dn { color: var(--waste); }
-.mtag { justify-self: start; font-size: 12px; font-weight: 600; padding: 2px 8px; border-radius: 999px; background: var(--bg); color: var(--muted); }
-.mtag.good { background: color-mix(in srgb, var(--raw) 16%, transparent); color: var(--ink); }
-.mtag.warn { background: color-mix(in srgb, var(--waste) 14%, transparent); color: var(--ink); }
+
+ .mmovers td.up, .mmovers td.dn { font-size: 12px; font-weight: 700; }
+ .mmovers .up { color: var(--raw); }  .mmovers .dn { color: var(--waste); }
+
 svg.spark { display: block; overflow: visible; }
 svg.spark polyline { fill: none; stroke: var(--accent); stroke-width: 1.75; stroke-linejoin: round; stroke-linecap: round; }
 svg.spark circle { fill: var(--accent); }
@@ -543,8 +528,8 @@ svg.spark .spark-none { stroke: var(--line); stroke-width: 1.5; stroke-dasharray
 /* A good that just traded flashes yellow */
 @keyframes tradeflash { 0%, 30% { background: #ffe14d; border-color: #e0b800; } 100% { background: var(--surface); } }
 @keyframes tradeflashrow { 0%, 30% { background: #ffe14d; } 100% { background: transparent; } }
-.qcard.flash, .mcard.flash { animation: tradeflash 1.6s ease-out; }
-.qcard.flash *, .mcard.flash * { color: #1d1d1b; }
+.qcard.flash{ animation: tradeflash 1.6s ease-out; }
+.qcard.flash *{ color: #1d1d1b; }
 .qcard.flash .qc-n small, .qcard.flash .qc-last { color: #4a4232; }
 tr.flash td { animation: tradeflashrow 1.6s ease-out; }
 
@@ -577,13 +562,11 @@ tr.flash td { animation: tradeflashrow 1.6s ease-out; }
 .depthbox .band { fill: color-mix(in srgb, var(--fin) 14%, transparent); }
 .depthbox .lbl { font-size: 10.5px; font-weight: 700; fill: var(--ink); text-transform: uppercase; letter-spacing: .05em; }
 /* Opportunities: goods others want */
-.opps { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 6px; }
-.opp { all: unset; box-sizing: border-box; cursor: pointer; display: grid; gap: 3px; padding: 8px 10px; border: 1px dashed var(--raw); border-radius: 8px; background: color-mix(in srgb, var(--raw) 6%, var(--surface)); font-size: 13px; }
-.opp:hover { border-style: solid; }
-.opp .up { color: var(--raw); font-weight: 700; } .opp .dn { color: var(--waste); font-weight: 700; }
-.opp small { color: var(--muted); font-size: 12px; }
+
+ 
+
 .drctl .dnow { color: var(--ink); font-weight: 600; }
-.mtag.want { background: color-mix(in srgb, var(--accent) 16%, transparent); color: var(--ink); }
+
 .depthbox .grid { stroke: var(--line); stroke-width: 1; }
 .depthbox .gl { font-size: 9px; fill: var(--muted); font-variant-numeric: tabular-nums; }
 .drr { font-size: 13px; display: inline-flex; align-items: center; gap: 5px; }
@@ -732,3 +715,4 @@ details.gnews[open] { display: grid; }
 .guser { font-size: 13px; font-weight: 600; color: var(--muted); margin-left: 8px; white-space: nowrap; }
 .gsetup h1 .guser { font-size: 14px; vertical-align: middle; }
 .gwait { font-size: 13px; font-weight: 700; color: var(--accent); }
+.qc-svg .cut { stroke: var(--surface); stroke-width: 1.5; }

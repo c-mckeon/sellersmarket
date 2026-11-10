@@ -294,7 +294,6 @@
     Object.entries(needsOf(p)).forEach(([c, q]) => w[c] = (w[c] || 0) + q);
     return w;
   };
-  const onOffer = (p, id) => vw.book.filter(o => o.pid === p.id && o.side === "sell" && o.good === id).reduce((s, o) => s + o.qty, 0);
   // Where your goods are: [{ label, qty }] (each business, then your own stockpile)
   const whereIs = (p, id) => [
     ...G.myBusinesses(vw, p.id).filter(b => b.stock?.[id]).map(b => ({ label: G.BIZ_BY[b.type].name, qty: b.stock[id] })),
@@ -330,16 +329,9 @@
   // Today's cost basis as text: "105", "≥ 60" (some raw materials haven't traded), or "" (nothing known)
   const basisText = id => { const b = G.costBasis(vw, id); return !b || G.COM[id].type === "raw" ? "" : `${b.missing.length ? "≥ " : ""}${m(b.value)}`; };
   const basisNote = id => { const b = G.costBasis(vw, id); return b?.missing.length ? ` (${b.missing.map(c => G.COM[c].name.toLowerCase()).join(", ")} not traded yet)` : ""; };
-  // What to show where a price would go: the last trade, else today's cost basis, else nothing yet
-  const priceOrBasis = (id, last, chg) => last != null
-    ? `<b>${m(last)}</b>${chg != null ? ` <small class="${chg > 0 ? "up" : chg < 0 ? "dn" : ""}">${pct(chg)}</small>` : ""}`
-    : basisText(id) ? `<small class="muted" title="Today's cost basis: its raw materials at their last traded prices${basisNote(id)}">cost ${basisText(id)}</small>`
-    : `<small class="muted">${G.COM[id].type === "raw" ? "no price yet" : "never traded"}</small>`;
 
   // ================= Quote board and replay =================
-  // A card per active good: best bid and ask, the spread between them drawn on a price line, and the
-  // last trade. "Play" replays every auction so far, one frame per auction, with the bars sliding as
-  // the book moved; a card flashes yellow whenever its good trades (live, too, after each auction).
+  // A card per active good with a small order book; a card flashes yellow whenever its good trades.
 
   // Goods that traded since this player last looked (each auction has a running number, n)
   const freshTrades = () => {
@@ -374,8 +366,20 @@
       for (const h of st.history) { if (hs[0] && h.n >= hs[0].n) break; if (h.trades[id]) last = h.trades[id].price; }
       fs.forEach(f => { if (f.sold != null) last = f.sold; f.last = last; });
       const ghosts = ghostsOf(id, hs.slice(-8)), sc = scaleOf(fs, ghosts);
-      fs.forEach(f => { f.lo = sc.lo; f.hi = sc.hi; });
-      per[id] = { frames: fs, ghosts, maxQ: sc.maxQ };
+      per[id] = { frames: fs, ghosts, maxQ: sc.maxQ, lo: sc.lo, hi: sc.hi };
+    });
+    // One scale for every card, so they can be compared: the same zoom (each card centred on its own
+    // prices, as a share of them, since goods' prices differ a lot) and the same bar length per unit.
+    // Both are set by a typical card (the 75th percentile), so one odd good doesn't squash the rest:
+    // its far prices are pinned to the edge, faintly, and its biggest orders are cut off at the edge.
+    const q75 = list => { const v = [...list].sort((a, b) => a - b); return v.length ? v[Math.min(v.length - 1, Math.floor(v.length * 0.75))] : 0; };
+    const mid = id => Math.max(1, (per[id].lo + per[id].hi) / 2);
+    const zoom = Math.max(0.15, q75(goods.map(id => (per[id].hi - per[id].lo) / 2 / mid(id))));  // half the window, as a share of the price
+    const maxQ = Math.max(1, q75(goods.map(id => per[id].maxQ)));
+    goods.forEach(id => {
+      const c = mid(id), half = Math.max(4, c * zoom);  // at least ±4, so cheap goods still show a spread
+      per[id].frames.forEach(f => { f.lo = c - half; f.hi = c + half; });
+      per[id].maxQ = maxQ;
     });
     return { goods, frames, per, lastStart: Math.max(0, frames.length - 5) };
   }
@@ -396,8 +400,12 @@
     if (isFinite(bid) && isFinite(ask) && ask > bid) g += `<rect class="band" x="3" y="${Y(ask).toFixed(1)}" width="${W - 6}" height="${(Y(bid) - Y(ask)).toFixed(1)}"/>`;
     if (s.trade != null && s.tradeOp > 0.02) g += `<line class="tline" opacity="${s.tradeOp.toFixed(2)}" x1="3" x2="${W - 3}" y1="${Y(s.trade).toFixed(1)}" y2="${Y(s.trade).toFixed(1)}"/>`;
     segs.forEach(x => {
-      const w = x.w * k, off = x.x0 * k, fill = `rgb(${x.rgb.map(Math.round).join(",")})`;
-      g += `<rect x="${(x.side === "a" ? cx + off : cx - off - w).toFixed(1)}" y="${(Y(x.p) - bh / 2).toFixed(1)}" width="${w.toFixed(1)}" height="${bh.toFixed(1)}" rx="1" fill="${fill}" opacity="${(x.op * (pinned(x.p) ? 0.35 : 1)).toFixed(2)}"/>`;
+      // Bars run from the centre line; one longer than the card is cut off at the edge, with a tick
+      const off = Math.min(half, x.x0 * k), w = Math.min(half - off, x.w * k), cut = (x.x0 + x.w) * k > half + 0.5;
+      const fill = `rgb(${x.rgb.map(Math.round).join(",")})`, op = (x.op * (pinned(x.p) ? 0.35 : 1)).toFixed(2), y = Y(x.p) - bh / 2;
+      const bx = x.side === "a" ? cx + off : cx - off - w;
+      g += `<rect x="${bx.toFixed(1)}" y="${y.toFixed(1)}" width="${w.toFixed(1)}" height="${bh.toFixed(1)}" rx="1" fill="${fill}" opacity="${op}"/>`;
+      if (cut && w > 0) g += `<line class="cut" x1="${(x.side === "a" ? cx + half - 1.5 : cx - half + 1.5).toFixed(1)}" x2="${(x.side === "a" ? cx + half - 1.5 : cx - half + 1.5).toFixed(1)}" y1="${(y - 1.5).toFixed(1)}" y2="${(y + bh + 1.5).toFixed(1)}" opacity="${op}"/>`;
     });
     g += `<line class="axis" x1="${cx}" x2="${cx}" y1="${T}" y2="${H - B}"/>`;
     if (s.last != null) g += `<circle class="ldot" cx="${cx}" cy="${Y(s.last).toFixed(1)}" r="3.5"/>`;
@@ -574,29 +582,6 @@
     return set;
   }
 
-  // Opportunities: goods other players are bidding for that nobody is selling, or whose best bid beats
-  // today's cost basis. Making them earns that margin, which is the market's reason to make what others need.
-  function opportunities(p) {
-    const list = COMMODITIES.map(c => {
-      const bid = G.bestBid(vw, c.id); if (!bid) return null;
-      if (vw.book.some(o => o.good === c.id && o.side === "buy" && o.pid === p.id && o.price === bid.price)) return null; // that's you bidding
-      const ask = G.bestAsk(vw, c.id), cb = G.costBasis(vw, c.id), basis = cb && !cb.missing.length && c.type !== "raw" ? cb.value : null;
-      const margin = basis != null ? bid.price - basis : null;
-      if (ask && ask.price <= bid.price) return null;
-      if (ask && (margin == null || margin <= 0)) return null;
-      const makers = vw.businesses.filter(b => G.BIZ_BY[b.type].outputs[c.id]).map(b => b.owner === p.id ? "you" : G.player(vw, b.owner).name);
-      const biz = G.BIZ.find(b => b.makes === c.id);
-      return { id: c.id, bid, ask, basis, margin, makers: [...new Set(makers)], biz, score: (margin ?? bid.price * 0.3) * bid.qty + (ask ? 0 : 1000) };
-    }).filter(Boolean).sort((a, b) => b.score - a.score).slice(0, 6);
-    if (!list.length) return "";
-    return fold("opps", "msec", `<h3>Opportunities <span class="muted small">${list.length} · what other players want and nobody is selling</span></h3>`, `
-      <div class="opps">${list.map(o => `<button class="opp" data-good="${o.id}">
-        <b>${G.COM[o.id].name}</b> <span class="mtag good">wanted: ${o.bid.qty} at ${m(o.bid.price)}</span>
-        ${o.margin != null ? `<span class="${o.margin > 0 ? "up" : "dn"}">cost basis ${m(o.basis)}: ${o.margin >= 0 ? "+" : "−"}${m(Math.abs(o.margin))} a unit</span>` : ""}
-        <small>${o.ask ? `cheapest ask ${m(o.ask.price)}` : "nobody selling"} · ${o.makers.length ? `made by ${esc(o.makers.join(", "))}` : `nobody makes it${o.biz ? `: a ${o.biz.name.toLowerCase()} would` : ""}`}</small>
-      </button>`).join("")}</div>`);
-  }
-
   function marketPanel(p) {
     const want = wantsOf(p), hold = G.holdings(vw, p), fresh = freshTrades(); // fresh: goods that traded since you last looked (they flash)
     const sel = ui.good && G.COM[ui.good] ? ui.good : null;
@@ -604,41 +589,10 @@
     const live = COMMODITIES.filter(c => G.bestBid(vw, c.id) || G.bestAsk(vw, c.id)).length;
     const myOrders = vw.book.filter(o => o.pid === p.id);
 
-    // Sell: everything you hold beyond what you want, plus anything already on offer
-    const sellIds = [...new Set([...Object.keys(hold).filter(c => hold[c] > (want[c] || 0)), ...myOrders.filter(o => o.side === "sell").map(o => o.good)])]
-      .sort((a, b) => (hold[b] || 0) - (hold[a] || 0));
-    // Buy: what you want and don't have enough of, plus anything you're already bidding for
-    const buyIds = [...new Set([...Object.keys(want).filter(c => (hold[c] || 0) < want[c]), ...myOrders.filter(o => o.side === "buy").map(o => o.good)])];
     // Moving: everything that traded in the last 6 auctions, busiest first
     const recent = st.history.slice(-6), moved = {};
     recent.forEach(h => Object.entries(h.trades).forEach(([id, t]) => moved[id] = (moved[id] || 0) + t.qty));
 
-    const sellCard = id => {
-      const bid = G.bestBid(vw, id), { s, last, chg } = lastBits(id), users = usersOf(p, id);
-      const spare = (hold[id] || 0) - (want[id] || 0), off = onOffer(p, id);
-      const demand = (bid ? `<span class="mtag good">Bid ${m(bid.price)} ×${bid.qty}</span>`
-        : users.length ? `<span class="mtag">No bids · ${names(users)} could use it</span>`
-        : contractGood(id) ? `<span class="mtag">No bids · contracts can ask for it</span>`
-        : wanted(p, id) ? "" : `<span class="mtag warn">⚠ Nobody else can use it now</span>`);
-      return `<button class="mcard${id === sel ? " sel" : ""}${fresh.has(id) ? " flash" : ""}" data-good="${id}">
-        <span class="mc-top"><b>${G.COM[id].name}</b><span class="mc-qty">${spare > 0 ? spare : 0}${off ? ` <small>+${off} on offer</small>` : ""}</span></span>
-        <span class="mc-where">${whereIs(p, id).map(x => `${x.qty} ${x.label === "your stockpile" ? "in" : "at"} ${x.label.toLowerCase()}`).join(" · ") || "all on offer"}</span>
-        <span class="mc-mid">${spark(s)}<span class="mc-px">${priceOrBasis(id, last, chg)}</span></span>
-        ${demand}${spoils(p, id) ? `<span class="mtag warn">⌛ ${spoils(p, id)} go off tonight: sell or use them</span>` : ""}</button>`;
-    };
-    const buyCard = id => {
-      const ask = G.bestAsk(vw, id), { s, last, chg } = lastBits(id), makers = makersOf(p, id);
-      const need = Math.max(0, (want[id] || 0) - (hold[id] || 0)), bidding = myOrders.filter(o => o.side === "buy" && o.good === id).reduce((x, o) => x + o.qty, 0);
-      const why = [(vw.contracts || []).some(k => !k.takers.length && k.goods[id]) ? "contract" : "", needsOf(p)[id] ? "factory input" : ""].filter(Boolean).join(" + ");
-      const supply = (ask ? `<span class="mtag good">Ask ${m(ask.price)} ×${ask.qty}</span>`
-        : makers.length ? `<span class="mtag">Nobody selling · ${names(makers)} make${makers.length === 1 ? "s" : ""} it</span>`
-        : `<span class="mtag warn">⚠ Nobody makes it yet</span>`);
-      return `<button class="mcard${id === sel ? " sel" : ""}${fresh.has(id) ? " flash" : ""}" data-good="${id}">
-        <span class="mc-top"><b>${G.COM[id].name}</b><span class="mc-qty">${need ? `need ${need}` : "✓"}${bidding ? ` <small>bidding ${bidding}</small>` : ""}</span></span>
-        <span class="mc-where">${why || "you're bidding"}${hold[id] ? ` · have ${hold[id]}` : ""}</span>
-        <span class="mc-mid">${spark(s)}<span class="mc-px">${priceOrBasis(id, last, chg)}</span></span>
-        ${supply}</button>`;
-    };
     const movers = Object.entries(moved).sort((a, b) => b[1] - a[1]);
     // The full list: goods in play by default (contract goods, what they're made from, building materials,
     // and anything someone holds or has orders for); the other goods behind a toggle
@@ -647,7 +601,7 @@
     return `
       ${fold("stats", "msec", `<h3>Market summary <span class="muted small">last auction, your orders, what's trading</span></h3>`, `<div class="mstats">
         <div><span>Last auction</span><b>${last ? `${Object.keys(last.trades).length} good${Object.keys(last.trades).length === 1 ? "" : "s"}` : "–"}</b><small>${last ? `${Object.values(last.trades).reduce((s, t) => s + t.qty, 0)} units · round ${last.round} ${last.phase}` : "no auctions yet"}</small></div>
-        <div><span>Goods with orders</span><b>${live}</b><small>of 50 on the book</small></div>
+        <div><span>Goods with orders</span><b>${live}</b><small>of ${COMMODITIES.length} on the book</small></div>
         <div><span>Your orders</span><b>${myOrders.length}</b><small>${G.lockedCash(vw, p) ? `${m(G.lockedCash(vw, p))} cash locked` : "nothing locked"}</small></div>
       </div>
       <p class="muted small">One sealed auction tonight: each good trades at a single price, where the most units change hands. Orders stay until they fill or you cancel.</p>
@@ -659,11 +613,6 @@
               <td class="n">${q.bid != null ? m(q.bid) : "–"} / ${q.ask != null ? m(q.ask) : "–"}</td></tr>`; }).join("")}
         </tbody></table>` : `<p class="muted">Nothing has traded yet. The first trades set the first prices.</p>`}`)}
       ${quoteBoard(fresh, sel ? ticket(p, sel, want) : "")}
-      ${opportunities(p)}
-      ${fold("sell", "msec", `<h3>Sell what you make <span class="muted small">${sellIds.length || "nothing"} spare</span></h3>`,
-        sellIds.length ? `<div class="mgrid">${sellIds.map(sellCard).join("")}</div>` : `<p class="muted">Nothing spare right now.</p>`)}
-      ${fold("buy", "msec", `<h3>Buy what you need <span class="muted small">${buyIds.length ? `${buyIds.length} good${buyIds.length === 1 ? "" : "s"} · ` : ""}for your contracts and factories</span></h3>`,
-        buyIds.length ? `<div class="mgrid">${buyIds.map(buyCard).join("")}</div>` : `<p class="muted">You have everything your contracts and factories need.</p>`)}
       <details class="msec mall" ${ui.allOpen ? "open" : ""}><summary><h3>${ui.allGoods ? `All ${COMMODITIES.length} goods` : `Goods in play (${inPlay.size})`}</h3></summary>
         <div class="grow"><input class="gsearch" id="gSearch" placeholder="Search" value="${esc(ui.search)}">
           <button class="glink blink" id="gAllGoods">${ui.allGoods ? "Show only goods in play" : `Show the other ${hidden} goods`}</button></div>
