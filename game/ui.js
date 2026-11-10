@@ -263,6 +263,7 @@
     flashMsg = "";
     drawMap(p);
     wire(p);
+    placeOpen();
     keepPlace();
   }
 
@@ -439,12 +440,12 @@
 
   function quoteBoard(fresh, open = "") {
     const d = boardData();
-    const openHTML = id => `<div class="qopen" data-open="${id}">${open}</div>`;
-    if (!d.goods.length) return `<section class="msec"><h3>Quote board</h3>${open ? `<div class="qgrid">${openHTML(ui.good)}</div>` : `<p class="muted">No orders or trades yet. Cards appear here as goods get bids and asks.</p>`}</section>`;
+    // An open good lies over the cards, covering a block of 6 around its own (placed by placeOpen)
+    const openHTML = id => `<div class="qopen" data-open="${id}" style="visibility:hidden">${open}</div>`;
     const k = d.frames.length - 1;
     ui.board = d; // the replay reads this
-    const cards = d.goods.map(id => id === ui.good && open ? openHTML(id) : cardHTML(id, d, k, fresh.has(id)));
-    if (open && !d.goods.includes(ui.good)) cards.unshift(openHTML(ui.good)); // a good with no card yet: open at the top
+    const cards = d.goods.map(id => cardHTML(id, d, k, fresh.has(id)));
+    if (open) cards.push(openHTML(ui.good));
     return `<section class="msec qboard">
       <div class="qhead"><h3>Quote board <span class="muted small">each good's book: asks right, bids left, the dot is the last trade</span></h3>
         <button class="gbtn ghost" id="qOpen" ${ui.qOpen ? "hidden" : ""}>▶ Replay</button></div>
@@ -1029,6 +1030,36 @@
   // ----- Opening a good: its quote card grows into the big card, and shrinks back when closed -----
   const pageRect = el => { const r = el.getBoundingClientRect(); return { x: r.left + scrollX, y: r.top + scrollY, w: r.width, h: r.height }; };
   // A plain box shaped like a card glides from `from` to where `to` now sits, then `to` fades in
+  // Lay the open good over a block of 6 cards around its own: 3 wide and 2 high (2 × 3 when the board is
+  // only 2 cards wide), kept inside the board. It's always exactly that size; what doesn't fit scrolls inside.
+  function placeOpen() {
+    const grid = root.querySelector("#qGrid"), box = grid?.querySelector(".qopen");
+    if (!box) return;
+    const cards = [...grid.querySelectorAll(".qcard")];
+    const card = cards.find(c => c.dataset.good === box.dataset.open) || cards[0];
+    if (!card) { box.style.visibility = ""; return; }
+    const tops = [...new Set(cards.map(c => c.offsetTop))].sort((a, b) => a - b);
+    const cols = cards.filter(c => c.offsetTop === tops[0]).length, rows = tops.length;
+    const w = Math.min(cols, cols >= 3 ? 3 : 2), h = Math.min(rows, cols >= 3 ? 2 : 3);
+    const i = cards.indexOf(card), r = Math.floor(i / cols), c = i % cols;
+    // Of the blocks that contain the card, the one covering the most cards (the last row may be short);
+    // then the one with the card nearest its top middle
+    const real = (rr, cc) => rr * cols + cc < cards.length;
+    let r0 = 0, c0 = 0, bestScore = -Infinity;
+    for (let rr = Math.max(0, r - h + 1); rr <= Math.min(r, rows - h); rr++)
+      for (let cc = Math.max(0, c - w + 1); cc <= Math.min(c, cols - w); cc++) {
+        let n = 0; for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) n += real(rr + y, cc + x);
+        const score = n * 10 - (r - rr) - Math.abs(c - cc - (w - 1) / 2);
+        if (score > bestScore) { bestScore = score; r0 = rr; c0 = cc; }
+      }
+    // Where each column and row is (the last row may be short, so columns come from the first row)
+    const colAt = cc => cards[cc], rowAt = rr => cards.find(x => x.offsetTop === tops[rr]);
+    const left = colAt(c0).offsetLeft, right = colAt(c0 + w - 1).offsetLeft + colAt(c0 + w - 1).offsetWidth;
+    const top = rowAt(r0).offsetTop, bottom = rowAt(r0 + h - 1).offsetTop + rowAt(r0 + h - 1).offsetHeight;
+    Object.assign(box.style, { left: `${left}px`, top: `${top}px`, width: `${right - left}px`, height: `${bottom - top}px`, visibility: "" });
+  }
+  addEventListener("resize", () => placeOpen());
+
   function morph(from, to) {
     if (!to) return;
     const after = () => { if (to.getBoundingClientRect().bottom > innerHeight || to.getBoundingClientRect().top < 0) to.scrollIntoView({ block: "nearest", behavior: "smooth" }); };

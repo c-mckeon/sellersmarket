@@ -516,7 +516,7 @@ svg.spark .spark-none { stroke: var(--line); stroke-width: 1.5; stroke-dasharray
 .qctl { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 8px; }
 .qctl input[type=range] { flex: 1; min-width: 140px; accent-color: var(--accent); }
 .qctl .gbtn { padding: 5px 12px; min-width: 96px; }
-.qgrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(92px, 1fr)); gap: 6px; }
+.qgrid { position: relative; display: grid; grid-template-columns: repeat(auto-fill, minmax(92px, 1fr)); gap: 6px; }
 .qcard { all: unset; box-sizing: border-box; cursor: pointer; display: grid; gap: 4px; padding: 6px 7px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); }
 .qcard:hover { border-color: var(--ink); }
 .qcard:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
@@ -703,8 +703,6 @@ details.gnews[open] { display: grid; }
 .qc-svg .tline { stroke: var(--ink); stroke-width: 1.2; stroke-dasharray: 2 2; }
 .qc-svg .ldot { fill: var(--accent); stroke: var(--surface); stroke-width: 1.5; }
 /* An open good sits in the board, across the whole row */
-.qopen { grid-column: 1 / -1; }
-.qopen .gticket { margin: 2px 0; }
 .qflip { position: absolute; z-index: 50; pointer-events: none; box-sizing: border-box; border: 1px solid var(--accent); border-radius: 10px; background: var(--bg); }
 .qflip.go { transition: left .32s cubic-bezier(.2, .7, .2, 1), top .32s cubic-bezier(.2, .7, .2, 1), width .32s cubic-bezier(.2, .7, .2, 1), height .32s cubic-bezier(.2, .7, .2, 1); }
 
@@ -766,3 +764,13 @@ details.gnews[open] { display: grid; }
 .dcon { display: grid; grid-template-columns: 1fr auto auto; gap: 2px 8px; align-items: center; font-size: 13px; padding: 4px 0; border-bottom: 1px solid var(--line); }
 .dcon .kc-make { grid-column: 1 / -1; justify-self: end; }
 .dcon.ok span:first-child { color: var(--raw); font-weight: 700; }
+
+/* An open good: laid over a block of 6 cards, always that size; its insides scroll */
+.qopen { position: absolute; z-index: 5; box-shadow: 0 10px 28px rgba(0,0,0,.28); border-radius: 10px; }
+.qopen .gticket { margin: 0; height: 100%; box-sizing: border-box; overflow: auto; overscroll-behavior: contain; }
+.qopen .tcharts, .qopen .gtwo { grid-template-columns: 1fr; }
+.qopen .tfacts div { padding: 2px 6px; }
+.qopen .ghead { position: sticky; top: -8px; background: var(--bg); z-index: 1; padding-top: 2px; }
+.qopen .depthbox svg { max-height: 230px; width: auto; max-width: 100%; margin: 0 auto; }
+.qopen .pchart svg { max-height: 130px; }
+@media (min-width: 900px) { .qopen .tcharts { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); } }
