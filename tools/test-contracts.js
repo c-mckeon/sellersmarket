@@ -13,7 +13,7 @@ const all = (st, orders) => st.players.forEach(p => G.submit(st, p.id, orders[p.
 
 { // The board is full, and bids are checked
   const st = fresh(), k = st.contracts[0];
-  eq("board has the set number", st.contracts.length, C.open);
+  eq("the board starts with the set number", st.contracts.length, C.start);
   eq("bid over the cap refused", G.act(G.draft(st, 1, []).state, 1, "bid", { contract: k.id, amount: k.cap + 1 }).ok, false);
   const d = G.draft(st, 1, [{ name: "bid", args: { contract: k.id, amount: 50 } }]).state;
   eq("a higher bid than your own refused", G.act(d, 1, "bid", { contract: k.id, amount: 60 }).ok, false);
@@ -26,7 +26,7 @@ const all = (st, orders) => st.players.forEach(p => G.submit(st, p.id, orders[p.
   eq("the lowest bid is public after the night", G.lowestBid(st.contracts.find(x => x.id === id)).amount, 60);
   for (let r = 1; r < C.bidRounds; r++) all(st, {});
   eq("gone from the board", st.contracts.some(x => x.id === id), false);
-  eq("board refilled", st.contracts.length, C.open);
+  eq("new contracts arrive, within the limits", st.contracts.length >= 0 && st.contracts.length <= C.open, true);
   const won = G.player(st, 2).contracts.find(x => x.id === id);
   eq("P2 won it at its bid", won && won.price, 60);
   eq("P1 didn't", G.player(st, 1).contracts.length, 0);

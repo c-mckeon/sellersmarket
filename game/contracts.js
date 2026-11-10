@@ -1,6 +1,7 @@
 // Sellers Market game engine: contracts, the way to earn money. Most money at the end wins.
 //
-// There are always settings.contracts.open contracts on the board, the same for everyone:
+// Contracts arrive on a board, the same for everyone: settings.contracts.start at first, then 0 to 2 new ones
+// a night (settings.contracts.perRound), up to settings.contracts.open at once. Each says:
 // "deliver these goods". Players bid what they'd want to be paid for it; bids are sealed until the
 // night, when the lowest bid so far is shown (not who made it).
 //   bid       { contract, amount }   any time you order; a new bid must be lower than your last one
@@ -123,7 +124,10 @@
       (st.stats.winning ||= []).push({ price: win.amount, cap: k.cap, bids: k.bids.length, goods: k.goods, round: st.round }); // for the simulator
       G.log(st, `${p.name} won ${item.icon} ${item.name} for ${G.money(win.amount)} (${k.bids.length} bid${k.bids.length === 1 ? "" : "s"})`);
     });
-    while (st.contracts.length < C.open) st.contracts.push(G.newContract(st));
+    // New contracts: a few at the start, then 0 to 2 a night, up to the most the board holds
+    const [lo, hi] = C.perRound || [1, 1];
+    const n = st.round === 1 && st.phase !== "night" ? C.start ?? C.open : lo + Math.floor(G.rand(st) * (hi - lo + 1));
+    for (let i = 0; i < n && st.contracts.length < C.open; i++) st.contracts.push(G.newContract(st));
   };
   G.onSetup.push(night);
   G.refillContracts = night;

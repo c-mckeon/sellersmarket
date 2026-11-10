@@ -88,7 +88,7 @@
       <section>
         <h2>Contracts and money</h2>
         <ul>
-          <li>There are always <b><span data-s="contracts.open"></span> contracts</b> on the board. Each asks for 1 to 4 different goods, a few of each, so some are simple and some complex.</li>
+          <li>Contracts arrive on a board everyone sees: <span data-s="contracts.start"></span> at the start, then <b><span data-s="perRound"></span> new ones each night</b>, up to <span data-s="contracts.open"></span> at once. Each asks for 1 to 4 different goods, a few of each, so some are simple and some complex.</li>
           <li><b>Bid</b> what you'd want to be paid for one. Bids are sealed until the night, when the lowest bid so far is shown (never who made it); a new bid of yours must be lower than your last. The client pays at most a cap, shown on the board: raw materials in it × <span data-s="contracts.capPerRawUnit"></span> × (1 + <span data-s="contracts.tierBonus" data-f="pct"></span> for each processing step).</li>
           <li>After <b><span data-s="contracts.bidRounds"></span> rounds</b> the lowest bid wins (a tie: the earlier bid). You can hold <span data-s="contracts.maxHeld"></span> contracts at once; if you're full, the next lowest bidder gets it. No bids: it's replaced.</li>
           <li>The winner has <b><span data-s="contracts.deliverRounds"></span> rounds</b> to deliver it, from their stockpile (goods in sell orders don't count), and is paid their bid. Miss the deadline and you pay <b>legal fees</b>: <span data-s="failFee"></span>.</li>

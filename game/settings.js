@@ -29,7 +29,9 @@ const GAME_SETTINGS = {
 
   // ---------- Contracts (game/contracts.js) ----------
   contracts: {
-    open: 6,               // contracts on the board at all times, open for bids
+    start: 3,              // contracts on the board when the game starts…
+    perRound: [0, 2],      // …then this many new ones each night (fewest, most; random)…
+    open: 6,               // …up to this many on the board at once
     bidRounds: 3,          // bidding stays open this many rounds; then the lowest bid wins
     deliverRounds: 5,      // the winner has this many rounds to deliver
     maxHeld: 3,            // contracts a player can hold at once
