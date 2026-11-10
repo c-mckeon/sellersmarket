@@ -167,8 +167,8 @@
     if (o.name === "placeOrder") return `${a.side === "buy" ? "Bid for" : "Offer"} ${a.qty} ${G.COM[a.id].name} at ${m(+a.price)} <em>${m(a.qty * a.price)}</em>`;
     if (o.name === "sellBusiness") { const b = st.businesses.find(x => x.id === a.biz); return b ? `Sell your ${G.BIZ_BY[b.type].name.toLowerCase()} in ${G.TERR[b.territory].name} for ${m(G.BIZ_BY[b.type].cost)}` : "Sell a business"; }
     if (o.name === "cancelOrder") { const x = st.book.find(y => y.id === a.order); return x ? `Cancel ${x.side === "buy" ? "bid for" : "offer of"} ${x.qty} ${G.COM[x.good].name} at ${m(x.price)}` : "Cancel an order"; }
-    if (o.name === "bid") { const k = (st.contracts || []).find(x => x.id === a.contract); return `Bid ${m(a.amount)} for ${k ? `the ${esc(G.contractItem(k).name.toLowerCase())} ${G.contractItem(k).icon}` : "a contract"}`; }
-    if (o.name === "deliver") { const k = (G.player(st, ui.seat).contracts || []).find(x => x.id === a.contract); if (!k) return "Deliver a contract"; const it = G.contractItem(k); return `Deliver ${it.icon} ${esc(it.name.toLowerCase())} for ${m(k.price)}`; }
+    if (o.name === "bid") { const k = (st.contracts || []).find(x => x.id === a.contract); return `Bid ${m(a.amount)} for ${k ? `${G.contractItem(k).icon} ${esc(G.contractItem(k).name)}` : "a contract"}`; }
+    if (o.name === "deliver") { const k = (G.player(st, ui.seat).contracts || []).find(x => x.id === a.contract); if (!k) return "Deliver a contract"; const it = G.contractItem(k); return `Deliver ${it.icon} ${esc(it.name)} for ${m(k.price)}`; }
     if (o.name === "dump") return `Throw away ${a.qty} ${G.COM[a.id].name}`;
     if (o.name === "move") return `Move to ${G.TERR[a.to].name}`;
     if (o.name === "build") return `Build a ${G.BIZ_BY[a.type].name.toLowerCase()}`;
@@ -309,7 +309,7 @@
   const usersOf = (p, id) => others(p).filter(x => vw.businesses.some(b => b.owner === x.id && usesGood(G.BIZ_BY[b.type], id)));
   // Demand: how many open contracts ask for a good
   const wanted = (p, id) => G.demand(vw, id);
-  const contractGood = id => S.contracts.goods.includes(id) || (S.contracts.rawShare > 0 && G.contractRaws().includes(id));
+  const contractGood = id => PROJECTS.some(([, , goods]) => goods.includes(id));
   const names = list => list.map(x => esc(x.name)).join(", ");
 
   // Every trade of a good, oldest first: [{ round, phase, price, qty }]

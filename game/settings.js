@@ -34,18 +34,11 @@ const GAME_SETTINGS = {
     deliverRounds: 5,      // the winner has this many rounds to deliver
     maxHeld: 3,            // contracts a player can hold at once
     failFee: { base: 50, share: 0.5 }, // not delivered in time: legal fees of base + share × the winning bid
-    goodsPerContract: [1, 4], // fewest and most different goods a contract asks for…
+    goodsPerContract: [1, 4], // fewest and most different goods a contract asks for (jobs: js/projects.js)…
     unitsPerGood: [2, 4],  // …and how many of each
     capPerRawUnit: 40,     // the most the client pays: this much per raw-material unit in it (see G.rawUnits)…
     tierBonus: 0.25,       // …+ this share for each processing step (raw 0, lumber 1, steel 2…)
-    // The goods that contracts ask for: 9 made goods from 6 regional raw materials, plus wheat and water
-    // from anywhere. (Concrete is left out: it's a building material.) Waste and raw goods never go in
-    // this list (rawShare and raws below cover raw ones).
-    rawShare: 0.5,         // chance that each good on a contract is a raw one (wood, clay, coal…) instead: raw goods come
-                           // from one faraway region, so these usually have to be bought from whoever mines them
-    goods: ["flour", "lumber", "glass", "ceramic", "iron",   // level 1
-            "bread", "paper", "cement", "steel"],          // level 2
-    // The raw materials contracts can ask for (and that spread-out starts hand out: G.spreadStarts)
+    // The raw materials that spread-out starts hand out, one region's each (G.spreadStarts)
     raws: ["wood", "sand", "clay", "limestone", "coal", "iron_ore"],
   },
 

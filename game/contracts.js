@@ -10,8 +10,8 @@
 // The winner has settings.contracts.deliverRounds rounds to deliver. If they don't, they pay legal fees:
 // failFee.base + failFee.share × their bid, and the contract is gone.
 //
-// A contract asks for 1 to 4 goods, a few of each, so some are simple and some complex: bidding sets
-// what each is worth. The client pays at most a cap (shown on the board), from what's in it:
+// A contract is for a real job (js/projects.js) and asks for its goods, a few of each: some are simple,
+// some complex, and bidding sets what each is worth. The client pays at most a cap (shown on the board), from what's in it:
 //   cap = raw-material units × capPerRawUnit × (1 + tierBonus × average processing steps)
 
 (() => {
@@ -48,8 +48,6 @@
   };
   // Where each raw material can be produced
   const sourcesOf = G.sourcesOf;
-  // Goods that can't be made at all on this map (a raw material with no source) never appear
-  G.contractGoods = () => C.goods.filter(id => G.rawsOf(id).every(raw => { const s = sourcesOf(raw); return s.length; }));
 
   // Raw goods a contract can ask for: any with a source on the map (only settings.contracts.raws, if set)
   G.contractRaws = () => COMMODITIES.filter(c => c.type === "raw" && sourcesOf(c.id).length && (!C.raws || C.raws.includes(c.id))).map(c => c.id);
@@ -75,27 +73,23 @@
     return picks.map(({ start, business }) => ({ start, business }));
   };
 
+  // The jobs that can be done on this map (every good has a source), by how many goods they ask for
+  const doable = () => PROJECTS.filter(([, , goods]) => goods.every(id => G.rawsOf(id).every(raw => sourcesOf(raw).length)));
   G.newContract = st => {
-    // Goods already on the board are less likely, so the contracts ask for different things
-    const onBoard = new Set((st.contracts || []).flatMap(k => Object.keys(k.goods)));
-    const weight = id => onBoard.has(id) ? 0.3 : 1;
-    let pool = G.contractGoods(), raws = C.rawShare ? G.contractRaws() : [];
-    const [lo, hi] = C.goodsPerContract, [qlo, qhi] = C.unitsPerGood;
+    // How many different goods: from settings.contracts.goodsPerContract, then a job with that many
+    // (a job already on the board is much less likely, so the board has variety)
+    const [lo, hi] = C.goodsPerContract, [qlo, qhi] = C.unitsPerGood, jobs = doable();
     const n = lo + Math.floor(G.rand(st) * (hi - lo + 1));
-    const goods = {};
-    for (let i = 0; i < n && pool.length; i++) {
-      // Each good on the contract is a raw one with chance settings.contracts.rawShare
-      const from = raws.length && G.rand(st) < C.rawShare ? raws : pool;
-      const total = from.reduce((s, id) => s + weight(id), 0);
-      let r = G.rand(st) * total, pick = from[0];
-      for (const id of from) { r -= weight(id); if (r <= 0) { pick = id; break; } }
-      goods[pick] = qlo + Math.floor(G.rand(st) * (qhi - qlo + 1));
-      pool = pool.filter(x => x !== pick); raws = raws.filter(x => x !== pick);
-    }
-    const ids = Object.keys(goods);
-    const raw = ids.reduce((s, id) => s + goods[id] * G.rawUnits(id), 0), avgT = ids.reduce((s, id) => s + G.tier(id), 0) / ids.length;
+    const onBoard = new Set((st.contracts || []).map(k => k.name));
+    const pool = jobs.filter(j => j[2].length === n).length ? jobs.filter(j => j[2].length === n) : jobs;
+    const weight = j => onBoard.has(j[0]) ? 0.1 : 1, total = pool.reduce((s, j) => s + weight(j), 0);
+    let r = G.rand(st) * total, job = pool[0];
+    for (const j of pool) { r -= weight(j); if (r <= 0) { job = j; break; } }
+    const [name, icon, list] = job, goods = {};
+    list.forEach(id => goods[id] = qlo + Math.floor(G.rand(st) * (qhi - qlo + 1)));
+    const raw = list.reduce((s, id) => s + goods[id] * G.rawUnits(id), 0), avgT = list.reduce((s, id) => s + G.tier(id), 0) / list.length;
     st.nextContractId = (st.nextContractId || 0) + 1;
-    return { id: st.nextContractId, goods, cap: Math.max(10, Math.round(raw * C.capPerRawUnit * (1 + (C.tierBonus || 0) * avgT))), drawn: st.round, bids: [] };
+    return { id: st.nextContractId, name, icon, goods, cap: Math.max(10, Math.round(raw * C.capPerRawUnit * (1 + (C.tierBonus || 0) * avgT))), drawn: st.round, bids: [] };
   };
 
   // The lowest bid on a board contract so far (public once the night has passed), or null
@@ -114,7 +108,7 @@
       p.cash -= fee; p.failed = (p.failed || 0) + 1; p.fees = (p.fees || 0) + fee;
       st.stats.failed = (st.stats.failed || 0) + 1;
       p.contracts = p.contracts.filter(x => x !== k);
-      G.log(st, `didn't deliver the ${item.name.toLowerCase()} ${item.icon} in time: paid ${G.money(fee)} in legal fees`, p.id);
+      G.log(st, `didn't deliver ${item.icon} ${item.name} in time: paid ${G.money(fee)} in legal fees`, p.id);
     }));
     // Bidding closed: the lowest bid from someone with room wins (a tie: the earlier bid); no bids, it's replaced
     st.contracts.filter(k => G.bidRoundsLeft(st, k) <= 1).forEach(k => {
@@ -122,51 +116,20 @@
       const order = [...k.bids].sort((a, b) => a.amount - b.amount || a.round - b.round || a.seq - b.seq);
       const win = order.find(b => (G.player(st, b.pid).contracts || []).length < C.maxHeld);
       st.contracts = st.contracts.filter(x => x !== k);
-      if (!win) { G.log(st, `Nobody ${k.bids.length ? "with room " : ""}bid for the ${item.name.toLowerCase()} ${item.icon}: it's off the board.`); return; }
+      if (!win) { G.log(st, `Nobody ${k.bids.length ? "with room " : ""}bid for ${item.icon} ${item.name}: it's off the board.`); return; }
       const p = G.player(st, win.pid);
-      (p.contracts ||= []).push({ id: k.id, goods: k.goods, cap: k.cap, price: win.amount, won: st.round, due: st.round + C.deliverRounds });
+      (p.contracts ||= []).push({ id: k.id, name: k.name, icon: k.icon, goods: k.goods, cap: k.cap, price: win.amount, won: st.round, due: st.round + C.deliverRounds });
       st.stats.won = (st.stats.won || 0) + 1;
       (st.stats.winning ||= []).push({ price: win.amount, cap: k.cap, bids: k.bids.length, goods: k.goods, round: st.round }); // for the simulator
-      G.log(st, `${p.name} won the ${item.name.toLowerCase()} ${item.icon} for ${G.money(win.amount)} (${k.bids.length} bid${k.bids.length === 1 ? "" : "s"})`);
+      G.log(st, `${p.name} won ${item.icon} ${item.name} for ${G.money(win.amount)} (${k.bids.length} bid${k.bids.length === 1 ? "" : "s"})`);
     });
     while (st.contracts.length < C.open) st.contracts.push(G.newContract(st));
   };
   G.onSetup.push(night);
   G.refillContracts = night;
 
-  // What a contract makes: a name and emoji for the thing its goods could build. Cosmetic only: the main
-  // good (most processed, then biggest) picks the thing, the next one says what it's made of, and the
-  // contract's id picks among the options, so a contract always keeps its name.
-  const ITEMS = {
-    steel:     ["Steel",       [["bridge", "🌉"], ["locomotive", "🚂"], ["steamship", "🚢"], ["crane", "🏗️"]]],
-    iron:      ["Cast-iron",   [["stove", "🔥"], ["anvil", "⚒️"], ["railway", "🛤️"], ["bell", "🔔"]]],
-    cement:    ["Concrete",    [["dam", "🌊"], ["lighthouse", "🗼"], ["harbour wall", "⚓"], ["stadium", "🏟️"]]],
-    paper:     ["Paper",       [["atlas", "🗺️"], ["newspaper", "📰"], ["kite", "🪁"], ["library", "📚"]]],
-    bread:     ["Harvest",     [["banquet", "🍽️"], ["bakery", "🥖"], ["picnic", "🧺"]]],
-    glass:     ["Glass",       [["greenhouse", "🪴"], ["lantern", "🏮"], ["telescope", "🔭"], ["chandelier", "💡"]]],
-    ceramic:   ["Porcelain",   [["tea set", "🫖"], ["vase", "🏺"], ["bathhouse", "🛁"]]],
-    lumber:    ["Timber",      [["barn", "🛖"], ["sailing ship", "⛵"], ["cabin", "🏡"], ["windmill", "🌬️"]]],
-    flour:     ["Baker's",     [["cake", "🎂"], ["pastry shop", "🥐"], ["noodle bar", "🍜"]]],
-    wood:      ["Wooden",      [["rowing boat", "🛶"], ["toy box", "🧸"], ["cart", "🛒"]]],
-    sand:      ["Sand-cast",   [["hourglass", "⏳"], ["sandcastle", "🏰"]]],
-    clay:      ["Terracotta",  [["brick oven", "🧱"], ["pottery", "🏺"]]],
-    limestone: ["Limestone",   [["cathedral", "⛪"], ["monument", "🗿"]]],
-    coal:      ["Coal-fired",  [["forge", "🔥"], ["steam engine", "🚂"]]],
-    iron_ore:  ["Ironstone",   [["foundry", "🏭"], ["mine cart", "⛏️"]]],
-    wheat:     ["Wheat",       [["haystack", "🌾"], ["granary", "🏚️"]]],
-    water:     ["Spring",      [["fountain", "⛲"], ["well", "🪣"]]],
-  };
-  const FOOD = new Set(["flour", "bread", "wheat"]);
-  G.contractItem = k => {
-    // Food only names the thing when the contract is all food (no "baker's lighthouse")
-    const keys = Object.keys(k.goods), solid = keys.filter(c => !FOOD.has(c));
-    const ids = (solid.length ? solid : keys).sort((a, b) => G.tier(b) - G.tier(a) || k.goods[b] * G.rawUnits(b) - k.goods[a] * G.rawUnits(a) || a.localeCompare(b));
-    const main = ITEMS[ids[0]], things = main ? main[1] : [["works", "📦"]];
-    const [thing, icon] = things[k.id % things.length];
-    const by = ids.slice(1).map(c => ITEMS[c]?.[0]).find(Boolean); // what it is made of, from the other goods
-    const name = by ? `${by} ${thing}` : thing;
-    return { name: name[0].toUpperCase() + name.slice(1), icon };
-  };
+  // What a contract is for: its job's name and icon (js/projects.js)
+  G.contractItem = k => ({ name: k.name || "Order", icon: k.icon || "📦" });
 
   const open = st => G.need(st.phase === "day", "Not right now.");
   G.canDeliver = (st, p, k) => Object.entries(k.goods).every(([c, q]) => G.have(st, p, c) >= q);
@@ -200,6 +163,6 @@
     { const d = (st.stats.deliveredGoods ||= {})[p.id] ||= {}; Object.entries(k.goods).forEach(([c, q]) => d[c] = (d[c] || 0) + q); } // for the simulator
     const item = G.contractItem(k);
     (p.made ||= []).push({ ...item, price: k.price, round: st.round }); // the shelf of things you've made (display only)
-    return `delivered the ${item.name.toLowerCase()} ${item.icon} and was paid ${G.money(k.price)}`;
+    return `delivered ${item.icon} ${item.name} and was paid ${G.money(k.price)}`;
   };
 })();

@@ -8,9 +8,8 @@
   const list = a => a.length < 2 ? a.join("") : `${a.slice(0, -1).join(", ")} and ${a.at(-1)}`;
   const special = {
     startGoods: () => list(Object.entries(S.startGoods).map(([c, q]) => `${q} ${name(c)}`)),
-    contractGoods: () => list(S.contracts.goods.map(name)),
+    projects: () => list(PROJECTS.map(([n, , g]) => `${n.toLowerCase()} (${g.map(name).join(", ")})`)),
     failFee: () => { const f = S.contracts.failFee; return [f.base ? `${f.base}` : "", f.share ? `${Math.round(f.share * 100)}% of your bid` : ""].filter(Boolean).join(" + ") || "nothing"; },
-    contractRaws: () => list((S.contracts.raws || G.contractRaws()).map(name)),
     substitutes: () => list((S.substitutes || []).slice(0, 4).map(r => `${r.ratio} ${name(r.use)} for 1 ${name(r.for)}`)) + " (and more)",
     lifetimes: () => { if (!S.depreciation?.on) return "goods never go off (switched off)";
       const d = S.depreciation, life = id => d.goods?.[id] ?? d.byType?.[G.COM[id].type] ?? d.life ?? 0;
