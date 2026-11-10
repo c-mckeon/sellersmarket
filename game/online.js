@@ -17,7 +17,7 @@
 const NET = (() => {
   const mock = /[?&]mock\b/.test(location.search);
   const ready = !!(typeof FIREBASE_CONFIG !== "undefined" && FIREBASE_CONFIG?.databaseURL) || mock;
-  const ROOT = "sellersmarket";
+  const ROOT = /[?&]testroot\b/.test(location.search) ? "sellersmarket-test" : "sellersmarket"; // ?testroot: a scratch area for testing
   const USER_KEY = "sellersmarket-user";
 
   // ----- A tiny database interface, the same for Firebase and the stand-in -----
