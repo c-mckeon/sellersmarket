@@ -16,6 +16,10 @@ const r = E.run(`(() => {
   G.submit(st, 2, [{ name: "build", args: { type: "kiln" } }]);
   G.submit(st, 3, [{ name: "build", args: { type: "kiln" } }]);
   out.push("kilns in Warsaw: " + st.businesses.filter(b => b.territory === "warsaw" && b.type === "kiln").length + ", cash " + st.players.map(p => p.cash).join("/"));
+  // Building costs cash: not enough free cash, no business
+  st.players[0].cash = 50;
+  out.push("build with 50 cash: " + JSON.stringify(G.submit(st, 1, [{ name: "build", args: { type: "farm" } }])));
+  st.players[0].cash = 1000;
   // Only the businesses a territory allows
   out.push("steelworks in Warsaw: " + JSON.stringify(G.submit(st, 2, [{ name: "build", args: { type: "steelworks" } }])));
   // One move or build a round

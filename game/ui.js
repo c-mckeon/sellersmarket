@@ -46,7 +46,7 @@
     if (watching) return render();
     watching = true;
     root.innerHTML = `<div class="gsetup"><p class="muted">Loading the game…</p></div>`;
-    NET.watch(next => {
+    Promise.resolve(NET.watch(next => {
       if (ui.offline) return;
       const before = st;
       st = next; loaded = true;
@@ -54,6 +54,12 @@
       if (!before || !st || before.round !== st.round || before.seed !== st.seed) { ui.orders = []; ui.card = null; }
       render();
       if (before && st && st.seed === before.seed && st.round > before.round && !st.over) nightfall(st.round);
+    })).catch(e => {
+      watching = false;
+      root.innerHTML = `<div class="gsetup"><h1>Can't reach the game</h1><p class="bad">${esc(e.message)}</p><p class="muted">Check your internet connection and try again.</p>
+        <div class="grow"><button class="gbtn" id="gRetry">Try again</button><button class="glink" id="gOffline2">Play on this device instead</button></div></div>`;
+      root.querySelector("#gRetry").addEventListener("click", () => location.reload());
+      root.querySelector("#gOffline2").addEventListener("click", goOffline);
     });
   }
   function goOffline() { ui.offline = true; const s0 = load(); st = s0 && s0.version === 7 && !s0.over ? s0 : null; render(); }
@@ -944,7 +950,7 @@
     </div>`;
   }
 
-  // ----- Move or build (one of them a round; building is free) -----
+  // ----- Move or build (one of them a round; building costs cash) -----
   const ioText = b => b.kind === "extract" ? `makes ${b.outputs[b.makes]} ${G.COM[b.makes].name}`
     : `${Object.entries(b.inputs).map(([c, q]) => `${q} ${G.COM[c].name}`).join(" + ")} → ${Object.entries(b.outputs).map(([c, q]) => `${q} ${G.COM[c].name}`).join(" + ")}`;
   function buildPanel(p) {
@@ -955,10 +961,11 @@
       <div class="ghead"><h3>${G.TERR[here].name}</h3><span class="muted">${G.isSea(here) ? "Sea" : G.coastal(here) ? "Coastal" : "Inland"} · one move or one build a round</span></div>
       <h4 class="gsub">${p.acted ? "Done for this round ✓" : "Move <span class=\"muted\">(or click the map)</span>"}</h4>
       <div class="gmoves">${G.neighbours(here).map(t => `<button data-move="${t}" ${p.acted ? "disabled" : ""}>${G.TERR[t].name}</button>`).join("")}</div>
-      <h4 class="gsub">…or build here <span class="muted">(free)</span></h4>
-      ${opts.length ? `<table class="gmkt"><thead><tr><th>Business</th><th>Each round</th><th></th></tr></thead><tbody>
+      <h4 class="gsub">…or build here <span class="muted">(you have ${m(p.cash)} free)</span></h4>
+      ${opts.length ? `<table class="gmkt"><thead><tr><th>Business</th><th>Each round</th><th class="n">Cost</th><th></th></tr></thead><tbody>
         ${opts.map(b => `<tr><td>${b.name}</td><td class="muted small">${ioText(b)}</td>
-          <td class="acts"><button data-build="${b.id}" ${p.acted ? "disabled" : ""} title="${done || "Build it"}">Build</button></td></tr>`).join("")}
+          <td class="n">${m(b.cost)}</td>
+          <td class="acts"><button data-build="${b.id}" ${p.acted || p.cash < b.cost ? "disabled" : ""} title="${done || (p.cash < b.cost ? "Not enough free cash (cash in buy orders doesn't count)" : "Build it")}">Build</button></td></tr>`).join("")}
       </tbody></table>` : `<p class="muted">Nothing can be built here.</p>`}`;
   }
 
@@ -970,7 +977,7 @@
     const opts = G.buildable(tid);
     const others = b => TERRITORIES.filter(t => t.id !== tid && G.canBuildAt(b, t.id)).length;
     const row = b => `<li><span class="bicon tc-icon"><svg viewBox="0 0 24 24">${iconSVG(BIZ_ICON[b.id], 12, 12, 18)}</svg></span>
-        <span><b>${b.name}</b>: ${ioText(b)}<small>${others(b) ? `also in ${others(b)} other territor${others(b) === 1 ? "y" : "ies"}` : "only here"}</small></span></li>`;
+        <span><b>${b.name}</b> (${m(b.cost)}): ${ioText(b)}<small>${others(b) ? `also in ${others(b)} other territor${others(b) === 1 ? "y" : "ies"}` : "only here"}</small></span></li>`;
     const ext = opts.filter(b => b.kind === "extract"), fac = opts.filter(b => b.kind === "factory");
     const here = vw.businesses.filter(b => b.territory === tid);
     const canMove = vw.phase === "day" && !p.acted && G.neighbours(p.pos).includes(tid);

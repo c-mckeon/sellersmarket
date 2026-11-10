@@ -8,8 +8,8 @@ const DB_SCHEMA = [
   // ---------- Design data: the rules of the game, the same in every game ----------
   { name: "commodities", group: "Design data", desc: "The 20 goods.",
     cols: [["id", "text", "pk"], ["name", "text"], ["type", "text", "", "raw, made or waste"], ["life", "integer", "", "rounds before it goes off; 0 = never"]] },
-  { name: "business_types", group: "Design data", desc: "Every kind of business: 8 that dig up or grow raw goods and 10 factories. Building one is free.",
-    cols: [["id", "text", "pk"], ["name", "text"], ["kind", "text", "", "extract or factory"]] },
+  { name: "business_types", group: "Design data", desc: "Every kind of business: 8 that dig up or grow raw goods and 10 factories.",
+    cols: [["id", "text", "pk"], ["name", "text"], ["kind", "text", "", "extract or factory"], ["cost", "integer", "", "cash to build one"]] },
   { name: "recipe_inputs", group: "Design data", desc: "What a business uses up each round. One row per input, so a recipe with 3 inputs has 3 rows.",
     cols: [["business_type_id", "text", "pk fk:business_types"], ["commodity_id", "text", "pk fk:commodities"], ["qty", "integer"]] },
   { name: "recipe_outputs", group: "Design data", desc: "What a business makes each round (2 of its main product), including by-products.",

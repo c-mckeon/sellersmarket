@@ -4,7 +4,7 @@
 function buildDbRows() {
   const G = SMG, R = {};
   R.commodities = COMMODITIES.map(c => [c.id, c.name, c.type, G.lifeOf(c.id)]);
-  R.business_types = G.BIZ.map(b => [b.id, b.name, b.kind]);
+  R.business_types = G.BIZ.map(b => [b.id, b.name, b.kind, b.cost]);
   R.recipe_inputs = [];
   R.recipe_outputs = [];
   G.BIZ.forEach(b => {

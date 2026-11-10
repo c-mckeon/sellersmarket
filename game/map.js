@@ -3,7 +3,8 @@
 // Each round, alongside their trades, each player may do ONE of these:
 //   - move their pawn to a neighbouring territory (land or sea)
 //   - build a business in the territory they're standing in
-// Building is free, but each territory only allows the businesses listed for it (js/territories.js).
+// Building costs cash (js/businesses.js: 120 to 170), and each territory only allows the businesses
+// listed for it (js/territories.js). Cash in your buy orders can't be spent on building.
 
 (() => {
   const G = SMG;
@@ -33,8 +34,10 @@
     const b = G.BIZ_BY[type];
     G.need(b, "Unknown business.");
     G.need(G.canBuildAt(b, p.pos), `A ${b.name.toLowerCase()} can't be built in ${G.TERR[p.pos].name}.`);
+    G.need(p.cash >= b.cost, `A ${b.name.toLowerCase()} costs ${G.money(b.cost)}; you have ${G.money(p.cash)} free (cash in buy orders doesn't count).`);
+    p.cash -= b.cost;
     p.acted = true;
     st.businesses.push({ id: st.nextBizId++, owner: p.id, type: b.id, territory: p.pos, built: st.round });
-    return `built a ${b.name.toLowerCase()} in ${G.TERR[p.pos].name}`;
+    return `built a ${b.name.toLowerCase()} in ${G.TERR[p.pos].name} for ${G.money(b.cost)}`;
   };
 })();

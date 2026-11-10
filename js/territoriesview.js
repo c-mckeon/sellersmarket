@@ -5,11 +5,12 @@ const coastal = tid => !isSea(tid) && (TERRITORY_NEIGHBOURS[tid] || []).some(isS
 
 const bizSlug = s => s.toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_|_$/g, "");
 
-// Every business type in one list. Every business makes 2 of its product a round, and building is free.
+// Every business type in one list. Every business makes 2 of its product a round; building one costs cash.
 const BIZ = [
   ...EXTRACTORS.map(([name, makes, out]) => ({ id: bizSlug(name), name, makes, out, kind: "extract" })),
   ...RECIPES.map(r => ({ id: bizSlug(r.at), name: r.at, makes: r.main, out: r.out[r.main], kind: "factory", recipe: r })),
 ];
+BIZ.forEach(b => b.cost = BUSINESS_COST[b.id]);
 
 // Only the businesses listed for a territory can go there (TERRITORY_INFO[tid].biz)
 const canBuild = (b, tid) => (TERRITORY_INFO[tid].biz || []).includes(b.id);
@@ -56,8 +57,8 @@ function renderTerritory() {
   const options = BIZ.filter(b => canBuild(b, tid));
   const ext = options.filter(b => b.kind === "extract"), fac = options.filter(b => b.kind === "factory");
   const tags = isSea(tid) ? ["Sea"] : ["Land", coastal(tid) ? "Coastal" : "Inland"];
-  const row = b => `<tr><td>${b.name}</td><td class="n">${makesText(b)}</td><td class="muted small">${inputsText(b)}</td></tr>`;
-  const table = list => `<table class="ht"><thead><tr><th>Business</th><th class="n">Makes a round</th><th>Uses</th></tr></thead><tbody>${list.map(row).join("")}</tbody></table>`;
+  const row = b => `<tr><td>${b.name}</td><td class="n">${makesText(b)}</td><td class="muted small">${inputsText(b)}</td><td class="n">${b.cost}</td></tr>`;
+  const table = list => `<table class="ht"><thead><tr><th>Business</th><th class="n">Makes a round</th><th>Uses</th><th class="n">Cost</th></tr></thead><tbody>${list.map(row).join("")}</tbody></table>`;
 
   document.getElementById("tpanel").innerHTML = `
     <h3>${t.name}</h3>
@@ -75,8 +76,8 @@ function renderTerritoryTables() {
     `<thead><tr><th>Territory</th><th>Coast</th><th>Mines, pits and farms</th><th>Factories</th></tr></thead><tbody>` +
     land.map(t => `<tr data-t="${t.id}"><td class="name">${t.name}</td><td>${coastal(t.id) ? "Coastal" : "Inland"}</td><td>${names(t.id, "extract") || "–"}</td><td>${names(t.id, "factory") || "–"}</td></tr>`).join("") + `</tbody>`;
   document.getElementById("btable").innerHTML =
-    `<thead><tr><th>Business</th><th>Makes a round</th><th>Uses</th><th class="n">Territories</th></tr></thead><tbody>` +
-    BIZ.map(b => `<tr data-b="${b.name}"><td class="name">${b.name}</td><td>${makesText(b)}</td><td>${inputsText(b)}</td><td class="n">${BIZ_COUNT(b) || "none"}</td></tr>`).join("") + `</tbody>`;
+    `<thead><tr><th>Business</th><th>Makes a round</th><th>Uses</th><th class="n">Cost</th><th class="n">Territories</th></tr></thead><tbody>` +
+    BIZ.map(b => `<tr data-b="${b.name}"><td class="name">${b.name}</td><td>${makesText(b)}</td><td>${inputsText(b)}</td><td class="n">${b.cost}</td><td class="n">${BIZ_COUNT(b) || "none"}</td></tr>`).join("") + `</tbody>`;
   document.querySelectorAll("#ttable tbody tr").forEach(tr => tr.addEventListener("click", () => { tSel = tr.dataset.t; paintMap(); renderTerritory(); document.getElementById("tmap").scrollIntoView({ behavior: "smooth", block: "start" }); }));
   document.querySelectorAll("#btable tbody tr").forEach(tr => tr.addEventListener("click", () => { tFilter = tr.dataset.b; document.getElementById("tfilter").value = tFilter; paintMap(); document.getElementById("tmap").scrollIntoView({ behavior: "smooth", block: "start" }); }));
 }

@@ -29,7 +29,8 @@
     pointsPerRound: 0.7,   // how many points a bot expects to score a round: sets what a point is worth in cash
     inputPremium: 1.5,     // what a factory input is worth: × its going price
     reach: 4,              // how many moves away a bot will travel to build
-    outputShare: 0.5,      // stop building once its businesses make this share of its stockpile each round
+    outputShare: 0.5,
+    buildReserve: 250,     // cash a bot keeps for trading: it only builds if this much is left afterwards      // stop building once its businesses make this share of its stockpile each round
     demandWeight: 1,       // how much a bot favours building what the open contracts ask for
   }, S.bots || {});
 
@@ -161,12 +162,13 @@
     .sort((a, b) => b.s - a.s)[0];
 
   const moveOrBuild = (st, p) => {
-    // Free building fills the stockpile: stop once what its businesses make would crowd out what it buys
+    // More businesses fill the stockpile: stop once what its businesses make would crowd out what it buys
     const output = G.myBusinesses(st, p.id).reduce((n, b) => n + G.BIZ_BY[b.type].outputs[G.BIZ_BY[b.type].makes], 0);
     if (output + 2 > B.outputShare * p.space) { p.plan = null; return; }
     const links = missingLinks(st, p);
     const here = bestHere(st, p, p.pos, links);
-    if (here && here.s > 0.5) { G.act(st, p.id, "build", { type: here.b.id }); p.plan = null; return; }
+    if (here && here.s > 0.5 && p.cash - here.b.cost >= B.buildReserve) { G.act(st, p.id, "build", { type: here.b.id }); p.plan = null; return; }
+    if (p.cash - Math.min(...G.BIZ.map(b => b.cost)) < B.buildReserve) { p.plan = null; return; } // can't afford to build anywhere: stay put
     // Nothing worth building here? Head for the best place within reach.
     const d = G.distances(p.pos);
     let target = { tid: p.pos, o: here, s: here ? here.s : 0 };

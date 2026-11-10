@@ -39,6 +39,7 @@ const SMG = (() => {
     ...EXTRACTORS.map(([name, makes, out]) => ({ id: slug(name), name, kind: "extract", inputs: {}, outputs: { [makes]: out }, makes })),
     ...RECIPES.map(r => ({ id: slug(r.at), name: r.at, kind: "factory", inputs: { ...r.in }, outputs: { ...r.out }, makes: Object.keys(r.out)[0] })),
   ];
+  G.BIZ.forEach(b => b.cost = BUSINESS_COST[b.id] ?? 150);
   G.BIZ_BY = Object.fromEntries(G.BIZ.map(b => [b.id, b]));
 
   // ---------- Randomness: seeded, so a game can be replayed exactly ----------

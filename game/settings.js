@@ -3,7 +3,7 @@
 
 const GAME_SETTINGS = {
   rounds: 30,              // the game ends after this many rounds; most points wins, cash breaks ties
-  startCash: 1000,         // the only money there will ever be. It's used for trading and nothing else.
+  startCash: 1000,         // the only money there will ever be: for trading and building businesses
   startBusinesses: 2,      // the business you pick, plus the one that goes with it (a farm and a flour mill…)
   startSpace: 20,          // your stockpile: 20 rows, one unit of anything in each
                            // first in, first out: when it overflows, the oldest units are pushed out
@@ -14,7 +14,7 @@ const GAME_SETTINGS = {
   startGoods: {},
 
   // Each round, besides trading, each player may move to one neighbouring territory OR build one business.
-  // Building is free; each territory allows only certain businesses (js/territories.js). Every business
+  // Building costs 120-170 cash (js/businesses.js); each territory allows only certain businesses (js/territories.js). Every business
   // makes 2 of its product a round (js/businesses.js, js/commodities.js).
 
   // ---------- The market (game/market.js) ----------

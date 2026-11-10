@@ -45,6 +45,7 @@ const NET = (() => {
     fbReady ||= load("https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js")
       .then(() => load("https://www.gstatic.com/firebasejs/10.12.2/firebase-database-compat.js"))
       .then(() => { firebase.initializeApp(FIREBASE_CONFIG); return firebase.database(); });
+    fbReady.catch(() => {}); // a failure is reported where the database is used
     const ref = async path => (await fbReady).ref(path);
     return {
       watch: async (path, cb) => (await ref(path)).on("value", s => cb(s.val())),
