@@ -693,8 +693,8 @@
       </svg><div class="ptip" hidden></div></div>`;
   }
 
-  // The order book, on a price scale running left to right (the same scale as the replay):
-  // asks as red bars rising from the centre line, bids as green bars hanging below it, one bar per price.
+  // The order book, on a price scale running bottom to top (the same scale as the replay):
+  // asks as red bars to the right of the centre line, bids as green bars to the left, one bar per price.
   // Faint grey blobs behind them are where orders sat in earlier rounds (a soft curve round each past
   // order, added up), the shaded band is the gap between the best bid and ask, and the dot on the centre
   // line is the last sale.
@@ -838,44 +838,44 @@
       last: f0.last != null && f1.last != null ? mix(f0.last, f1.last, t) : f1.last ?? f0.last ?? null };
   };
   const still = (f, C) => blend(f, f, 1, C);
-  // Draws one moment of the book (see bookChart). hits: bars to give hover tips (the live chart only).
+  // Draws one moment of the book (see bookChart), price running bottom to top like the quote cards:
+  // asks to the right of the centre line, bids to the left. hits: bars to give hover tips (live chart only).
   function drawBook(D, s, hits = []) {
-    const W = 320, H = 210, L = 8, R = 8, top = 16, bot = 26, cy = top + (H - top - bot) / 2, half = (H - top - bot) / 2 - 2;
-    const span = s.hi - s.lo || 1, plotW = W - L - R;
-    const Xraw = p => L + (p - s.lo) / span * plotW;
-    const X = p => Math.min(W - R, Math.max(L, Xraw(p)));                    // far-off prices are pinned to the edge
-    const pinned = p => Xraw(p) < L - 0.5 || Xraw(p) > W - R + 0.5;
-    const k = half / D.maxQ, bw = Math.max(2.5, Math.min(12, plotW / span * 0.7));
+    const W = 320, H = 300, L = 34, R = 6, T = 22, B = 10, cx = L + (W - L - R) / 2, half = (W - L - R) / 2 - 2;
+    const span = s.hi - s.lo || 1, plotH = H - T - B;
+    const Yraw = p => T + (s.hi - p) / span * plotH;
+    const Y = p => Math.min(H - B, Math.max(T, Yraw(p)));                    // far-off prices are pinned to the edge
+    const pinned = p => Yraw(p) < T - 0.5 || Yraw(p) > H - B + 0.5;
+    const k = half / D.maxQ, bh = Math.max(3, Math.min(12, plotH / span * 0.7));
     const segs = Object.values(s.segs).filter(x => x.w > 0.02 && x.op > 0.02);
     let g = "";
-    // Price gridlines, labelled along the bottom; they glide with the scale
-    const step = [1, 2, 5, 10, 20, 25, 50, 100, 200, 250, 500, 1000, 2000, 5000].find(x => span / x <= 6) || 10000;
+    // Price gridlines, labelled down the left; they glide with the scale
+    const step = [1, 2, 5, 10, 20, 25, 50, 100, 200, 250, 500, 1000, 2000, 5000].find(x => span / x <= 7) || 10000;
     for (let v = Math.ceil(s.lo / step) * step; v <= s.hi; v += step) {
-      const x = Xraw(v); if (x < L - 1 || x > W - R + 1) continue;
-      g += `<line class="grid" x1="${x.toFixed(1)}" x2="${x.toFixed(1)}" y1="${top}" y2="${H - bot}"/><text class="gl" x="${x.toFixed(1)}" y="${H - bot + 12}" text-anchor="middle">${m(v)}</text>`;
+      const y = Yraw(v); if (y < T - 1 || y > H - B + 1) continue;
+      g += `<line class="grid" x1="${L}" x2="${W - R}" y1="${y.toFixed(1)}" y2="${y.toFixed(1)}"/><text class="gl" x="${L - 4}" y="${(y + 3).toFixed(1)}" text-anchor="end">${m(v)}</text>`;
     }
-    // Past orders: grey blobs, older ones lighter
-    if (D.ghosts?.n) g += ghostPaths(D.ghosts, s.lo, s.hi, 80, 14, t => L + t * plotW, (x, v) => `${x.toFixed(1)},${(cy + v).toFixed(1)}`, half, [["a", -1], ["b", 1]], [L, 0, W - R, 0]);
+    // Past orders: one blurry shape per side, shaded by how recent
+    if (D.ghosts?.n) g += ghostPaths(D.ghosts, s.lo, s.hi, 80, 14, t => H - B - t * plotH, (y, v) => `${(cx + v).toFixed(1)},${y.toFixed(1)}`, half, [["a", 1], ["b", -1]], [0, H - B, 0, T]);
     // The gap between the best bid and ask still standing
     const live = side => segs.filter(x => x.side === side && x.op > 0.5 && !x.fill);
     const bid = Math.max(-Infinity, ...live("b").map(x => x.p)), ask = Math.min(Infinity, ...live("a").map(x => x.p));
-    if (isFinite(bid) && isFinite(ask) && ask > bid) g += `<rect class="band" x="${X(bid).toFixed(1)}" y="${top}" width="${(X(ask) - X(bid)).toFixed(1)}" height="${H - top - bot}"/>`;
+    if (isFinite(bid) && isFinite(ask) && ask > bid) g += `<rect class="band" x="${L}" y="${Y(ask).toFixed(1)}" width="${W - L - R}" height="${(Y(bid) - Y(ask)).toFixed(1)}"/>`;
     // A trade happening (replay): a line at the clearing price
-    if (s.trade != null && s.tradeOp > 0.02) g += `<line class="tline" opacity="${s.tradeOp.toFixed(2)}" x1="${X(s.trade).toFixed(1)}" x2="${X(s.trade).toFixed(1)}" y1="${top}" y2="${H - bot}"/>
-      <text class="tlbl" opacity="${s.tradeOp.toFixed(2)}" x="${X(s.trade).toFixed(1)}" y="${top - 4}" text-anchor="middle">${m(s.trade)}</text>`;
-    // The bars: asks up, bids down; a part about to fill sits beyond the part that stays (x0)
+    if (s.trade != null && s.tradeOp > 0.02) g += `<line class="tline" opacity="${s.tradeOp.toFixed(2)}" x1="${L}" x2="${W - R}" y1="${Y(s.trade).toFixed(1)}" y2="${Y(s.trade).toFixed(1)}"/>
+      <text class="tlbl" opacity="${s.tradeOp.toFixed(2)}" x="${W - R}" y="${(Y(s.trade) - 4).toFixed(1)}" text-anchor="end">${m(s.trade)}</text>`;
+    // The bars: asks right, bids left; a part about to fill sits beyond the part that stays (x0)
     segs.forEach(x => {
-      const h = x.w * k, off = x.x0 * k, fill = `rgb(${x.rgb.map(Math.round).join(",")})`;
-      const y = x.side === "a" ? cy - off - h : cy + off;
-      g += `<rect x="${(X(x.p) - bw / 2).toFixed(1)}" y="${y.toFixed(1)}" width="${bw.toFixed(1)}" height="${h.toFixed(1)}" rx="1.5" fill="${fill}" opacity="${(x.op * (pinned(x.p) ? 0.35 : 1)).toFixed(2)}"/>`;
+      const w = x.w * k, off = x.x0 * k, fill = `rgb(${x.rgb.map(Math.round).join(",")})`;
+      g += `<rect x="${(x.side === "a" ? cx + off : cx - off - w).toFixed(1)}" y="${(Y(x.p) - bh / 2).toFixed(1)}" width="${w.toFixed(1)}" height="${bh.toFixed(1)}" rx="1.5" fill="${fill}" opacity="${(x.op * (pinned(x.p) ? 0.35 : 1)).toFixed(2)}"/>`;
     });
     // Hover targets (live chart)
-    hits.forEach(x => { const h = Math.max(8, x.w * k);
-      g += `<rect class="hit" data-tip="${esc(x.tip)}" x="${(X(x.p) - Math.max(bw, 8) / 2).toFixed(1)}" y="${(x.side === "a" ? cy - h : cy).toFixed(1)}" width="${Math.max(bw, 8).toFixed(1)}" height="${h.toFixed(1)}"/>`; });
+    hits.forEach(x => { const w = Math.max(10, x.w * k), h = Math.max(bh, 8);
+      g += `<rect class="hit" data-tip="${esc(x.tip)}" x="${(x.side === "a" ? cx : cx - w).toFixed(1)}" y="${(Y(x.p) - h / 2).toFixed(1)}" width="${w.toFixed(1)}" height="${h.toFixed(1)}"/>`; });
     // The centre line, and the last sale as a dot on it
-    g += `<line class="axis" x1="${L}" x2="${W - R}" y1="${cy}" y2="${cy}"/>`;
-    if (s.last != null) g += `<circle class="ldot" cx="${X(s.last).toFixed(1)}" cy="${cy}" r="4.5"><title>Last sale ${m(Math.round(s.last))}</title></circle>`;
-    return `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Order book: asks above the line, bids below, by price"><text class="lbl" x="${L}" y="11">Asks ↑</text><text class="lbl" x="${L}" y="${H - 2}">Bids ↓</text>${s.last != null ? `<text class="llbl" x="${W - R}" y="11" text-anchor="end">● last ${m(Math.round(s.last))}</text>` : ""}${g}</svg>`;
+    g += `<line class="axis" x1="${cx}" x2="${cx}" y1="${T}" y2="${H - B}"/>`;
+    if (s.last != null) g += `<circle class="ldot" cx="${cx}" cy="${Y(s.last).toFixed(1)}" r="5"><title>Last sale ${m(Math.round(s.last))}</title></circle>`;
+    return `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Order book: price bottom to top, asks right of the line, bids left"><text class="lbl" x="${cx - 6}" y="12" text-anchor="end">← Bids</text><text class="lbl" x="${cx + 6}" y="12">Asks →</text>${s.last != null ? `<text class="llbl" x="${W - R}" y="12" text-anchor="end">● ${m(Math.round(s.last))}</text>` : ""}${g}</svg>`;
   }
   // Play: each moment blends into the next over 0.65s, then holds. Returns a stop function.
   function playDepth(box, label, id, rounds, done) {
@@ -921,7 +921,7 @@
       </div>
       <p class="small muted tused">${[contractGood(id) ? "contracts can ask for it" : ""].filter(Boolean).map(x => x + " · ").join("")}used by ${usedBy.join(", ") || "no factory"}${S.depreciation?.on ? ` · ${G.lifeOf(id) ? `lasts ${G.lifeOf(id)} rounds` : "never goes off"}` : ""}</p>
       <div class="tcharts">
-        <div><h4 title="Price runs left to right. Red bars above the line are asks, green bars below are bids: the taller, the more at that price. Grey blobs: where orders sat in recent rounds. The dot is the last sale. Hover a bar for details.">Order book <span class="hint">ⓘ</span></h4><div class="depthbox">${bookChart(id, yours)}</div>
+        <div><h4 title="Price runs bottom to top. Red bars right of the line are asks, green bars left are bids: the longer, the more at that price. Grey shapes: where orders sat in recent rounds, darker where recent. The dot is the last sale. Hover a bar for details.">Order book <span class="hint">ⓘ</span></h4><div class="depthbox">${bookChart(id, yours)}</div>
           <div class="drctl">${bookRoundsKept() ? `<button class="gbtn ghost" id="dPlay">▶ Replay</button><label class="drr">last <input type="number" id="dRounds" min="1" max="${bookRoundsKept()}" value="${bookRounds()}"> <span class="muted">of ${bookRoundsKept()} rounds</span></label><span id="dLabel" class="muted small"></span>` : `<button class="gbtn ghost" disabled>▶ Replay</button><span class="muted small">Replays build up from here on: each auction from now is recorded.</span>`}</div></div>
         <div><h4>Price history</h4>${priceChart(id)}</div>
       </div>
