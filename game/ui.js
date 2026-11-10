@@ -13,11 +13,51 @@
   const esc = s => String(s).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
   // Money and prices: whole numbers (older saved games may still have cents)
   const m = n => (Number.isInteger(+n) || Math.abs(n) >= 100 ? Math.round(n).toLocaleString() : (+n).toFixed(2)).replace(/^-/, "−");
-  const save = () => { try { localStorage.setItem(KEY, JSON.stringify(st)); } catch (e) {} };
+  const save = () => { if (online()) return; try { localStorage.setItem(KEY, JSON.stringify(st)); } catch (e) {} }; // online games live in the database
   const load = () => { try { return JSON.parse(localStorage.getItem(KEY)); } catch (e) { return null; } };
   const LAND = TERRITORIES.filter(t => !t.sea);
   const COLOURS = ["#d4682a", "#2f6db5", "#8a4fc0", "#2e8b57", "#c23b5a", "#1f8a8a", "#a07a1a", "#555"];
   const NAMES = ["You", "Ana", "Ben", "Cleo", "Dev", "Eli", "Fay", "Gus"];
+
+  // ================= Online (game/online.js) =================
+  // With online play set up, the game lives in the shared database: you log in as yourself, and the
+  // screen follows the game as it changes. "Play on this device" goes back to the local game.
+  const online = () => NET.ready && !ui.offline;
+  const mySeat = () => st && NET.user ? st.players.find(p => p.name === NET.user && !p.bot) : null;
+  function renderLogin(msg = "") {
+    root.innerHTML = `<div class="gsetup glogin">
+      <h1>Who's playing?</h1>
+      <p class="muted">The first time you log in, the password you type becomes yours.${NET.mock ? " (Test mode: a stand-in database in this browser.)" : ""}</p>
+      ${NET.players.map(n => `<form class="glog" data-name="${esc(n)}"><button class="gbtn" type="submit">${esc(n)}</button><input type="password" placeholder="Password" autocomplete="current-password" aria-label="${esc(n)}'s password"></form>`).join("")}
+      ${msg ? `<p class="bad">${esc(msg)}</p>` : ""}
+      <p class="small"><button class="glink" id="gOffline">Play on this device instead</button></p>
+    </div>`;
+    root.querySelectorAll(".glog").forEach(f => f.addEventListener("submit", async e => {
+      e.preventDefault();
+      const r = await NET.login(f.dataset.name, f.querySelector("input").value);
+      if (!r.ok) return renderLogin(r.msg);
+      goOnline();
+    }));
+    root.querySelector("#gOffline").addEventListener("click", goOffline);
+  }
+  let watching = false, loaded = false;
+  function goOnline() {
+    ui.offline = false;
+    if (watching) return render();
+    watching = true;
+    root.innerHTML = `<div class="gsetup"><p class="muted">Loading the game…</p></div>`;
+    NET.watch(next => {
+      if (ui.offline) return;
+      const before = st;
+      st = next; loaded = true;
+      // A new round: forget the old draft orders, and show nightfall
+      if (!before || !st || before.round !== st.round || before.seed !== st.seed) { ui.orders = []; ui.card = null; }
+      render();
+      if (before && st && st.seed === before.seed && st.round > before.round && !st.over) nightfall(st.round);
+    });
+  }
+  function goOffline() { ui.offline = true; const s0 = load(); st = s0 && s0.version === 7 && !s0.over ? s0 : null; render(); }
+  const userBar = () => online() ? `<span class="guser">${esc(NET.user)} <button class="glink" id="gLogout" title="Log out">log out</button></span>` : "";
 
   // ================= Setup =================
   let setup = null;
@@ -34,25 +74,31 @@
 
   function renderSetup() {
     setup ||= { players: defaultPlayers(4), rounds: S.rounds };
-    const saved = load();
+    // Online: the players who log in are the humans, everyone else is a computer
+    if (online() && !setup.online) {
+      setup.online = true;
+      setup.players = defaultPlayers(Math.max(4, NET.players.length)).map((x, i) => i < NET.players.length ? { ...x, name: NET.players[i], bot: false } : { ...x, bot: true });
+    }
+    const fixed = p => online() && NET.players.includes(p.name) && !p.bot;
+    const saved = online() ? null : load();
     root.innerHTML = `
       <div class="gsetup">
-        <h1>New game</h1>
-        <p class="muted">Pick who's playing. Each player starts with ${S.startCash} cash, a ${S.startSpace}-row stockpile (first in, first out), ${S.startBusinesses > 1 ? "two free businesses where they start (the one picked here and the one that uses its output)" : "one free business where they start"}, and ${S.contracts.hand} secret contracts. Deliver contracts to score points; most points after the last round wins, and cash breaks ties. ${S.businessStock ? `What a business makes stays in its own stock (up to ${S.businessSpace} units) until you sell or use it. ` : ""}There's no price list: every price comes from what players bid and ask.</p>
+        <h1>New game ${userBar()}</h1>
+        <p class="muted">Pick who's playing. Each player starts with ${S.startCash} cash, a ${S.startSpace}-row stockpile (first in, first out), ${S.startBusinesses > 1 ? "two free businesses where they start (the one picked here and the one that uses its output)" : "one free business where they start"}, and ${S.contracts.open} contracts on a shared board: the first to deliver one scores its points; most points after the last round wins, and cash breaks ties. ${S.businessStock ? `What a business makes stays in its own stock (up to ${S.businessSpace} units) until you sell or use it. ` : ""}There's no price list: every price comes from what players bid and ask.</p>
         ${saved && saved.version === 7 && !saved.over ? `<div class="gresume">A game in round ${saved.round} is saved in this browser. <button class="gbtn" id="gResume">Continue it</button></div>` : ""}
         <table class="gplayers"><thead><tr><th></th><th>Name</th><th>Who</th><th>Starts in</th><th>Free businesses</th><th></th></tr></thead><tbody>
         ${setup.players.map((p, i) => {
           const opts = G.BIZ.filter(b => G.canBuildAt(b, p.start));
           return `<tr data-i="${i}">
             <td><input type="color" data-k="colour" value="${p.colour}"></td>
-            <td><input data-k="name" value="${esc(p.name)}" maxlength="16"></td>
-            <td><select data-k="bot"><option value="0"${p.bot ? "" : " selected"}>Human</option><option value="1"${p.bot ? " selected" : ""}>Computer</option></select></td>
+            <td>${fixed(p) ? `<b>${esc(p.name)}</b>` : `<input data-k="name" value="${esc(p.name)}" maxlength="16">`}</td>
+            <td>${fixed(p) ? "Human" : online() ? "Computer" : `<select data-k="bot"><option value="0"${p.bot ? "" : " selected"}>Human</option><option value="1"${p.bot ? " selected" : ""}>Computer</option></select>`}</td>
             <td><select data-k="start">${LAND.map(t => `<option value="${t.id}"${t.id === p.start ? " selected" : ""}>${t.name}</option>`).join("")}</select></td>
             <td><select data-k="business">
               <optgroup label="Extraction">${opts.filter(b => b.kind === "extract").map(b => `<option value="${b.id}"${b.id === p.business ? " selected" : ""}>${b.name}</option>`).join("")}</optgroup>
               <optgroup label="Factories">${opts.filter(b => b.kind === "factory").map(b => `<option value="${b.id}"${b.id === p.business ? " selected" : ""}>${b.name}</option>`).join("")}</optgroup>
             </select>${(() => { const x = S.startBusinesses > 1 && G.starterPartner(p.business, p.start); return x ? `<div class="muted small">+ ${x.name.toLowerCase()}</div>` : ""; })()}</td>
-            <td>${setup.players.length > 1 ? `<button class="glink" data-del="${i}" title="Remove">✕</button>` : ""}</td>
+            <td>${setup.players.length > 1 && !fixed(p) ? `<button class="glink" data-del="${i}" title="Remove">✕</button>` : ""}</td>
           </tr>`; }).join("")}
         </tbody></table>
         <div class="grow">
@@ -77,9 +123,11 @@
     root.querySelector("#gRounds").addEventListener("change", e => setup.rounds = Math.max(3, Math.min(200, +e.target.value || S.rounds)));
     root.querySelector("#gResume")?.addEventListener("click", () => { st = saved; render(); });
     root.querySelector("#gStart").addEventListener("click", () => {
-      st = G.newGame({ players: setup.players, rounds: setup.rounds });
-      save(); render();
+      const game = G.newGame({ players: setup.players, rounds: setup.rounds });
+      if (online()) { NET.start(game); return; } // everyone's screen picks it up from the database
+      st = game; save(); render();
     });
+    root.querySelector("#gLogout")?.addEventListener("click", () => { NET.logout(); render(); });
   }
 
   // ================= Game screen =================
@@ -100,6 +148,7 @@
   };
   // Add an order, if it would work given everything else you've ordered
   const tryOrder = (name, args) => {
+    if (online() && st.orders[ui.seat]) return "You've sent your orders for this round.";
     const next = [...ui.orders, { name, args }];
     const d = G.draft(st, ui.seat, next);
     if (d.error) return d.error;
@@ -150,12 +199,27 @@
   }
 
   function render() {
+    if (online()) {
+      if (!NET.user) return renderLogin();
+      if (!watching || !loaded) return goOnline();
+    }
     if (!st) return renderSetup();
     if (st.over) return renderEnd();
-    const seat = nextSeat();
-    if (!seat) { G.resolve(st); save(); return render(); } // shouldn't happen, but never get stuck
+    let seat;
+    if (online()) {
+      seat = mySeat();
+      if (!seat) { root.innerHTML = `<div class="gsetup"><h1>${esc(NET.user)}, you're not in this game ${userBar()}</h1><p class="muted">It's being played by ${st.players.filter(p => !p.bot).map(p => esc(p.name)).join(" and ")}.</p><div class="grow"><button class="gbtn" id="gNew2">Start a new game</button></div></div>`;
+        root.querySelector("#gNew2").addEventListener("click", () => { if (confirm("End the current game for everyone and start a new one?")) NET.reset(); });
+        root.querySelector("#gLogout")?.addEventListener("click", () => { NET.logout(); render(); });
+        return; }
+    } else {
+      seat = nextSeat();
+      if (!seat) { G.resolve(st); save(); return render(); } // shouldn't happen, but never get stuck
+    }
     if (ui.seat !== seat.id) { ui.seat = seat.id; ui.orders = []; ui.card = null; }
-    if (humans().length > 1 && ui.passed !== seat.id) return renderPass(seat);
+    if (!online() && humans().length > 1 && ui.passed !== seat.id) return renderPass(seat);
+    const sent = online() && !!st.orders[seat.id]; // online: already submitted, waiting for the others
+    if (sent) ui.orders = st.orders[seat.id];
     vw = G.draft(st, ui.seat, ui.orders).state;
     const p = me();
     const news = st.log.slice(ui.seenBy[p.id] ?? st.log.length);
@@ -166,8 +230,9 @@
         <span class="gturn"><i style="background:${p.colour}"></i>${p.name === "You" ? "Your" : esc(p.name) + "'s"} orders</span>
         <span class="gready">${st.players.map(x => `<i title="${esc(x.name)}${st.orders[x.id] ? " is ready" : " is deciding"}" style="background:${x.colour};opacity:${st.orders[x.id] ? 1 : .25}"></i>`).join("")}</span>
         <span class="gsp"></span>
-        <button class="gbtn" id="gEnd">Submit${ui.orders.length ? ` ${ui.orders.length} order${ui.orders.length > 1 ? "s" : ""}` : " (no orders)"} →</button>
-        <button class="gbtn ghost" id="gNew" title="Start a new game">New game</button>
+        ${sent ? `<span class="gwait">Sent. Waiting for ${G.waitingFor(st).filter(x => !x.bot).map(x => esc(x.name)).join(" and ") || "the others"}…</span>`
+          : `<button class="gbtn" id="gEnd">Submit${ui.orders.length ? ` ${ui.orders.length} order${ui.orders.length > 1 ? "s" : ""}` : " (no orders)"} →</button>`}
+        <button class="gbtn ghost" id="gNew" title="Start a new game">New game</button>${userBar()}
       </div>
       ${flashMsg ? `<div class="gflash">${esc(flashMsg)}</div>` : ""}
       ${news.length ? (n => fold("news", "gnews", `<b>What happened since your last orders <span class="muted small">${n.length} event${n.length === 1 ? "" : "s"}</span></b><button class="glink" id="gNewsOk" title="Dismiss">✕</button>`,
@@ -178,7 +243,7 @@
           ${terrCard(p, ui.terr || p.pos)}
           <div class="gpanel">
             <div class="gorders"><b>Your orders</b> <span class="muted small">Nothing happens until everyone has submitted; then all orders go through at once.</span>
-              <div>${ui.orders.map((o, i) => `<span class="gorder">${orderText(o)}<button data-undo="${i}" title="Remove">✕</button></span>`).join("") || `<span class="muted">None yet.</span>`}</div>
+              <div>${ui.orders.map((o, i) => `<span class="gorder">${orderText(o)}${sent ? "" : `<button data-undo="${i}" title="Remove">✕</button>`}</span>`).join("") || `<span class="muted">None yet.</span>`}</div>
             </div>
             <div class="gtabs2"><button data-tab="market" class="${ui.tab !== "build" ? "on" : ""}">Market</button><button data-tab="build" class="${ui.tab === "build" ? "on" : ""}">Move or build${p.acted ? " ✓" : ""}</button></div>
             ${ui.tab === "build" ? buildPanel(p) : marketPanel(p)}
@@ -236,7 +301,6 @@
   const usersOf = (p, id) => others(p).filter(x => vw.businesses.some(b => b.owner === x.id && usesGood(G.BIZ_BY[b.type], id)));
   // Demand: how many open contracts ask for a good
   const wanted = (p, id) => G.demand(vw, id);
-  const wantedTag = (p, id) => { const n = wanted(p, id); return n ? `<span class="mtag want" title="Open contracts on the board that ask for it">in ${n} contract${n === 1 ? "" : "s"}</span>` : ""; };
   const contractGood = id => S.contracts.goods.includes(id) || (S.contracts.rawShare > 0 && G.contractRaws().includes(id));
   const names = list => list.map(x => esc(x.name)).join(", ");
 
@@ -313,7 +377,7 @@
   // One card's little chart: asks to the right of the centre line, bids to the left, past orders as grey
   // blobs, the spread shaded, a line at a clearing price, and the last sale as a dot on the centre line
   function drawMini(D, s) {
-    const W = 140, H = 100, T = 5, B = 5, cx = W / 2, half = cx - 5, span = s.hi - s.lo || 1, plotH = H - T - B;
+    const W = 80, H = 96, T = 4, B = 4, cx = W / 2, half = cx - 3, span = s.hi - s.lo || 1, plotH = H - T - B;
     const Yraw = p => T + (s.hi - p) / span * plotH, Y = p => Math.min(H - B, Math.max(T, Yraw(p)));
     const pinned = p => Yraw(p) < T - 0.5 || Yraw(p) > H - B + 0.5;
     const k = half / D.maxQ, bh = Math.max(3, Math.min(7, plotH / span * 0.7));
@@ -338,10 +402,9 @@
   const cardWords = (id, f) => {
     const best = side => Object.entries(f.segs).filter(([key, x]) => key[0] === side && x.op > 0.5).sort((a, b) => side === "b" ? b[1].p - a[1].p : a[1].p - b[1].p)[0]?.[1];
     const b = best("b"), a = best("a");
-    const n = G.demand(vw, id);
     return {
-      h: `<b>${G.COM[id].name}${n ? ` <small class="qc-want" title="In ${n} open contract${n === 1 ? "" : "s"}">in ${n} contract${n === 1 ? "" : "s"}</small>` : ""}</b><span class="qc-last">${f.sold != null ? `traded at ${m(f.sold)}` : f.last != null ? `last ${m(f.last)}` : "no trades"}</span>`,
-      n: `<span class="b">${b ? `bid ${m(b.p)} <small>×${b.w}</small>` : "no bids"}</span><span class="sp">${a && b ? `spread ${m(a.p - b.p)}` : ""}</span><span class="a">${a ? `ask ${m(a.p)} <small>×${a.w}</small>` : "no asks"}</span>`,
+      h: `<b>${G.COM[id].name}</b><span class="qc-last">${f.sold != null ? `traded at ${m(f.sold)}` : f.last != null ? `last ${m(f.last)}` : "no trades"}</span>`,
+      n: `<span class="a">${a ? `ask ${m(a.p)} <small>×${a.w}</small>` : "no asks"}</span><span class="b">${b ? `bid ${m(b.p)} <small>×${b.w}</small>` : "no bids"}</span>`,
     };
   };
   const cardHTML = (id, d, k, flash) => {
@@ -547,7 +610,7 @@
     const sellCard = id => {
       const bid = G.bestBid(vw, id), { s, last, chg } = lastBits(id), users = usersOf(p, id);
       const spare = (hold[id] || 0) - (want[id] || 0), off = onOffer(p, id);
-      const demand = wantedTag(p, id) + (bid ? `<span class="mtag good">Bid ${m(bid.price)} ×${bid.qty}</span>`
+      const demand = (bid ? `<span class="mtag good">Bid ${m(bid.price)} ×${bid.qty}</span>`
         : users.length ? `<span class="mtag">No bids · ${names(users)} could use it</span>`
         : contractGood(id) ? `<span class="mtag">No bids · contracts can ask for it</span>`
         : wanted(p, id) ? "" : `<span class="mtag warn">⚠ Nobody else can use it now</span>`);
@@ -563,7 +626,7 @@
       const why = [(vw.contracts || []).some(k => !k.takers.length && k.goods[id]) ? "contract" : "", needsOf(p)[id] ? "factory input" : ""].filter(Boolean).join(" + ");
       const supply = (ask ? `<span class="mtag good">Ask ${m(ask.price)} ×${ask.qty}</span>`
         : makers.length ? `<span class="mtag">Nobody selling · ${names(makers)} make${makers.length === 1 ? "s" : ""} it</span>`
-        : `<span class="mtag warn">⚠ Nobody makes it yet</span>`) + (wanted(p, id) ? `<span class="mtag">in ${wanted(p, id)} open contract${wanted(p, id) === 1 ? "" : "s"}</span>` : "");
+        : `<span class="mtag warn">⚠ Nobody makes it yet</span>`);
       return `<button class="mcard${id === sel ? " sel" : ""}${fresh.has(id) ? " flash" : ""}" data-good="${id}">
         <span class="mc-top"><b>${G.COM[id].name}</b><span class="mc-qty">${need ? `need ${need}` : "✓"}${bidding ? ` <small>bidding ${bidding}</small>` : ""}</span></span>
         <span class="mc-where">${why || "you're bidding"}${hold[id] ? ` · have ${hold[id]}` : ""}</span>
@@ -856,7 +919,7 @@
         <div><span>Made by</span><b>${makers.length ? names(makers) : "nobody else"}</b></div>
         <div><span>Could use it</span><b>${users.length ? names(users) : "nobody yet"}</b></div>
       </div>
-      <p class="small muted tused">${[wanted(p, id) ? `in ${wanted(p, id)} open contract${wanted(p, id) === 1 ? "" : "s"}` : "", contractGood(id) ? "contracts can ask for it" : ""].filter(Boolean).map(x => x + " · ").join("")}used by ${usedBy.join(", ") || "no factory"}${S.depreciation?.on ? ` · ${G.lifeOf(id) ? `lasts ${G.lifeOf(id)} rounds` : "never goes off"}` : ""}</p>
+      <p class="small muted tused">${[contractGood(id) ? "contracts can ask for it" : ""].filter(Boolean).map(x => x + " · ").join("")}used by ${usedBy.join(", ") || "no factory"}${S.depreciation?.on ? ` · ${G.lifeOf(id) ? `lasts ${G.lifeOf(id)} rounds` : "never goes off"}` : ""}</p>
       <div class="tcharts">
         <div><h4 title="Price runs left to right. Red bars above the line are asks, green bars below are bids: the taller, the more at that price. Grey blobs: where orders sat in recent rounds. The dot is the last sale. Hover a bar for details.">Order book <span class="hint">ⓘ</span></h4><div class="depthbox">${bookChart(id, yours)}</div>
           <div class="drctl">${bookRoundsKept() ? `<button class="gbtn ghost" id="dPlay">▶ Replay</button><label class="drr">last <input type="number" id="dRounds" min="1" max="${bookRoundsKept()}" value="${bookRounds()}"> <span class="muted">of ${bookRoundsKept()} rounds</span></label><span id="dLabel" class="muted small"></span>` : `<button class="gbtn ghost" disabled>▶ Replay</button><span class="muted small">Replays build up from here on: each auction from now is recorded.</span>`}</div></div>
@@ -995,8 +1058,15 @@
 
   // ----- Clicks -----
   function wire(p) {
-    root.querySelector("#gEnd").addEventListener("click", () => {
+    root.querySelector("#gEnd")?.addEventListener("click", async () => {
       const before = st.log.length, who = ui.seat, round = st.round;
+      if (online()) {
+        const btn = root.querySelector("#gEnd"); btn.disabled = true; btn.textContent = "Sending…";
+        const r = await NET.submit(who, round, ui.orders);
+        if (!r.ok) { flash(r.msg); return render(); }
+        ui.seenBy[who] = before;
+        return; // the database sends the new game back to every screen
+      }
       const r = G.submit(st, ui.seat, ui.orders);
       if (!r.ok) { flash(r.msg); return render(); }
       ui.orders = []; ui.card = null;
@@ -1012,7 +1082,11 @@
       if (d.error) flash("Can't remove that: later orders depend on it. Remove those first."); else ui.orders = next;
       render();
     }));
-    root.querySelector("#gNew").addEventListener("click", () => { if (confirm("Abandon this game and start a new one?")) { st = null; localStorage.removeItem(KEY); render(); } });
+    root.querySelector("#gNew").addEventListener("click", () => {
+      if (online()) { if (confirm("End this game for everyone and start a new one?")) NET.reset(); return; }
+      if (confirm("Abandon this game and start a new one?")) { st = null; localStorage.removeItem(KEY); render(); }
+    });
+    root.querySelector("#gLogout")?.addEventListener("click", () => { NET.logout(); render(); });
     const s = root.querySelector("#gSearch");
     if (s) s.addEventListener("input", () => { ui.search = s.value.toLowerCase(); ui.allOpen = true; const pos = s.selectionStart; render(); const n = root.querySelector("#gSearch"); n.focus(); n.setSelectionRange(pos, pos); });
     root.querySelectorAll("[data-tab]").forEach(b => b.addEventListener("click", () => { ui.tab = b.dataset.tab; render(); }));
@@ -1125,11 +1199,10 @@
       ${rank.map((p, i) => `<tr><td>${i + 1}</td><td><i class="gdot" style="background:${p.colour}"></i>${esc(p.name)}</td><td class="n"><b>${p.points}</b></td><td class="n">${p.delivered || 0}</td><td class="n">${m(G.totalCash(st, p))}</td><td class="n">${G.myBusinesses(st, p.id).length}</td></tr>`).join("")}
       </tbody></table>
       <div class="grow"><button class="gbtn" id="gAgain">New game</button></div></div>`;
-    root.querySelector("#gAgain").addEventListener("click", () => { st = null; localStorage.removeItem(KEY); render(); });
+    root.querySelector("#gAgain").addEventListener("click", () => { if (online()) return NET.reset(); st = null; localStorage.removeItem(KEY); render(); });
   }
 
-  // Start: continue a saved game in progress, or show setup
-  const saved = load();
-  st = saved && saved.version === 7 && !saved.over ? saved : null;
-  render();
+  // Start: online (log in, then follow the shared game), or continue a game saved on this device, or set one up
+  if (NET.ready) render();
+  else goOffline();
 })();

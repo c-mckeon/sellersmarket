@@ -531,16 +531,15 @@ svg.spark .spark-none { stroke: var(--line); stroke-width: 1.5; stroke-dasharray
 .qctl { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 8px; }
 .qctl input[type=range] { flex: 1; min-width: 140px; accent-color: var(--accent); }
 .qctl .gbtn { padding: 5px 12px; min-width: 96px; }
-.qgrid { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 6px; }
-@media (max-width: 900px) { .qgrid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
-.qcard { all: unset; box-sizing: border-box; cursor: pointer; display: grid; gap: 5px; padding: 7px 9px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); }
+.qgrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(92px, 1fr)); gap: 6px; }
+.qcard { all: unset; box-sizing: border-box; cursor: pointer; display: grid; gap: 4px; padding: 6px 7px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); }
 .qcard:hover { border-color: var(--ink); }
 .qcard:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
-.qc-h { display: flex; justify-content: space-between; align-items: baseline; gap: 6px; font-size: 13px; }
+.qc-h { display: grid; gap: 0; font-size: 12.5px; line-height: 1.25; }
 .qc-last { font-size: 11.5px; color: var(--muted); white-space: nowrap; }
-.qc-n { display: flex; justify-content: space-between; gap: 4px; font-size: 12px; font-variant-numeric: tabular-nums; }
+.qc-n { display: grid; gap: 0; font-size: 11.5px; line-height: 1.3; font-variant-numeric: tabular-nums; }
+.qc-n .a { color: var(--waste); } .qc-n .b { color: var(--raw); }
 .qc-n small { color: var(--muted); }
-.qc-n .sp { color: var(--muted); }
 /* A good that just traded flashes yellow */
 @keyframes tradeflash { 0%, 30% { background: #ffe14d; border-color: #e0b800; } 100% { background: var(--surface); } }
 @keyframes tradeflashrow { 0%, 30% { background: #ffe14d; } 100% { background: transparent; } }
@@ -585,7 +584,6 @@ tr.flash td { animation: tradeflashrow 1.6s ease-out; }
 .opp small { color: var(--muted); font-size: 12px; }
 .drctl .dnow { color: var(--ink); font-weight: 600; }
 .mtag.want { background: color-mix(in srgb, var(--accent) 16%, transparent); color: var(--ink); }
-.qc-want { font-size: 10.5px; font-weight: 700; color: var(--accent); }
 .depthbox .grid { stroke: var(--line); stroke-width: 1; }
 .depthbox .gl { font-size: 9px; fill: var(--muted); font-variant-numeric: tabular-nums; }
 .drr { font-size: 13px; display: inline-flex; align-items: center; gap: 5px; }
@@ -725,3 +723,12 @@ details.gnews[open] { display: grid; }
 .qopen .gticket { margin: 2px 0; }
 .qflip { position: absolute; z-index: 50; pointer-events: none; box-sizing: border-box; border: 1px solid var(--accent); border-radius: 10px; background: var(--bg); }
 .qflip.go { transition: left .32s cubic-bezier(.2, .7, .2, 1), top .32s cubic-bezier(.2, .7, .2, 1), width .32s cubic-bezier(.2, .7, .2, 1), height .32s cubic-bezier(.2, .7, .2, 1); }
+
+/* Online: logging in */
+.glogin { max-width: 420px; }
+.glog { display: flex; gap: 8px; margin: 8px 0; }
+.glog .gbtn { min-width: 84px; }
+.glog input { flex: 1; font: inherit; padding: 6px 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); color: var(--ink); }
+.guser { font-size: 13px; font-weight: 600; color: var(--muted); margin-left: 8px; white-space: nowrap; }
+.gsetup h1 .guser { font-size: 14px; vertical-align: middle; }
+.gwait { font-size: 13px; font-weight: 700; color: var(--accent); }
