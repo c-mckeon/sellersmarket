@@ -4,8 +4,9 @@
 const GAME_SETTINGS = {
   rounds: 30,              // the game ends after this many rounds; most money wins
   startCash: 1000,         // the only money there will ever be: for trading and building businesses
+  businessResale: 0.6,     // a business sells back for this share of its cost
   startBusinesses: 2,      // the business you pick, plus the one that goes with it (a farm and a flour mill…)
-  startSpace: 20,          // your stockpile: 20 rows, one unit of anything in each
+  startSpace: 25,          // your stockpile: 25 rows, one unit of anything in each
                            // first in, first out: when it overflows, the oldest units are pushed out
   businessStock: false,    // false: what your businesses make goes straight into your stockpile
   businessSpace: 10,       // (only with businessStock: how many units each business holds)
@@ -32,7 +33,7 @@ const GAME_SETTINGS = {
     start: 3,              // contracts on the board when the game starts…
     perRound: [0, 2],      // …then this many new ones each night (fewest, most; random)…
     open: 4,               // …up to this many on the board at once
-    bidRounds: 3,          // bidding stays open this many rounds; then the lowest bid wins
+    bidRounds: 4,          // bidding stays open this many rounds; then the lowest bid wins
     deliverRounds: 5,      // the winner has this many rounds to deliver
     maxHeld: 3,            // contracts a player can hold at once
     failFee: { base: 50, share: 0.5 }, // not delivered in time: legal fees of base + share × the winning bid

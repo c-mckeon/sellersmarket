@@ -102,7 +102,7 @@
         <ul>
           <li>Once a round, at night after the auction, each business runs and makes <b>1</b> of its product. Mines, pits, farms and water works need nothing; factories need every input, from your stockpile.</li>
           <li><b>Waste:</b> sawmills, blast furnaces and steelworks also make 1 slag or sawdust a round. Nothing uses it and it goes off after 3 rounds, but it takes up stockpile rows and can't just be thrown away. On the market it runs backwards: you <i>pay</i> someone to take it away, or get paid to take someone else's.</li>
-          <li><b>Selling a business:</b> any time you order, sell one of your businesses back for its cost price. It disappears; it doesn't use your move or build.</li>
+          <li><b>Selling a business:</b> any time you order, sell one of your businesses back for 60% of what it cost. It disappears; it doesn't use your move or build.</li>
           <li><b>Stand-ins:</b> a factory short of an input can use another good instead, e.g. <span data-s="substitutes"></span>. Goods a contract of yours asks for are never used as stand-ins.</li>
           <li>What your businesses make goes into your <b>stockpile</b>: <span data-s="startSpace"></span> rows, one unit in each, first in at the top. It's <b>first in, first out</b>: the oldest units are used, sold and delivered first, and when it overflows the oldest are pushed out. Goods in your sell orders keep their rows; buy orders keep rows free for what they could bring in.</li>
         </ul>
@@ -185,7 +185,7 @@
         <ul>
           <li>A <b>buy order</b> (bid) or <b>sell order</b> (ask): a good, a price and a quantity. Prices are whole numbers from 1 to <span data-s="market.maxPrice"></span>.</li>
           <li>A bid locks price × quantity of your cash. An ask takes the goods from your businesses first, then your stockpile; they keep ageing while on offer. Nothing can be promised twice.</li>
-          <li>Orders stay on the book until they fill or you cancel them. You can't place an order that would trade with one of your own.</li>
+          <li>Orders stay on the book until they fill or you cancel them. Cancelling one that has been through an auction takes effect after the next one, so players who saw it can still meet it. You can't place an order that would trade with one of your own.</li>
           <li>Everyone's new orders are secret until the auction; the book you see is what's left from earlier auctions.</li>
         </ul>
       </section>

@@ -5,7 +5,7 @@
 //   - build a business in the territory they're standing in
 // Building costs cash (js/businesses.js: 120 to 170), and each territory only allows the businesses
 // listed for it (js/territories.js). Cash in your buy orders can't be spent on building.
-// Any business can be sold back for its cost price at any time: sellBusiness { biz }.
+// Any business can be sold back for 60% of its cost at any time: sellBusiness { biz }.
 
 (() => {
   const G = SMG;
@@ -42,8 +42,10 @@
     return `built a ${b.name.toLowerCase()} in ${G.TERR[p.pos].name} for ${G.money(b.cost)}`;
   };
 
-  // Sell a business back for its cost price (any time you order; it doesn't use your move or build).
+  // Sell a business back for settings.businessResale (60%) of its cost (any time you order; it doesn't use
+  // your move or build).
   // It disappears; anything in its own stock goes to your stockpile.
+  G.resale = t => Math.round(t.cost * (GAME_SETTINGS.businessResale ?? 1));
   G.actions.sellBusiness = (st, p, { biz }) => {
     G.need(st.phase === "day", "Not right now.");
     const b = st.businesses.find(x => x.id === biz && x.owner === p.id);
@@ -51,7 +53,8 @@
     const t = G.BIZ_BY[b.type];
     Object.entries(b.stock || {}).forEach(([c, q]) => { const lots = G.addBiz(b, c, -q); if (lots.length) lots.forEach(([k, made]) => G.add(p, c, k, made)); else G.add(p, c, q); });
     st.businesses = st.businesses.filter(x => x !== b);
-    p.cash += t.cost;
-    return `sold a ${t.name.toLowerCase()} in ${G.TERR[b.territory].name} for ${G.money(t.cost)}`;
+    const price = G.resale(t);
+    p.cash += price;
+    return `sold a ${t.name.toLowerCase()} in ${G.TERR[b.territory].name} for ${G.money(price)}`;
   };
 })();

@@ -25,5 +25,14 @@ const iconSVG = (name, x, y, size, colour = "#fff") =>
   `<g transform="translate(${x - size / 2},${y - size / 2}) scale(${size / 24})" fill="none" stroke="${colour}" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">${ICONS[name] || ICONS.factory}</g>`;
 
 // A pawn shape, for where players stand
-const pawnSVG = (x, y, h, fill) =>
-  `<path transform="translate(${x - h * 0.35},${y - h * 0.55}) scale(${h / 24})" d="M8.4 0a3.6 3.6 0 0 1 2.1 6.5c1.6 1 2.6 2.5 2.6 4.4h-2c.4 3 1.8 5.6 3.4 7.6l2 1.9v3.6H0v-3.6l2-1.9c1.6-2 3-4.6 3.4-7.6h-2c0-1.9 1-3.4 2.6-4.4A3.6 3.6 0 0 1 8.4 0z" fill="${fill}" stroke="#fff" stroke-width="2"/>`;
+// A player's token: a round counter in their colour with their initial, like a game piece seen from above.
+// mine: yours gets a second, dark ring.
+const pawnSVG = (x, y, h, fill, label = "", mine = false) => {
+  const r = h / 2;
+  return `<g class="token">
+    <circle cx="${x}" cy="${y + 1.5}" r="${r}" fill="#000" opacity=".25"/>
+    ${mine ? `<circle cx="${x}" cy="${y}" r="${r + 2.5}" fill="none" stroke="#1d1d1b" stroke-width="2"/>` : ""}
+    <circle cx="${x}" cy="${y}" r="${r}" fill="${fill}" stroke="#fff" stroke-width="2.2"/>
+    <circle cx="${x}" cy="${y}" r="${r - 4}" fill="none" stroke="#fff" stroke-opacity=".45" stroke-width="1"/>
+    <text x="${x}" y="${y + r * 0.36}" text-anchor="middle" font-size="${(r * 1.05).toFixed(1)}" font-weight="800" fill="#fff" font-family="system-ui, sans-serif">${label}</text></g>`;
+};

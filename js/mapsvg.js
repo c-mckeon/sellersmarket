@@ -16,7 +16,7 @@ function europeMapSVG(fid) {
   // Borders: each territory gets a thin ring just inside its edge (a filter, so territories made of
   // several provinces get one outline, with no lines between their provinces). Two neighbours' rings
   // meet to make one fine border line.
-  // Highlights (mapHighlightSVG) use wider rings in their own colour, drawn on top in the .hl layer.
+  // Highlights (mapHighlightSVG) are drawn on top in the .hl layer.
   const ring = (id, r, colour, op, keep) => `<filter id="${id}" x="-5%" y="-5%" width="110%" height="110%">
       <feMorphology in="SourceAlpha" operator="erode" radius="${r}" result="in"/>
       <feComposite in="SourceAlpha" in2="in" operator="out" result="ring"/>
@@ -24,7 +24,7 @@ function europeMapSVG(fid) {
       <feComposite in2="ring" operator="in" result="edge"/>
       <feMerge>${keep ? `<feMergeNode in="SourceGraphic"/>` : ""}<feMergeNode in="edge"/></feMerge></filter>`;
   let s = `<svg class="board" viewBox="0 0 ${W} ${H}" role="img" aria-label="Map of Europe split into ${TERRITORIES.length} territories">
-    <defs>${ring(fid, 0.9, "#5d5543", 0.55, true)}${ring(fid + "-here", 3.2, "#1d1d1b", 0.9, false)}${ring(fid + "-near", 2, "#d4682a", 0.85, false)}${ring(fid + "-sel", 3.2, "#2f6db5", 0.95, false)}</defs>
+    <defs>${ring(fid, 0.9, "#5d5543", 0.55, true)}</defs>
     <rect width="${W}" height="${H}" fill="#cfc8a6"/>`;
   TERRITORIES.forEach(t => {
     const c = colour[t.id];
@@ -48,11 +48,19 @@ function europeMapSVG(fid) {
   return { svg: s + `<g class="hl"></g></svg>`, below };
 }
 
-// An outline (and for "near", a light tint) over one territory, for the map's top .hl layer.
-// kind: "here" (dark ring), "near" (orange ring and tint) or "sel" (blue ring: the one you clicked). fid: the id passed to europeMapSVG.
+// An outline (and for "near", a light tint) round one territory, for the map's top .hl layer.
+// kind: "here" (dark: where you are), "near" (orange: you can move there) or "sel" (blue: the one you clicked).
+// The outline is drawn as vector shapes, so it stays smooth at any zoom: the territory, widened by a stroke,
+// with its own inside masked out leaves a clean ring just outside its edge (and no lines between the
+// provinces a territory is made of).
+let hlIds = 0;
 function mapHighlightSVG(fid, tid, kind) {
   const t = TERRITORIES.find(x => x.id === tid);
   if (!t) return "";
-  const d = t.provinces.map(p => PROVINCE_PATHS[p]).join(" ");
-  return `${kind === "near" ? `<path d="${d}" fill="#d4682a" fill-opacity=".14"/>` : ""}<g filter="url(#${fid}-${kind})"><path d="${d}" fill="#000"/></g>`;
+  const d = t.provinces.map(p => PROVINCE_PATHS[p]).join(" "), [W, H] = MAP_SIZE, id = `${fid}-m${++hlIds}`;
+  const style = { here: ["#1d1d1b", 2.6, 0.9], near: ["#d4682a", 1.6, 0.9], sel: ["#2f6db5", 2.6, 0.95] }[kind] || ["#1d1d1b", 2, 0.9];
+  const [colour, width, op] = style;
+  return `${kind === "near" ? `<path d="${d}" fill="${colour}" fill-opacity=".12"/>` : ""}
+    <mask id="${id}" maskUnits="userSpaceOnUse" x="0" y="0" width="${W}" height="${H}"><rect width="${W}" height="${H}" fill="#fff"/><path d="${d}" fill="#000"/></mask>
+    <path d="${d}" mask="url(#${id})" fill="${colour}" stroke="${colour}" stroke-width="${width * 2}" stroke-linejoin="round" opacity="${op}"/>`;
 }

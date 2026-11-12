@@ -5,6 +5,9 @@
 // Orders
 //   placeOrder  { id, side: "buy" | "sell", price, qty }   any phase
 //   cancelOrder { order }                                   any phase
+//   Cancelling an order that has been through an auction takes effect after the next one: an order other
+//   players have seen stays live one more round, so they can still meet it. (One placed and cancelled in
+//   the same round goes at once: nobody has seen it.)
 //   A buy order locks price × qty of your cash. A sell order locks the goods (they still take up
 //   stockpile space). A buy order also reserves stockpile space for what it might bring in.
 //   Orders stay on the book until they fill or you cancel them.
@@ -113,7 +116,7 @@
     G.need(qty > 0, "Order at least 1.");
     G.need(Number.isInteger(price) && price >= 1 && price <= MS.maxPrice, `Prices are whole numbers: pick one from 1 to ${MS.maxPrice}.`);
     const name = G.COM[id].name, waste = G.isWaste(id);
-    const mine = st.book.filter(o => o.pid === p.id && o.good === id);
+    const mine = st.book.filter(o => o.pid === p.id && o.good === id && !G.isCancelling(o)); // (ones being cancelled don't count)
     // Your own orders on the other side: you can't trade with yourself
     const other = mine.filter(o => o.side !== side).map(o => o.price);
     if (waste) {
@@ -140,16 +143,21 @@
     p.cash = cents(p.cash + locks(o));
     if (o.side === "sell") G.giveBack(st, p, o.good, o.qty, o.from, o.lots);
   };
+  // Cancel one order: at once if it's new this round, otherwise after tonight's auction (it can still fill)
+  const cancel = (st, o) => {
+    if (o.round === st.round) { release(st, o); st.book = st.book.filter(x => x !== o); }
+    else o.cancelAfter = st.round;
+  };
+  G.isCancelling = o => o.cancelAfter != null;
   G.actions.cancelOrder = (st, p, { order }) => {
     const o = st.book.find(x => x.id === order && x.pid === p.id);
     G.need(o, "That order isn't on the book any more.");
-    release(st, o);
-    st.book = st.book.filter(x => x !== o);
+    G.need(!G.isCancelling(o), "That order is already cancelled: it goes after tonight's auction.");
+    cancel(st, o);
     return null;
   };
   G.actions.cancelAll = (st, p, { id } = {}) => {
-    st.book.filter(o => o.pid === p.id && (!id || o.good === id)).forEach(o => release(st, o));
-    st.book = st.book.filter(o => !(o.pid === p.id && (!id || o.good === id)));
+    st.book.filter(o => o.pid === p.id && (!id || o.good === id) && !G.isCancelling(o)).forEach(o => cancel(st, o));
     return null;
   };
 
@@ -258,6 +266,9 @@
       st.lastTrade[id] = { price: P, qty: vol, round: st.round };
       record.trades[id] = { price: P, qty: vol };
     });
+    // Orders cancelled before this auction have had their last chance: they go now, and what they locked comes back
+    st.book.filter(o => G.isCancelling(o) && o.cancelAfter <= st.round).forEach(o => release(st, o));
+    st.book = st.book.filter(o => !(G.isCancelling(o) && o.cancelAfter <= st.round));
     // What was left on the book afterwards: best bid and ask (and how many at each) for every good with orders
     record.quotes = quotesNow();
     const after = depthNow();

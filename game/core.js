@@ -143,7 +143,7 @@ const SMG = (() => {
   };
   G.log = (st, msg, pid = null) => { if (st.drafting) return; st.log.push({ round: st.round, phase: st.phase, pid, msg }); if (st.log.length > 400) st.log.shift(); };
   const moneyFmt = new Intl.NumberFormat(undefined, { maximumFractionDigits: 2 }); // one shared formatter: toLocaleString is slow
-  G.money = n => moneyFmt.format(Math.round(n * 100) / 100);
+  G.money = n => (n < 0 ? "−€" : "€") + moneyFmt.format(Math.abs(Math.round(n * 100) / 100));
   G.myBusinesses = (st, pid) => st.businesses.filter(b => b.owner === pid);
 
   // The second free business that goes with a starting one, making a two-step chain:

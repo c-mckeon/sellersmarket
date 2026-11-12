@@ -54,7 +54,7 @@ const order = (st, pid, side, price, qty, id = "slag") => G.act(st, pid, "placeO
   const biz = st.businesses.find(b => b.owner === a.id), cost = G.BIZ_BY[biz.type].cost;
   eq("sell it", G.act(st, 1, "sellBusiness", { biz: biz.id }).ok, true);
   eq("gone", st.businesses.some(b => b.id === biz.id), false);
-  eq("paid its cost", a.cash, 1000 + cost);
+  eq("paid 60% of its cost", a.cash, 1000 + Math.round(cost * 0.6));
   eq("not someone else's", G.act(st, 1, "sellBusiness", { biz: st.businesses.find(b => b.owner === 2).id }).ok, false);
 }
 console.log(fails ? `${fails} failed, ${passes} passed` : `all ${passes} passed`);

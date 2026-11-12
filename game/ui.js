@@ -12,7 +12,7 @@
 
   const esc = s => String(s).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
   // Money and prices: whole numbers (older saved games may still have cents)
-  const m = n => (Number.isInteger(+n) || Math.abs(n) >= 100 ? Math.round(n).toLocaleString() : (+n).toFixed(2)).replace(/^-/, "−");
+  const m = n => (+n < 0 ? "−€" : "€") + (Number.isInteger(+n) || Math.abs(n) >= 100 ? Math.abs(Math.round(n)).toLocaleString() : Math.abs(+n).toFixed(2));
   const save = () => { if (online()) return; try { localStorage.setItem(KEY, JSON.stringify(st)); } catch (e) {} }; // online games live in the database
   const load = () => { try { return JSON.parse(localStorage.getItem(KEY)); } catch (e) { return null; } };
   const LAND = TERRITORIES.filter(t => !t.sea);
@@ -165,7 +165,7 @@
     const a = o.args || {};
     if (o.name === "placeOrder" && G.isWaste(a.id)) return a.side === "buy" ? `Take ${a.qty} ${G.COM[a.id].name} for at least ${m(+a.price)} each` : `Pay up to ${m(+a.price)} each to get rid of ${a.qty} ${G.COM[a.id].name} <em>${m(a.qty * a.price)}</em>`;
     if (o.name === "placeOrder") return `${a.side === "buy" ? "Bid for" : "Offer"} ${a.qty} ${G.COM[a.id].name} at ${m(+a.price)} <em>${m(a.qty * a.price)}</em>`;
-    if (o.name === "sellBusiness") { const b = st.businesses.find(x => x.id === a.biz); return b ? `Sell your ${G.BIZ_BY[b.type].name.toLowerCase()} in ${G.TERR[b.territory].name} for ${m(G.BIZ_BY[b.type].cost)}` : "Sell a business"; }
+    if (o.name === "sellBusiness") { const b = st.businesses.find(x => x.id === a.biz); return b ? `Sell your ${G.BIZ_BY[b.type].name.toLowerCase()} in ${G.TERR[b.territory].name} for ${m(G.resale(G.BIZ_BY[b.type]))}` : "Sell a business"; }
     if (o.name === "cancelOrder") { const x = st.book.find(y => y.id === a.order); return x ? `Cancel ${x.side === "buy" ? "bid for" : "offer of"} ${x.qty} ${G.COM[x.good].name} at ${m(x.price)}` : "Cancel an order"; }
     if (o.name === "bid") { const k = (st.contracts || []).find(x => x.id === a.contract); return `Bid ${m(a.amount)} for ${k ? `${G.contractItem(k).icon} ${esc(G.contractItem(k).name)}` : "a contract"}`; }
     if (o.name === "deliver") { const k = (G.player(st, ui.seat).contracts || []).find(x => x.id === a.contract); if (!k) return "Deliver a contract"; const it = G.contractItem(k); return `Deliver ${it.icon} ${esc(it.name)} for ${m(k.price)}`; }
@@ -387,21 +387,30 @@
       const c = mid(id), half = Math.max(4, c * zoom);  // at least ±4, so cheap goods still show a spread
       per[id].frames.forEach(f => { f.lo = c - half; f.hi = c + half; });
       per[id].maxQ = maxQ;
+      // The grey blobs move with the replay: each moment shows only orders from the (up to 8) auctions
+      // before it. One shape per auction (set i: the auctions before auction i; the last: now), all drawn
+      // to one scale, so the blobs grow and shift rather than jump.
+      const books = hs.map(h => bookOf(h)?.[id]?.pre).map(x => x || { a: [], b: [] });
+      const sets = Array.from({ length: hs.length + 1 }, (_, i) => ghostSet(books.slice(Math.max(0, i - 8), i), c - half, c + half, 40, 10));
+      per[id].ghostSets = sets;
+      per[id].ghostPeak = Math.max(...sets.map(ghostPeak));
+      per[id].frames.forEach((f, k) => f.gi = Math.min(hs.length, Math.floor(k / 4)));
     });
-    return { goods, frames, per, lastStart: Math.max(0, frames.length - 5) };
+    // Four moments per auction, then now: auction i starts at moment 4i; the slider moves in auctions (rounds)
+    return { goods, frames, per, auctions: hs.length, lastStart: Math.max(0, frames.length - 5) };
   }
 
   // One card's little chart: asks to the right of the centre line, bids to the left, past orders as grey
   // blobs, the spread shaded, a line at a clearing price, and the last sale as a dot on the centre line
   function drawMini(D, s) {
-    const W = 80, H = 96, T = 4, B = 4, cx = W / 2, half = cx - 3, span = s.hi - s.lo || 1, plotH = H - T - B;
+    const W = 80, H = 100, T = 10, B = 10, cx = W / 2, half = cx - 3, span = s.hi - s.lo || 1, plotH = H - T - B;
     const Yraw = p => T + (s.hi - p) / span * plotH, Y = p => Math.min(H - B, Math.max(T, Yraw(p)));
     const pinned = p => Yraw(p) < T - 0.5 || Yraw(p) > H - B + 0.5;
     const k = half / D.maxQ, bh = Math.max(3, Math.min(7, plotH / span * 0.7));
     const segs = Object.values(s.segs).filter(x => x.w > 0.02 && x.op > 0.02);
     let g = "";
     // Past orders: grey blobs, older ones lighter (price runs bottom to top here)
-    if (D.ghosts.n) g += ghostPaths(D.ghosts, s.lo, s.hi, 40, 10, t => H - B - t * plotH, (y, v) => `${(cx + v).toFixed(1)},${y.toFixed(1)}`, half, [["a", 1], ["b", -1]], [0, H - B, 0, T]);
+    if (s.gh && D.ghostPeak > 1e-9) g += ghostSVG(s.gh, 0.7 * half / D.ghostPeak, 40, t => H - B - t * plotH, (y, v) => `${(cx + v).toFixed(1)},${y.toFixed(1)}`, [["a", 1], ["b", -1]], [0, H - B, 0, T]);
     const live = side => segs.filter(x => x.side === side && x.op > 0.5 && !x.fill);
     // (waste runs the other way: the takers' fees sit above the payers', and they trade when they meet)
     const bid = D.neg ? Math.max(-Infinity, ...live("a").map(x => x.p)) : Math.max(-Infinity, ...live("b").map(x => x.p));
@@ -421,6 +430,19 @@
       g += `<rect class="mine" x="${(o.side === "sell" ? cx : cx - w).toFixed(1)}" y="${y.toFixed(1)}" width="${w.toFixed(1)}" height="${bh.toFixed(1)}" rx="1"/>`; });
     g += `<line class="axis" x1="${cx}" x2="${cx}" y1="${T}" y2="${H - B}"/>`;
     if (s.last != null) g += `<circle class="ldot" cx="${cx}" cy="${Y(s.last).toFixed(1)}" r="3.5"/>`;
+    // The best ask and bid: their price beside the bar, on its side (asks right, bids left)
+    const bestOf = side => { const l = live(side); if (!l.length) return null; const hi = (side === "b") !== !!D.neg;
+      const p = hi ? Math.max(...l.map(x => x.p)) : Math.min(...l.map(x => x.p)); return { p, w: l.filter(x => Math.round(x.p) === Math.round(p)).reduce((t, x) => t + x.w, 0) }; };
+    const label = (side, x) => {
+      if (!x || pinned(x.p)) return;
+      const len = Math.min(half, x.w * k), y = Y(x.p) + 2.8, txt = m(Math.round(x.p));
+      const out = side === "a" ? cx + len + 2 : cx - len - 2, room = side === "a" ? W - out : out; // outside the bar if it fits, else inside
+      const fits = room >= txt.length * 4.4, xx = fits ? out : side === "a" ? W - 1 : 1;
+      g += `<text class="plbl ${side === "a" ? "ask" : "bid"}" x="${xx.toFixed(1)}" y="${y.toFixed(1)}" text-anchor="${(side === "a") === fits ? "start" : "end"}">${txt}</text>`;
+    };
+    label("a", bestOf("a")); label("b", bestOf("b"));
+    // Which side is which: ask in the top-right corner, bid in the bottom-left
+    g += `<text class="corner ask" x="${W - 1}" y="7" text-anchor="end">ask</text><text class="corner bid" x="1" y="${H - 1}">bid</text>`;
     return `<svg viewBox="0 0 ${W} ${H}" aria-hidden="true">${g}</svg>`;
   }
 
@@ -429,19 +451,17 @@
     const hiFirst = side => (side === "b") !== G.isWaste(id); // waste: the lowest take fee and highest pay fee are best
     const best = side => Object.entries(f.segs).filter(([key, x]) => key[0] === side && x.op > 0.5).sort((a, b) => hiFirst(side) ? b[1].p - a[1].p : a[1].p - b[1].p)[0]?.[1];
     const b = best("b"), a = best("a");
-    if (G.isWaste(id)) return {
-      h: `<b>${G.COM[id].name}</b><span class="qc-last">${f.sold != null ? `fee ${m(f.sold)}` : f.last != null ? `last fee ${m(f.last)}` : "no trades"}</span>`,
-      n: `<span class="a" title="The most someone will pay to get rid of it">${a ? `pays ${m(a.p)} <small>×${a.w}</small>` : "nobody paying"}</span><span class="b" title="The least someone asks to take it">${b ? `takes ${m(b.p)} <small>×${b.w}</small>` : "nobody taking"}</span><span class="c">waste: costs to dump</span>`,
-    };
+    const made = G.COM[id].type === "made";
     return {
       h: `<b>${G.COM[id].name}</b><span class="qc-last">${f.sold != null ? `traded at ${m(f.sold)}` : f.last != null ? `last ${m(f.last)}` : "no trades"}</span>`,
-      n: `<span class="a">${a ? `ask ${m(a.p)} <small>×${a.w}</small>` : "no asks"}</span><span class="b">${b ? `bid ${m(b.p)} <small>×${b.w}</small>` : "no bids"}</span><span class="c" title="What its raw materials cost at their last traded prices${basisNote(id)}">${G.COM[id].type === "raw" ? "raw" : G.COM[id].type === "waste" ? "by-product" : basisText(id) ? `cost ${basisText(id)}` : "cost –"}</span>`,
+      // Under the chart: the cost basis (made goods only); the bid and ask prices are on the chart itself
+      n: `<span class="c" title="${made ? `What its raw materials cost at their last traded prices${basisNote(id)}` : ""}">${made ? (basisText(id) ? `cost ${basisText(id)}` : "cost –") : "&nbsp;"}</span>`,
     };
   };
   const cardHTML = (id, d, k, flash) => {
     const f = d.per[id].frames[k], w = cardWords(id, f);
     return `<button class="qcard${flash ? " flash" : ""}" data-good="${id}">
-      <span class="qc-h">${w.h}</span><span class="qc-svg">${drawMini(d.per[id], { ...still(f, themeColours()), mine: k === d.frames.length - 1 ? myLevels(id) : [] })}</span><span class="qc-n">${w.n}</span></button>`;
+      <span class="qc-h">${w.h}</span><span class="qc-svg">${drawMini(d.per[id], { ...still(f, themeColours()), gh: d.per[id].ghostSets[f.gi], mine: k === d.frames.length - 1 ? myLevels(id) : [] })}</span><span class="qc-n">${w.n}</span></button>`;
   };
 
   function quoteBoard(fresh, open = "") {
@@ -449,48 +469,53 @@
     // An open good lies over the cards, covering a block of 6 around its own (placed by placeOpen)
     const openHTML = id => `<div class="qopen" data-open="${id}" style="visibility:hidden">${open}</div>`;
     const k = d.frames.length - 1;
-    ui.board = d; // the replay reads this
+    ui.board = d; ui.boardK = k; // the replay reads these (k: the moment showing: now)
     const cards = d.goods.map(id => cardHTML(id, d, k, fresh.has(id)));
     if (open) cards.push(openHTML(ui.good));
     return `<section class="msec qboard">
       <div class="qhead"><h3>Quote board <span class="muted small">each good's book: asks right, bids left, the dot is the last trade</span></h3>
         <button class="gbtn ghost" id="qOpen" ${ui.qOpen ? "hidden" : ""}>▶ Replay</button></div>
       <div class="qctl" ${ui.qOpen ? "" : "hidden"}><div class="gseg"><button data-rmode="last" class="${ui.rmode !== "game" ? "on" : ""}">Last auction</button><button data-rmode="game" class="${ui.rmode === "game" ? "on" : ""}">Whole game</button></div>
-        <button class="gbtn ghost" id="qPlay">▶ Replay</button><input type="range" id="qSlide" min="${ui.rmode === "game" ? 0 : d.lastStart}" max="${k}" value="${k}" aria-label="Step through the auctions">
+        <button class="gbtn ghost" id="qPlay">▶ Replay</button><input type="range" id="qSlide" min="0" max="${d.auctions}" value="${d.auctions}" aria-label="Drag back to replay from that round">
         <span id="qLabel" class="muted small">${d.frames[k].label}</span><button class="glink" id="qClose" title="Close the replay">✕</button></div>
       <div class="qgrid" id="qGrid">${cards.join("")}</div>
     </section>`;
   }
 
-  // Draw the board at moment k, or part-way from k - 1 to k (t from 0 to 1). Cards update in place.
-  function showFrame(k, t = 1, C = themeColours()) {
+  // Draw the board part-way from moment `a` to moment `b` (t from 0 to 1; t = 1: just b). Cards update in place.
+  // The slider shows which round it's in.
+  function showFrame(b, t = 1, C = themeColours(), a = b - 1) {
     const d = ui.board, grid = root.querySelector("#qGrid");
     if (!d || !grid) return;
-    root.querySelector("#qLabel").textContent = d.frames[k].label;
-    root.querySelector("#qSlide").value = k;
+    ui.boardK = b;
+    root.querySelector("#qLabel").textContent = d.frames[b].label;
+    root.querySelector("#qSlide").value = Math.min(d.auctions, Math.floor(b / 4));
+    const now = d.frames.length - 1;
     d.goods.forEach(id => {
       const el = grid.querySelector(`.qcard[data-good="${id}"]`);
       if (!el) return;
-      const F = d.per[id].frames, f = F[k];
-      el.querySelector(".qc-svg").innerHTML = drawMini(d.per[id], { ...(k > 0 && t < 1 ? blend(F[k - 1], f, t, C) : still(f, C)), mine: k === d.frames.length - 1 && t >= 1 ? myLevels(id) : [] });
-      if (t === 1 || !el.dataset.k || +el.dataset.k !== k) {
+      const F = d.per[id].frames, f = F[b];
+      const gs = d.per[id].ghostSets, gh = a >= 0 && t < 1 ? ghostMix(gs[F[a].gi], gs[f.gi], t) : gs[f.gi];
+      el.querySelector(".qc-svg").innerHTML = drawMini(d.per[id], { ...(a >= 0 && t < 1 ? blend(F[a], f, t, C) : still(f, C)), gh, mine: b === now && t >= 1 ? myLevels(id) : [] });
+      if (t === 1 || +el.dataset.k !== b) {
         const w = cardWords(id, f);
         el.querySelector(".qc-h").innerHTML = w.h; el.querySelector(".qc-n").innerHTML = w.n;
-        if (+el.dataset.k !== k && f.sold != null) { el.classList.remove("flash"); void el.offsetWidth; el.classList.add("flash"); }
-        el.dataset.k = k;
+        if (+el.dataset.k !== b && f.sold != null) { el.classList.remove("flash"); void el.offsetWidth; el.classList.add("flash"); }
+        el.dataset.k = b;
       }
     });
   }
-  // Play from moment `from` to `to`: each blends into the next, then holds. Returns a stop function.
+  // Play from moment `from` to `to`, each blending smoothly into the next, then holding (as in the big
+  // order book replay). It first glides from whatever is showing to `from`. Returns a stop function.
   function playBoard(from, to, fast, done) {
-    const d = ui.board, C = themeColours(), MOVE = fast ? 160 : 325;
-    let k = from, t0 = null, raf = 0;
+    const d = ui.board, C = themeColours(), MOVE = fast ? 180 : 325;
     const ease = t => t < .5 ? 2 * t * t : 1 - (-2 * t + 2) ** 2 / 2;
+    let prev = ui.boardK ?? d.frames.length - 1, k = from, t0 = null, raf = 0;
     const tick = now => {
       if (t0 == null) t0 = now;
-      const el = Math.max(0, now - t0), move = k === from ? 0 : MOVE, hold = (d.frames[k].hold ?? 375) * (fast ? 0.4 : 1);
-      showFrame(k, move && el < move ? ease(el / move) : 1, C);
-      if (el >= move + hold) { if (++k > to) return done(); t0 = now; }
+      const el = Math.max(0, now - t0), move = prev === k ? 0 : MOVE, hold = (d.frames[k].hold ?? 375) * (fast ? 0.4 : 1);
+      showFrame(k, move && el < move ? ease(el / move) : 1, C, prev);
+      if (el >= move + hold) { if (k >= to) return done(); prev = k; k++; t0 = now; }
       raf = requestAnimationFrame(tick);
     };
     raf = requestAnimationFrame(tick);
@@ -556,7 +581,7 @@
           const t = G.BIZ_BY[b.type], held = Object.entries(b.stock || {}), used = held.reduce((s, [, q]) => s + q, 0);
           const miss = t.kind === "factory" ? G.inputsFor(vw, p, t).missing : [];
           return `<div class="dbiz"><span class="bicon" style="background:${p.colour}"><svg viewBox="0 0 24 24">${iconSVG(BIZ_ICON[t.id], 12, 12, 18)}</svg></span>
-            <b>${t.name}</b> <span class="muted">${G.TERR[b.territory].name}</span> <button class="glink dsellbiz" data-sellbiz="${b.id}" title="Sell it back for its cost price; it disappears">sell for ${m(t.cost)}</button>
+            <b>${t.name}</b> <span class="muted">${G.TERR[b.territory].name}</span> <button class="glink dsellbiz" data-sellbiz="${b.id}" title="Sell it back for ${Math.round((S.businessResale ?? 1) * 100)}% of what it cost; it disappears">sell for ${m(G.resale(t))}</button>
             ${S.businessStock ? `<span class="dcap" title="${used} of ${S.businessSpace} units"><i style="width:${Math.min(100, used / S.businessSpace * 100)}%" class="${used >= S.businessSpace ? "full" : ""}"></i></span>
             <span class="dheld">${held.map(([c, q]) => `<button class="dgood" data-good="${c}" title="Sell it">${q} ${G.COM[c].name}${offBadge(p, c)}</button>`).join("") || `<span class="muted">empty</span>`}${used >= S.businessSpace ? ` <b class="bad">full</b>` : ""}</span>` : ""}
             ${miss.length ? `<span class="bad">needs ${miss.map(([c, n]) => `${n} ${G.COM[c].name}`).join(", ")}</span>` : ""}</div>`;
@@ -580,7 +605,7 @@
     const mine = vw.book.filter(o => o.pid === p.id).sort((a, b) => G.COM[a.good].name.localeCompare(G.COM[b.good].name) || a.price - b.price);
     const text = o => G.isWaste(o.good) ? (o.side === "buy" ? `Take ${o.qty} ${G.COM[o.good].name} for ≥ ${m(o.price)}` : `Pay ≤ ${m(o.price)} to dump ${o.qty} ${G.COM[o.good].name}`)
       : `${o.side === "buy" ? "Bid" : "Ask"} ${o.qty} ${G.COM[o.good].name} @ ${m(o.price)}`;
-    return `<div class="myorders"><b>Your orders on the book</b>${mine.length ? mine.map(o => `<span class="mo ${o.side}${isNew(o) ? " new" : ""}"><button class="glink" data-good="${o.good}">${text(o)}</button>${isNew(o) ? "<em>new</em>" : ""}<button class="mox" data-cancel="${o.id}" data-new="${isNew(o) ? 1 : ""}" title="Cancel it${o.side === "buy" ? " (frees the cash)" : " (the goods come back)"}">✕</button></span>`).join("")
+    return `<div class="myorders"><b>Your orders on the book</b>${mine.length ? mine.map(o => `<span class="mo ${o.side}${isNew(o) ? " new" : ""}"><button class="glink" data-good="${o.good}">${text(o)}</button>${isNew(o) ? "<em>new</em>" : ""}${G.isCancelling(o) ? `<em class="moc" title="Others saw it, so it can still fill in tonight's auction; then it goes">cancelled · live until tonight</em>` : `<button class="mox" data-cancel="${o.id}" data-new="${isNew(o) ? 1 : ""}" title="${isNew(o) ? "Take it back" : "Cancel it: it stays live through tonight's auction (others have seen it), then goes"}">✕</button>`}</span>`).join("")
       : `<span class="muted small">None. Unfilled orders stay on the book until they fill or you cancel them.</span>`}</div>`;
   }
 
@@ -722,32 +747,48 @@
   //   along(t) → position along the price axis (t from 0 at the low end to 1); out(pos, v) → the point v
   //   away from the centre line; grad: [x1, y1, x2, y2] of the price axis, for the shading
   let ghostIds = 0;
-  function ghostPaths(G0, lo, hi, N, sdDiv, along, out, half, sides, grad) {
-    const key = `${lo}|${hi}|${N}`;
-    if (G0.cache?.key === key) return G0.cache.svg;
-    const span = hi - lo || 1, sd = Math.max(span / sdDiv, 1), n = G0.rounds.length;
+  // The shape behind the blobs, for some past auctions' books ({ a, b } price levels each, oldest first):
+  // per side, N + 1 samples along the price axis of the added-up curves (`sum`) and how recent the orders
+  // there were, 0 (oldest) to 1 (newest) (`recent`)
+  function ghostSet(rounds, lo, hi, N, sdDiv) {
+    const span = hi - lo || 1, sd = Math.max(span / sdDiv, 1), n = rounds.length, set = {};
     const curve = list => Array.from({ length: N + 1 }, (_, i) => { const p = lo + i / N * span; return list.reduce((t, [pp, q]) => t + q * Math.exp(-((p - pp) ** 2) / (2 * sd * sd)), 0); });
     // Newer rounds weigh more: the oldest counts 30%, the newest 100%
     const weight = r => 0.3 + 0.7 * (n > 1 ? r / (n - 1) : 1);
-    const total = {}, recent = {};
-    sides.forEach(([side]) => {
+    ["a", "b"].forEach(side => {
       const sum = Array(N + 1).fill(0), age = Array(N + 1).fill(0);
-      G0.rounds.forEach((r, i) => { if (!r[side].length) return; const c = curve(r[side]), w = weight(i);
+      rounds.forEach((r, i) => { if (!r[side].length) return; const c = curve(r[side]), w = weight(i);
         c.forEach((v, j) => { sum[j] += v * w; age[j] += v * w * (n > 1 ? i / (n - 1) : 1); }); });
-      total[side] = sum; recent[side] = sum.map((v, j) => v > 1e-9 ? age[j] / v : 0);
+      set[side] = { sum, recent: sum.map((v, j) => v > 1e-9 ? age[j] / v : 0) };
     });
-    const peak = Math.max(1e-9, ...sides.flatMap(([side]) => total[side])), kg = 0.7 * half / peak;
+    return set;
+  }
+  // Part-way between two shapes (t from 0 to 1), for a smooth replay
+  const ghostMix = (x, y, t) => !x ? y : !y ? x : Object.fromEntries(["a", "b"].map(k => [k, {
+    sum: x[k].sum.map((v, i) => v + (y[k].sum[i] - v) * t), recent: x[k].recent.map((v, i) => v + (y[k].recent[i] - v) * t) }]));
+  const ghostPeak = set => Math.max(1e-9, ...set.a.sum, ...set.b.sum);
+  // Draw a shape: kg turns a sample into a distance from the centre line
+  function ghostSVG(set, kg, N, along, out, sides, grad) {
     let svg = "";
     sides.forEach(([side, dir]) => {
-      if (!G0.rounds.some(r => r[side].length)) return;
+      const { sum, recent } = set[side];
+      if (!sum.some(v => v * kg > 0.3)) return;
       const id = `gh${++ghostIds}`, stops = 12;
       svg += `<linearGradient id="${id}" gradientUnits="userSpaceOnUse" x1="${grad[0]}" y1="${grad[1]}" x2="${grad[2]}" y2="${grad[3]}">${Array.from({ length: stops + 1 }, (_, k) => {
-        const j = Math.round(k / stops * N); return `<stop offset="${(k / stops).toFixed(3)}" stop-opacity="${(0.05 + 0.2 * recent[side][j]).toFixed(3)}"/>`; }).join("")}</linearGradient>`;
-      svg += `<path class="ghost" fill="url(#${id})" d="M${out(along(0), 0)} ${total[side].map((v, i) => `L${out(along(i / N), dir * v * kg)}`).join(" ")} L${out(along(1), 0)} Z"/>`;
+        const j = Math.round(k / stops * N); return `<stop offset="${(k / stops).toFixed(3)}" stop-opacity="${(0.05 + 0.2 * recent[j]).toFixed(3)}"/>`; }).join("")}</linearGradient>`;
+      svg += `<path class="ghost" fill="url(#${id})" d="M${out(along(0), 0)} ${sum.map((v, i) => `L${out(along(i / N), dir * v * kg)}`).join(" ")} L${out(along(1), 0)} Z"/>`;
     });
+    return svg;
+  }
+  // The big order book's blobs: one shape for all the rounds shown (kept per price scale)
+  function ghostPaths(G0, lo, hi, N, sdDiv, along, out, half, sides, grad) {
+    const key = `${lo}|${hi}|${N}`;
+    if (G0.cache?.key === key) return G0.cache.svg;
+    const set = ghostSet(G0.rounds, lo, hi, N, sdDiv), svg = ghostSVG(set, 0.7 * half / ghostPeak(set), N, along, out, sides, grad);
     G0.cache = { key, svg };
     return svg;
   }
+
 
   function depthFrames(id, rounds = 4, now = nowBook(st, id)) {
     const frames = [];
@@ -790,7 +831,7 @@
   // Draws one moment of the book (see bookChart), price running bottom to top like the quote cards:
   // asks to the right of the centre line, bids to the left. hits: bars to give hover tips (live chart only).
   function drawBook(D, s, hits = []) {
-    const W = 320, H = 300, L = 34, R = 6, T = 22, B = 10, cx = L + (W - L - R) / 2, half = (W - L - R) / 2 - 2;
+    const W = 200, H = 300, L = 26, R = 4, T = 20, B = 8, cx = L + (W - L - R) / 2, half = (W - L - R) / 2 - 2;
     const span = s.hi - s.lo || 1, plotH = H - T - B;
     const Yraw = p => T + (s.hi - p) / span * plotH;
     const Y = p => Math.min(H - B, Math.max(T, Yraw(p)));                    // far-off prices are pinned to the edge
@@ -854,50 +895,39 @@
   }
 
   // One good: who makes and uses it, its book, price history, your orders and the order form
+  // One good, opened over the quote board: its order book (left), and its price history and an order form
+  // (right). Sized to fit its block of 6 cards without scrolling.
   function ticket(p, id, want) {
-    const q = G.quote(vw, id), c = G.COM[id];
+    const q = G.quote(vw, id), c = G.COM[id], waste = G.isWaste(id);
     const hold = have(p, id);
     const t = ui.ticket[id] ||= { side: hold > (want[id] || 0) ? "sell" : "buy", price: "", qty: "" };
     const yours = (side, price) => vw.book.filter(o => o.pid === p.id && o.good === id && o.side === side && o.price === price).reduce((s, o) => s + o.qty, 0);
-    const myOrders = vw.book.filter(o => o.pid === p.id && o.good === id);
-    const isNew = o => !st.book.some(x => x.id === o.id);
     const cb = G.costBasis(vw, id), basisVal = cb && !cb.missing.length && cb.value ? cb.value : null;
     const suggest = t.side === "buy" ? q.ask ?? q.last?.price ?? q.bid ?? basisVal : q.bid ?? q.last?.price ?? q.ask ?? basisVal;
-    const makers = makersOf(p, id), users = usersOf(p, id);
-    const standIn = b => Object.keys(b.inputs).find(x => G.substitutesFor(b, x).some(([y]) => y === id));
-    const usedBy = G.BIZ.filter(b => usesGood(b, id)).map(b => `${b.name.toLowerCase()}${b.inputs[id] ? "" : ` <i>instead of ${G.COM[standIn(b)].name.toLowerCase()}</i>`}`);
-    return `<div class="gticket">
-      <div class="ghead"><h3>${c.name}</h3><span class="muted small">${q.last ? `last ${m(q.last.price)} · ${q.volume} traded in 3 rounds` : "nothing traded yet"}${basisText(id) ? ` · <span title="What its inputs cost at their last traded prices${basisNote(id)}">cost basis ${basisText(id)}</span>` : G.COM[id].type === "raw" && !q.last ? " · raw: the market sets its price" : ""}${q.spread != null ? ` · spread ${Math.round(q.spread * 100)}%` : ""}</span><span class="gsp"></span><button class="glink" id="gTicketClose" title="Close">✕</button></div>
-      <div class="tfacts">
-        <div><span>You have</span><b>${hold}${spoils(p, id) ? ` <small class="bad">⌛ ${spoils(p, id)} go off tonight</small>` : G.roundsLeft && G.roundsLeft(vw, p, id) != null ? ` <small class="muted">oldest lasts ${G.roundsLeft(vw, p, id)} more round${G.roundsLeft(vw, p, id) === 1 ? "" : "s"}</small>` : ""}</b>${whereIs(p, id).length > 1 || (whereIs(p, id)[0] && whereIs(p, id)[0].label !== "your stockpile") ? `<small>${whereIs(p, id).map(x => `${x.qty} ${x.label === "your stockpile" ? "in" : "at"} ${x.label.toLowerCase()}`).join(", ")}</small>` : ""}</div>
-        <div><span>Made by</span><b>${makers.length ? names(makers) : "nobody else"}</b></div>
-        <div><span>Could use it</span><b>${users.length ? names(users) : "nobody yet"}</b></div>
-      </div>
-      <p class="small muted tused">${[contractGood(id) ? "contracts can ask for it" : ""].filter(Boolean).map(x => x + " · ").join("")}used by ${usedBy.join(", ") || "no factory"}${S.depreciation?.on ? ` · ${G.lifeOf(id) ? `lasts ${G.lifeOf(id)} rounds` : "never goes off"}` : ""}</p>
-      <div class="tcharts">
-        <div><h4 title="Price runs bottom to top. Red bars right of the line are asks, green bars left are bids: the longer, the more at that price. Grey shapes: where orders sat in recent rounds, darker where recent. The dot is the last sale. Hover a bar for details.">Order book <span class="hint">ⓘ</span></h4><div class="depthbox">${bookChart(id, yours)}</div>
-          <div class="drctl">${bookRoundsKept() ? `<button class="gbtn ghost" id="dPlay">▶ Replay</button><label class="drr">last <input type="number" id="dRounds" min="1" max="${bookRoundsKept()}" value="${bookRounds()}"> <span class="muted">of ${bookRoundsKept()} rounds</span></label><span id="dLabel" class="muted small"></span>` : `<button class="gbtn ghost" disabled>▶ Replay</button><span class="muted small">Replays build up from here on: each auction from now is recorded.</span>`}</div></div>
-        <div><h4>Price history</h4>${priceChart(id)}</div>
-      </div>
-      <div class="${myOrders.length ? "gtwo" : ""}">
-        <div>
-          <h4>New order</h4>
-          <div class="gform">
-            <div class="gseg"><button data-side="buy" class="${t.side === "buy" ? "on" : ""}">${G.isWaste(id) ? "Take it" : "Buy"}</button><button data-side="sell" class="${t.side === "sell" ? "on" : ""}">${G.isWaste(id) ? "Get rid of it" : "Sell"}</button></div>
-            <label>${G.isWaste(id) ? (t.side === "buy" ? "Fee you want, each" : "Most you'll pay, each") : "Price each"} <input type="number" id="gPrice" min="1" step="1" value="${t.price || (suggest != null ? suggest : "")}" placeholder="price"></label>
-            <label>Quantity <input type="number" id="gQty" min="1" step="1" value="${t.qty || (t.side === "sell" ? hold : Math.max(1, (want[id] || 0) - hold)) || 1}"></label>
-            <button class="gbtn" id="gPlace">${G.isWaste(id) ? (t.side === "buy" ? "Offer to take it" : "Offer to pay") : t.side === "buy" ? "Place buy" : "Place sell"}</button>
-          </div>
-          ${G.isWaste(id) ? `<p class="muted small">Waste is worth less than nothing: whoever gets rid of it pays whoever takes it. ${t.side === "buy" ? "You'll be paid at least this fee for each unit you take; it then sits in your stockpile until it goes off." : `You'll pay at most this fee for each unit someone takes; the fee is locked until then · ${m(p.cash)} free`}</p>` : ""}
-          <p class="muted small" ${G.isWaste(id) ? "hidden" : ""} title="${t.side === "buy" ? "Locks price × quantity of your cash until it fills or you cancel. What you buy goes to your stockpile." : "Takes the goods from your businesses first, then your stockpile."}">${t.side === "buy" ? `Locks the cash until filled or cancelled · ${m(p.cash)} free` : `${hold} available to sell`}</p>
+    const head = [q.last ? `last ${m(q.last.price)}` : "no trades yet", c.type === "made" && basisText(id) ? `<span title="What its inputs cost at their last traded prices${basisNote(id)}">cost ${basisText(id)}</span>` : ""].filter(Boolean).join(" · ");
+    const note = waste ? (t.side === "buy" ? "You're paid at least this a unit to take it" : `You pay at most this a unit · ${m(p.cash)} free`)
+      : t.side === "buy" ? `Locks the cash · ${m(p.cash)} free` : `${hold} to sell`;
+    return `<div class="gticket tk">
+      <div class="ghead"><h3>${c.name}</h3><span class="muted small">${head}</span><span class="gsp"></span><button class="glink" id="gTicketClose" title="Close">✕</button></div>
+      <div class="tk-body">
+        <div class="tk-book">
+          <div class="depthbox" title="Price runs bottom to top. Red bars right of the line are asks, green bars left are bids: the longer, the more at that price. Blue: yours. Grey: where orders sat in recent rounds. The dot is the last sale.">${bookChart(id, yours)}</div>
+          <div class="drctl">${bookRoundsKept() ? `<button class="gbtn ghost" id="dPlay">▶ Replay</button><span id="dLabel" class="muted small"></span>` : ""}</div>
         </div>
-        ${myOrders.length ? `<div>
-          <h4>Your orders</h4>
-          ${myOrders.map(o => `<div class="gpos">${G.isWaste(id) ? (o.side === "buy" ? `Take ${o.qty} for ≥ ${m(o.price)} each` : `Pay ≤ ${m(o.price)} each to get rid of ${o.qty}`) : `${o.side === "buy" ? "Buy" : "Sell"} ${o.qty} at ${m(o.price)}`}${isNew(o) ? ` <em>new</em>` : ""}<button data-cancel="${o.id}" data-new="${isNew(o) ? 1 : ""}">Cancel</button></div>`).join("")}
-        </div>` : ""}
+        <div class="tk-side">
+          <div class="tk-price">${priceChart(id)}</div>
+          <div class="gform">
+            <div class="gseg"><button data-side="buy" class="${t.side === "buy" ? "on" : ""}">${waste ? "Take it" : "Buy"}</button><button data-side="sell" class="${t.side === "sell" ? "on" : ""}">${waste ? "Get rid of it" : "Sell"}</button></div>
+            <label>${waste ? (t.side === "buy" ? "Fee each" : "Pay up to") : "Price"} <input type="number" id="gPrice" min="1" step="1" value="${t.price || (suggest != null ? suggest : "")}" placeholder="€"></label>
+            <label>Qty <input type="number" id="gQty" min="1" step="1" value="${t.qty || (t.side === "sell" ? hold : Math.max(1, (want[id] || 0) - hold)) || 1}"></label>
+            <button class="gbtn" id="gPlace">${waste ? (t.side === "buy" ? "Offer to take" : "Offer to pay") : t.side === "buy" ? "Place buy" : "Place sell"}</button>
+            <span class="muted small tk-note">${note}</span>
+          </div>
+        </div>
       </div>
     </div>`;
   }
+
 
   // ----- Contracts: a pinboard of work orders -----
   // Every contract is a paper work order pinned to a cork board: who issued it (a made-up agency), what it
@@ -1024,7 +1054,7 @@
         const half = (inRow - 1) / 2 * step + S / 2 + 4;
         const cx = Math.min(W - half, Math.max(half, x)) + (k - (inRow - 1) / 2) * step, cy = below[tid] + 22 + r * (S + 4);
         if (mk.kind === "biz") { const o = G.player(vw, mk.b.owner), t = G.BIZ_BY[mk.b.type]; svg += `<g class="mk"><title>${esc(o.name)}: ${t.name}</title><rect x="${cx - S / 2}" y="${cy - S / 2}" width="${S}" height="${S}" rx="6" fill="${o.colour}" stroke="#fff" stroke-width="2"/>${iconSVG(BIZ_ICON[t.id], cx, cy, 19)}</g>`; }
-        else svg += `<g class="mk"><title>${esc(mk.x.name)}${mk.x.id === p.id ? " (you)" : ""}</title>${pawnSVG(cx, cy, mk.x.id === p.id ? 36 : 30, mk.x.colour)}</g>`;
+        else svg += `<g class="mk"><title>${esc(mk.x.name)}${mk.x.id === p.id ? " (you)" : ""}</title>${pawnSVG(cx, cy, mk.x.id === p.id ? 26 : 22, mk.x.colour, esc(mk.x.name[0] || "?").toUpperCase(), mk.x.id === p.id)}</g>`;
       });
       if (show.length < list.length) svg += `<text x="${x}" y="${below[tid] + 22 + rows * (S + 4) + 6}" text-anchor="middle" font-size="12" font-weight="700" fill="#4a4232" paint-order="stroke" stroke="#fff" stroke-width="3">+${list.length - show.length} more</text>`;
     });
@@ -1048,8 +1078,7 @@
   }
 
   // ----- Opening a good: its quote card grows into the big card, and shrinks back when closed -----
-  const pageRect = el => { const r = el.getBoundingClientRect(); return { x: r.left + scrollX, y: r.top + scrollY, w: r.width, h: r.height }; };
-  // A plain box shaped like a card glides from `from` to where `to` now sits, then `to` fades in
+
   // Lay the open good over a block of 6 cards around its own: 3 wide and 2 high (2 × 3 when the board is
   // only 2 cards wide), kept inside the board. It's always exactly that size; what doesn't fit scrolls inside.
   function placeOpen() {
@@ -1080,25 +1109,37 @@
   }
   addEventListener("resize", () => placeOpen());
 
-  function morph(from, to) {
-    if (!to) return;
-    const after = () => { if (to.getBoundingClientRect().bottom > innerHeight || to.getBoundingClientRect().top < 0) to.scrollIntoView({ block: "nearest", behavior: "smooth" }); };
-    if (!from || matchMedia("(prefers-reduced-motion: reduce)").matches) return after();
-    const end = pageRect(to), box = document.createElement("div");
-    box.className = "qflip";
-    const place = r => Object.assign(box.style, { left: `${r.x}px`, top: `${r.y}px`, width: `${r.w}px`, height: `${r.h}px` });
-    place(from); document.body.appendChild(box);
-    to.style.opacity = 0;
-    requestAnimationFrame(() => requestAnimationFrame(() => { box.classList.add("go"); place(end); }));
-    let finished = false;
-    const finish = () => { if (finished) return; finished = true; box.remove(); to.style.transition = "opacity .18s"; to.style.opacity = 1; after(); };
-    box.addEventListener("transitionend", finish, { once: true });
-    setTimeout(finish, 600); // in case the transition never fires
+  // The opened good grows out of its quote card: it's drawn in full straight away, but only the part over
+  // the card shows at first, and what shows widens to the whole block (a clip, so nothing is squashed).
+  // Closing runs it backwards, then the card is all that's left.
+  // The card's place inside the box: [top, right, bottom, left] insets
+  const insetOf = (box, card) => { const b = box.getBoundingClientRect(), c = card.getBoundingClientRect();
+    return [c.top - b.top, b.right - c.right, b.bottom - c.bottom, c.left - b.left].map(v => Math.max(0, v)); };
+  const reduced = () => matchMedia("(prefers-reduced-motion: reduce)").matches;
+  // Animate the clip from insets `from` to `to` (each [t, r, b, l]) over `ms`, frame by frame; then done()
+  let clipRaf = 0;
+  function animateClip(box, from, to, ms, done = () => {}) {
+    cancelAnimationFrame(clipRaf);
+    const ease = t => 1 - (1 - t) ** 3, set = v => box.style.clipPath = `inset(${v.map(x => x.toFixed(1) + "px").join(" ")} round ${(8 + 2 * (1 - v[0] / Math.max(1, from[0] || to[0] || 1))).toFixed(1)}px)`;
+    let t0 = null;
+    const tick = now => {
+      t0 ??= now;
+      const t = Math.min(1, (now - t0) / ms), k = ease(t);
+      set(from.map((f, i) => f + (to[i] - f) * k));
+      if (t < 1) clipRaf = requestAnimationFrame(tick); else done();
+    };
+    set(from); clipRaf = requestAnimationFrame(tick);
+  }
+  function growOpen(card) {
+    const box = root.querySelector(".qopen");
+    if (!box || !card || reduced()) return;
+    animateClip(box, insetOf(box, card), [0, 0, 0, 0], 340, () => box.style.clipPath = "");
   }
   function closeGood() {
-    const open = root.querySelector(".qopen"), id = ui.good, from = open && pageRect(open);
-    ui.good = null; render();
-    morph(from, root.querySelector(`.qcard[data-good="${id}"]`));
+    const box = root.querySelector(".qopen"), id = ui.good, card = root.querySelector(`.qcard[data-good="${id}"]`);
+    const done = () => { ui.good = null; render(); };
+    if (!box || !card || reduced()) return done();
+    animateClip(box, [0, 0, 0, 0], insetOf(box, card), 260, done);
   }
 
   // ----- Clicks -----
@@ -1139,9 +1180,11 @@
     root.querySelectorAll("[data-good]").forEach(el => el.addEventListener("click", () => {
       const fromSide = !!el.closest(".gdash"), id = el.dataset.good;
       if (!fromSide && ui.good === id) return closeGood();
-      const card = el.closest(".qcard");
       ui.good = id; ui.tab = "market"; render();
-      morph(card && pageRect(card), root.querySelector(".qopen"));
+      // Grow out of its quote card (wherever it was clicked from), then make sure it's in view
+      growOpen(root.querySelector(`.qcard[data-good="${id}"]`));
+      const box = root.querySelector(".qopen"), r = box?.getBoundingClientRect();
+      if (r && (r.bottom > innerHeight || r.top < 0)) box.scrollIntoView({ block: "nearest", behavior: "smooth" });
     }));
     root.querySelector("#gTicketClose")?.addEventListener("click", closeGood);
     root.querySelectorAll("[data-bin]").forEach(b => b.addEventListener("click", e => { e.stopPropagation(); doAct("dump", { id: b.dataset.bin, qty: 1 }); }));
@@ -1153,7 +1196,7 @@
     root.querySelectorAll("[data-bidinput]").forEach(i => i.addEventListener("keydown", e => { if (e.key === "Enter") root.querySelector(`[data-bidfor="${i.dataset.bidinput}"]`)?.click(); }));
     root.querySelectorAll("[data-sellbiz]").forEach(b => b.addEventListener("click", () => {
       const biz = vw.businesses.find(x => x.id === +b.dataset.sellbiz), t = biz && G.BIZ_BY[biz.type];
-      if (t && confirm(`Sell your ${t.name.toLowerCase()} in ${G.TERR[biz.territory].name} for ${m(t.cost)}? It disappears.`)) doAct("sellBusiness", { biz: biz.id });
+      if (t && confirm(`Sell your ${t.name.toLowerCase()} in ${G.TERR[biz.territory].name} for ${m(G.resale(t))}? It disappears.`)) doAct("sellBusiness", { biz: biz.id });
     }));
     // Order book replay (last 4 rounds): ▶ starts it, ■ stops it; a redraw of the page stops it too
     dStop(); dStop = () => {};
@@ -1169,7 +1212,14 @@
     qStop?.(); qStop = null;
     const qPlay = root.querySelector("#qPlay"), qSlide = root.querySelector("#qSlide");
     const stopReplay = () => { qStop?.(); qStop = null; if (qPlay) qPlay.textContent = "▶ Replay"; };
-    qSlide?.addEventListener("input", () => { stopReplay(); showFrame(+qSlide.value); });
+    // Drag the slider back: it shows that round; let go and it replays from there to now
+    qSlide?.addEventListener("input", () => { stopReplay(); showFrame(Math.min(ui.board.frames.length - 1, 4 * +qSlide.value)); });
+    qSlide?.addEventListener("change", () => {
+      const k = Math.min(ui.board.frames.length - 1, 4 * +qSlide.value), end = ui.board.frames.length - 1;
+      if (k >= end) return;
+      qPlay.textContent = "❚❚ Pause";
+      qStop = playBoard(k, end, ui.rmode === "game", () => { qStop = null; qPlay.textContent = "▶ Replay"; });
+    });
     // One ▶ Replay button: opens the controls and starts playing; ✕ puts them away and shows the book as it stands
     root.querySelector("#qOpen")?.addEventListener("click", e => {
       ui.qOpen = true; e.target.hidden = true; root.querySelector(".qctl").hidden = false; qPlay.click();
@@ -1183,7 +1233,7 @@
       if (qStop) return stopReplay();
       const end = ui.board.frames.length - 1;
       const start = ui.rmode === "game" ? 0 : ui.board.lastStart;
-      const k = +qSlide.value >= end ? start : Math.max(start, +qSlide.value);
+      const at = ui.boardK ?? end, k = at >= end ? start : at;
       qPlay.textContent = "❚❚ Pause";
       qStop = playBoard(k, end, ui.rmode === "game", () => { qStop = null; qPlay.textContent = "▶ Replay"; });
     });

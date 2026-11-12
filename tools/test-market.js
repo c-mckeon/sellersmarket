@@ -130,5 +130,23 @@ eq("middle of an odd gap rounds to a whole number", G.clearingPrice([o(6, 10)], 
   console.log(`random books: ${runs} auctions, ${crossedAfter} left a crossed book behind`);
 }
 
+// ---------- Cancelling: an order others have seen stays live one more auction ----------
+{
+  const st = fresh();
+  buy(st, 1, "wood", 9, 3);                     // round 1: a bid…
+  clear(st);                                    // …that nobody meets
+  st.round++;                                   // round 2: the bidder cancels, and someone sells into the bid they saw
+  G.act(st, 1, "cancelAll", {});
+  eq("a seen bid is still on the book after cancelling", st.book.filter(o => o.pid === 1).length, 1);
+  sell(st, 2, "wood", 9, 3);
+  eq("it can still be met", clear(st).wood, { price: 9, qty: 3 });
+  eq("the bidder got the wood", G.player(st, 1).stock.wood, 3);
+  st.round++; buy(st, 1, "clay", 5, 2); clear(st);  // round 3: a bid nobody meets…
+  st.round++; G.act(st, 1, "cancelAll", {}); clear(st); // …cancelled in round 4: gone after that auction
+  eq("unmet, it goes after the next auction", st.book.filter(o => o.pid === 1).length, 0);
+  eq("and its cash comes back", G.player(st, 1).cash, 1000 - 27);
+  st.round++; buy(st, 1, "sand", 4, 2); G.act(st, 1, "cancelAll", {});
+  eq("one placed and cancelled in the same round goes at once", st.book.filter(o => o.pid === 1).length, 0);
+}
 console.log(fails ? `${fails} failed, ${passes} passed` : `all ${passes} passed`);
 process.exit(fails ? 1 : 0);
