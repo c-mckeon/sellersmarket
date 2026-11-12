@@ -487,7 +487,7 @@ svg.spark .spark-none { stroke: var(--line); stroke-width: 1.5; stroke-dasharray
 .pchart .pdot { fill: var(--accent); stroke: var(--bg); stroke-width: 1.5; }
 .pchart .vbar { fill: var(--muted); opacity: .45; }
 .pchart .xhair { stroke: var(--muted); stroke-width: 1; stroke-dasharray: 3 3; }
-.ptip { position: absolute; pointer-events: none; background: var(--ink); color: var(--bg); font-size: 12px; font-weight: 600; padding: 3px 8px; border-radius: 6px; white-space: nowrap; }
+.ptip { position: fixed; z-index: 50; pointer-events: none; background: var(--ink); color: var(--bg); font-size: 12px; font-weight: 600; padding: 3px 8px; border-radius: 6px; white-space: nowrap; }
 
 .lv { display: grid; grid-template-columns: 58px 1fr auto; gap: 8px; align-items: center; }
 

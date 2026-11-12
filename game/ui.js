@@ -54,13 +54,14 @@
     }));
     root.querySelector("#gOffline").addEventListener("click", goOffline);
   }
-  let watching = false, loaded = false;
+  let watching = false, loaded = false, netSt = null; // netSt: the latest online game, kept while playing on this device
   function goOnline() {
     ui.offline = false;
-    if (watching) return render();
+    if (watching) { if (loaded) st = netSt; return render(); }
     watching = true;
     root.innerHTML = `<div class="gsetup"><p class="muted">Loading the game…</p></div>`;
     Promise.resolve(NET.watch(next => {
+      netSt = next;
       if (ui.offline) return;
       const before = st;
       st = next; loaded = true;
@@ -77,7 +78,8 @@
     });
   }
   function goOffline() { ui.offline = true; const s0 = load(); st = s0 && s0.version === 7 && !s0.over ? s0 : null; render(); }
-  const userBar = () => online() ? `<span class="guser">${esc(NET.user)} <button class="glink" id="gLogout" title="Log out">log out</button></span>` : "";
+  const userBar = () => online() ? `<span class="guser">${esc(NET.user)} <button class="glink" id="gLogout" title="Log out">log out</button></span>`
+    : NET.ready ? `<span class="guser"><button class="glink" id="gOnline" title="Back to the shared online game (this device's game is kept)">play online</button></span>` : "";
 
   // ================= Setup =================
   let setup = null;
@@ -148,6 +150,7 @@
       st = game; save(); render();
     });
     root.querySelector("#gLogout")?.addEventListener("click", () => { NET.logout(); render(); });
+    root.querySelector("#gOnline")?.addEventListener("click", goOnline);
   }
 
   // ================= Game screen =================
@@ -236,6 +239,7 @@
       if (!seat) { root.innerHTML = `<div class="gsetup"><h1>${esc(NET.user)}, you're not in this game ${userBar()}</h1><p class="muted">It's being played by ${st.players.filter(p => !p.bot).map(p => esc(p.name)).join(" and ")}.</p><div class="grow"><button class="gbtn" id="gNew2">Start a new game</button></div></div>`;
         root.querySelector("#gNew2").addEventListener("click", () => { if (confirm("End the current game for everyone and start a new one?")) NET.reset(); });
         root.querySelector("#gLogout")?.addEventListener("click", () => { NET.logout(); render(); });
+    root.querySelector("#gOnline")?.addEventListener("click", goOnline);
         return; }
     } else {
       seat = nextSeat();
@@ -325,8 +329,10 @@
       <span class="gphase day">Round ${st.round}</span>
       <h2><i style="background:${seat.colour}"></i>Pass to ${esc(seat.name)}</h2>
       <p class="muted">Everyone's orders stay secret until they all go through at once.</p>
-      <button class="gbtn" id="gImHere">I'm ${esc(seat.name)}: show my orders</button></div>`;
+      <button class="gbtn" id="gImHere">I'm ${esc(seat.name)}: show my orders</button>
+      <p class="small">${userBar()}</p></div>`;
     root.querySelector("#gImHere").addEventListener("click", () => { ui.passed = seat.id; render(); });
+    root.querySelector("#gOnline")?.addEventListener("click", goOnline);
   }
 
   // ----- Dashboard: what's ours, kept compact -----
@@ -1280,6 +1286,7 @@
       if (confirm("Abandon this game and start a new one?")) { st = null; localStorage.removeItem(KEY); render(); }
     });
     root.querySelector("#gLogout")?.addEventListener("click", () => { NET.logout(); render(); });
+    root.querySelector("#gOnline")?.addEventListener("click", goOnline);
     root.querySelectorAll("[data-tab]").forEach(b => b.addEventListener("click", () => { ui.tab = b.dataset.tab; render(); }));
     // Market: pick a good, then the order ticket
     // Any card, row or chip with a good on it opens that good (from the sidebar too, switching to the market)
@@ -1339,6 +1346,14 @@
     qBack?.addEventListener("click", () => { const k = ui.boardK ?? lastK(); if (k > 0) goTo(stepFrom(k, -1), false); });
     qFwd?.addEventListener("click", () => { const k = ui.boardK ?? lastK(); if (k < lastK()) goTo(stepFrom(k, 1), false); });
     if (ui.board) steps();
+    // Tooltips float over the page (position: fixed), just above the point, kept inside the window,
+    // so a card's edge never cuts them off
+    const showTip = (tip, text, x, y) => {
+      tip.hidden = false; tip.textContent = text;
+      const w = tip.offsetWidth, h = tip.offsetHeight;
+      tip.style.left = `${Math.max(4, Math.min(innerWidth - w - 4, x - w / 2))}px`;
+      tip.style.top = `${y - h - 10 < 4 ? y + 14 : y - h - 10}px`;
+    };
     // Price chart: crosshair and tooltip on the nearest trade
     root.querySelectorAll(".pchart").forEach(box => {
       const pts = JSON.parse(box.dataset.pts), svg = box.querySelector("svg"), tip = box.querySelector(".ptip"), xh = svg.querySelector(".xhair");
@@ -1346,8 +1361,7 @@
         const r = svg.getBoundingClientRect(), vb = svg.viewBox.baseVal, x = (e.clientX - r.left) / r.width * vb.width;
         const pt = pts.reduce((a, b) => Math.abs(b.x - x) < Math.abs(a.x - x) ? b : a);
         xh.setAttribute("x1", pt.x); xh.setAttribute("x2", pt.x); xh.setAttribute("visibility", "visible");
-        tip.hidden = false; tip.textContent = pt.t;
-        tip.style.left = `${Math.min(r.width - 150, Math.max(0, pt.x / vb.width * r.width - 70))}px`; tip.style.top = `${pt.y / vb.height * r.height - 34}px`;
+        showTip(tip, pt.t, r.left + pt.x / vb.width * r.width, r.top + pt.y / vb.height * r.height);
       });
       svg.addEventListener("mouseleave", () => { tip.hidden = true; xh.setAttribute("visibility", "hidden"); });
     });
@@ -1356,9 +1370,7 @@
       const tip = box.querySelector(".ptip");
       box.querySelectorAll("[data-tip]").forEach(g => {
         g.addEventListener("mousemove", e => {
-          const r = box.getBoundingClientRect();
-          tip.hidden = false; tip.textContent = g.dataset.tip;
-          tip.style.left = `${Math.min(r.width - 230, Math.max(0, e.clientX - r.left - 110))}px`; tip.style.top = `${e.clientY - r.top - 34}px`;
+          showTip(tip, g.dataset.tip, e.clientX, e.clientY);
         });
         g.addEventListener("mouseleave", () => tip.hidden = true);
       });
@@ -1398,12 +1410,14 @@
   function renderEnd() {
     const rank = G.ranking(st);
     root.innerHTML = `<div class="gsetup">
-      <h1>${esc(rank[0].name)} wins</h1>
+      <h1>${esc(rank[0].name)} wins ${userBar()}</h1>
       <table class="gplayers"><thead><tr><th>#</th><th>Player</th><th class="n">Net worth</th><th class="n">Contracts delivered</th><th class="n">Failed</th><th class="n">Businesses</th></tr></thead><tbody>
       ${rank.map((p, i) => `<tr><td>${i + 1}</td><td><i class="gdot" style="background:${p.colour}"></i>${esc(p.name)}</td><td class="n"><b>${m(G.netWorth(st, p))}</b></td><td class="n">${p.delivered || 0}</td><td class="n">${p.failed || 0}</td><td class="n">${G.myBusinesses(st, p.id).length}</td></tr>`).join("")}
       </tbody></table>
       <div class="grow"><button class="gbtn" id="gAgain">New game</button></div></div>`;
     root.querySelector("#gAgain").addEventListener("click", () => { if (online()) return NET.reset(); st = null; localStorage.removeItem(KEY); render(); });
+    root.querySelector("#gLogout")?.addEventListener("click", () => { NET.logout(); render(); });
+    root.querySelector("#gOnline")?.addEventListener("click", goOnline);
   }
 
   // ================= Under the game: chat, and ideas =================
