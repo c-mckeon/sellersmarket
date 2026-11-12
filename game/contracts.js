@@ -1,4 +1,4 @@
-// Sellers Market game engine: contracts, the way to earn money. Most money at the end wins.
+// Sellers Market game engine: contracts, the way to earn money. The first to the goal (settings.goal, €5000) wins.
 //
 // Contracts arrive on a board, the same for everyone: settings.contracts.start at first, then 0 to 2 new ones
 // a night (settings.contracts.perRound), up to settings.contracts.open at once. Each says:
@@ -93,6 +93,11 @@
     return { id: st.nextContractId, name, icon, goods, cap: Math.max(10, Math.round(raw * C.capPerRawUnit * (1 + (C.tierBonus || 0) * avgT))), drawn: st.round, bids: [] };
   };
 
+  // Contracts coming next, drawn ahead of time (st.upcoming) so the "inside line" card can show them exactly.
+  // G.nextContract takes the next one (stamped with the round it goes on the board).
+  G.upcoming = (st, n) => { st.upcoming ||= []; while (st.upcoming.length < n) st.upcoming.push(G.newContract(st)); return st.upcoming.slice(0, n); };
+  G.nextContract = st => { G.upcoming(st, 1); const k = st.upcoming.shift(); k.drawn = st.round; k.bids = []; return k; };
+
   // The lowest bid on a board contract so far (public once the night has passed), or null
   G.lowestBid = k => k.bids.reduce((m, b) => !m || b.amount < m.amount || (b.amount === m.amount && b.round < m.round) ? b : m, null);
   // Rounds of bidding left on a board contract, counting this one
@@ -105,7 +110,7 @@
     st.contracts ||= [];
     // Not delivered in time: legal fees
     st.players.forEach(p => (p.contracts ||= []).filter(k => st.round >= k.due).forEach(k => {
-      const fee = G.failFee(k.price), item = G.contractItem(k);
+      const fee = k.noFee ? 0 : G.failFee(k.price), item = G.contractItem(k); // (good lawyers: no fee)
       p.cash -= fee; p.failed = (p.failed || 0) + 1; p.fees = (p.fees || 0) + fee;
       st.stats.failed = (st.stats.failed || 0) + 1;
       p.contracts = p.contracts.filter(x => x !== k);
@@ -127,7 +132,8 @@
     // New contracts: a few at the start, then 0 to 2 a night, up to the most the board holds
     const [lo, hi] = C.perRound || [1, 1];
     const n = st.round === 1 && st.phase !== "night" ? C.start ?? C.open : lo + Math.floor(G.rand(st) * (hi - lo + 1));
-    for (let i = 0; i < n && st.contracts.length < C.open; i++) st.contracts.push(G.newContract(st));
+    for (let i = 0; i < n && st.contracts.length < C.open; i++) st.contracts.push(G.nextContract(st));
+    G.upcoming(st, 2); // the next ones are drawn ahead, so a card can show them
   };
   G.onSetup.push(night);
   G.refillContracts = night;
@@ -167,6 +173,7 @@
     { const d = (st.stats.deliveredGoods ||= {})[p.id] ||= {}; Object.entries(k.goods).forEach(([c, q]) => d[c] = (d[c] || 0) + q); } // for the simulator
     const item = G.contractItem(k);
     (p.made ||= []).push({ ...item, price: k.price, round: st.round }); // the shelf of things you've made (display only)
-    return `delivered ${item.icon} ${item.name} and was paid ${G.money(k.price)}`;
+    const card = G.drawCard ? G.drawCard(st, p) : null;
+    return `delivered ${item.icon} ${item.name} and was paid ${G.money(k.price)}${card ? `, and drew a card` : ""}`;
   };
 })();

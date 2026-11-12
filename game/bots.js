@@ -132,7 +132,7 @@
     bidContracts(st, p);
 
     const want = wantsOf(st, p);
-    const end = st.round >= st.rounds - 2;
+    const end = st.round >= st.rounds - 2; // (only near the safety stop: the real end is reaching the goal)
     // Sell spares. Floor: its going price (falling the longer it goes unsold). If a buyer is already bidding
     // at least that, sell at their bid. Goods that go off tonight, or would just pile up, go at the best bid.
     Object.entries({ ...p.stock }).forEach(([c, q]) => {
@@ -246,5 +246,47 @@
   };
 
   G.botWants = wantsOf; // what a bot is keeping for itself (used by tools/sim.js)
-  G.bots.day = (st, p) => { moveOrBuild(st, p); trade(st, p); };
+  // ---------- Cards ----------
+  // A simple use for each card: help itself, or slow down the richest other player. One a round, if any fits.
+  const playCard = (st, p) => {
+    if (!(p.hand || []).length) return;
+    const rivals = st.players.filter(x => x.id !== p.id), leader = rivals.sort((a, b) => G.netWorth(st, b) - G.netWorth(st, a))[0];
+    const mine = G.myBusinesses(st, p.id), makes = new Set(mine.map(b => G.BIZ_BY[b.type].makes));
+    const leaderBiz = leader ? G.myBusinesses(st, leader.id) : [];
+    const leaderLand = leaderBiz.length ? Object.entries(leaderBiz.reduce((m, b) => (m[b.territory] = (m[b.territory] || 0) + 1, m), {})).sort((a, b) => b[1] - a[1])[0][0] : null;
+    const leaderGood = leaderBiz.map(b => G.BIZ_BY[b.type].makes).find(c => !makes.has(c) && !G.isWaste(c));
+    const ownGood = [...makes].find(c => !G.isWaste(c));
+    const atRisk = (p.contracts || []).filter(k => k.due - st.round <= 1 && !G.canDeliver(st, p, k))[0];
+    const want = Object.keys(wantsOf(st, p)).find(c => G.COM[c].type === "raw");
+    const bidOn = (st.contracts || []).find(k => k.bids.some(b => b.pid === p.id));
+    const pick = {
+      overtime: () => mine.length ? [null] : null, windfall: () => [null], warehouse: () => [null], cold_store: () => Object.keys(p.stock).length > 5 ? [null] : null,
+      grant: () => p.cash > 200 ? [null] : null, rush_order: () => [null], fast_horses: () => p.plan && p.plan.tid !== p.pos ? [null] : null,
+      bumper_harvest: () => makes.has("wheat") ? [null] : null,
+      rich_seam: () => { const b = mine.find(x => G.BIZ_BY[x.type].kind === "extract"); return b ? [b.id] : null; },
+      shipment: () => want ? [want] : ["coal"],
+      extension: () => atRisk ? [atRisk.id] : null, lawyers: () => atRisk ? [atRisk.id] : null,
+      lobbying: () => bidOn ? [bidOn.id] : null, peek: () => bidOn ? [bidOn.id] : null,
+      subsidy: () => ownGood ? [ownGood] : null,
+      drought: () => !makes.has("wheat") && !makes.has("water") ? [null] : null,
+      miners_strike: () => !makes.has("coal") && !makes.has("iron_ore") ? [null] : null,
+      weevils: () => !["wheat", "flour", "bread"].some(c => p.stock[c]) ? [null] : null,
+      power_cut: () => leader ? [leader.id] : null, damp: () => leader ? [leader.id] : null, theft: () => leader ? [leader.id] : null,
+      embargo: () => leader ? [leader.id] : null, tax_audit: () => leader ? [leader.id] : null, insider_tip: () => leader ? [leader.id] : null,
+      tariff: () => leaderGood ? [leaderGood] : null, export_controls: () => leaderGood ? [leaderGood] : null, rumour: () => leaderGood ? [leaderGood] : null,
+      mine_collapse: () => leaderLand && !mine.some(b => b.territory === leaderLand) ? [leaderLand] : null,
+      flood: () => leaderLand && !mine.some(b => b.territory === leaderLand) ? [leaderLand] : null,
+      objection: () => leaderLand ? [leaderLand] : null,
+      takeover: () => leaderBiz.length ? [leaderBiz[0].id] : null,
+      pass_buck: () => atRisk && leader ? [[atRisk.id, leader.id]] : null,
+      gov_order: () => { const k = (st.contracts || []).filter(x => !x.bids.some(b => b.pid === p.id)).sort((a, b) => Object.keys(b.goods).length - Object.keys(a.goods).length)[0]; return k && leader ? [[k.id, leader.id]] : null; },
+      inside_line: () => [null],
+    };
+    for (const card of p.hand) {
+      const t = pick[card]?.();
+      if (t && G.act(st, p.id, "playCard", { card, target: t[0] }).ok) return;
+    }
+  };
+
+  G.bots.day = (st, p) => { playCard(st, p); moveOrBuild(st, p); trade(st, p); };
 })();

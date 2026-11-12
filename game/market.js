@@ -143,6 +143,7 @@
     p.cash = cents(p.cash + locks(o));
     if (o.side === "sell") G.giveBack(st, p, o.good, o.qty, o.from, o.lots);
   };
+  G.releaseOrder = release;
   // Cancel one order: at once if it's new this round, otherwise after tonight's auction (it can still fill)
   const cancel = (st, o) => {
     if (o.round === st.round) { release(st, o); st.book = st.book.filter(x => x !== o); }
@@ -228,8 +229,10 @@
     const say = (pid, msg) => (mine[pid] ||= []).push(msg);
     COMMODITIES.forEach(c => {
       const id = c.id;
-      const bids = st.book.filter(o => o.good === id && o.side === "buy");
-      const asks = st.book.filter(o => o.good === id && o.side === "sell");
+      if (G.halted?.(st, id)) return; // export controls (a card): its orders wait on the book
+      const live = o => o.good === id && !G.embargoed?.(st, o.pid); // a player under an embargo doesn't trade tonight
+      const bids = st.book.filter(o => live(o) && o.side === "buy");
+      const asks = st.book.filter(o => live(o) && o.side === "sell");
       // Waste: the ones paying (getting rid of it) are the "bidders" for the service of taking it away
       const waste = c.type === "waste", payers = waste ? asks : bids, payees = waste ? bids : asks;
       const P = G.clearingPrice(payers, payees, st.lastTrade[id]?.price);
@@ -256,7 +259,8 @@
       af.forEach((n, o) => {
         const p = G.player(st, o.pid);
         // A sale: get the price. Getting rid of waste: pay the fee (the rest of what was locked comes back).
-        p.cash = cents(p.cash + (waste ? o.price - P : P) * n);
+        // (a tariff or subsidy card changes what a seller gets: × G.sellerShare)
+        p.cash = cents(p.cash + (waste ? o.price - P : P * (G.sellerShare ? G.sellerShare(st, id) : 1)) * n);
         o.qty -= n; sold[p.id] = (sold[p.id] || 0) + n;
       });
       st.book = st.book.filter(o => o.qty > 0);

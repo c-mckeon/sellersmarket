@@ -9,5 +9,6 @@ SMG.steps.night = [
   SMG.auction,             // the round's orders are matched
   SMG.produce,             // businesses turn inputs into products
   SMG.expire,              // goods at the end of their life go off (game/depreciation.js)
-  SMG.refillContracts,     // delivered and discarded contracts are replaced
+  SMG.refillContracts,     // deadlines, tender awards and new contracts
+  SMG.tidyEffects,         // card effects that have run out are forgotten
 ];

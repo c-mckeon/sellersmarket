@@ -818,3 +818,42 @@ details.gnews[open] { display: grid; }
 .tk .gform .gseg { display: flex; } .tk .gform .gseg button { flex: 1; }
 .mo .moc { color: var(--muted); }
 .mo:has(.moc) { opacity: .7; }
+
+/* Cards: your hand, a card to play, and what's in force */
+.hand { display: flex; flex-wrap: wrap; gap: 6px; }
+.pcard { all: unset; box-sizing: border-box; cursor: pointer; width: 62px; height: 84px; border-radius: 7px; padding: 5px 4px; display: grid; grid-template-rows: 1fr auto; justify-items: center; text-align: center;
+  background: linear-gradient(160deg, #fffdf6, #f1ead8); border: 1px solid #cdbf9b; box-shadow: 0 2px 4px rgba(0,0,0,.15); color: #2b2a26; }
+.pcard:hover, .pcard.on { transform: translateY(-3px); box-shadow: 0 6px 10px rgba(0,0,0,.2); border-color: var(--accent); }
+.pcard .pc-i { font-size: 26px; align-self: center; }
+.pcard .pc-n { font-size: 10px; font-weight: 700; line-height: 1.15; }
+.pcard.g-world { border-top: 4px solid #2e8b57; } .pcard.g-stockpile { border-top: 4px solid #a8641f; } .pcard.g-trading { border-top: 4px solid #2f6db5; }
+.pcard.g-contracts { border-top: 4px solid #8a4fc0; } .pcard.g-map { border-top: 4px solid #b8323a; }
+.pcard-play { margin-top: 8px; padding: 8px; border: 1px solid var(--line); border-radius: 8px; background: var(--bg); font-size: 13px; }
+.pcard-play p { margin: 4px 0 6px; }
+.pcp-row { display: flex; gap: 6px; align-items: center; }
+.pcp-row select { flex: 1; min-width: 0; font: inherit; font-size: 12.5px; padding: 3px; }
+.effects { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 8px; font-size: 12px; align-items: center; }
+.effects b { margin-right: 2px; }
+.effects span { border: 1px solid var(--line); border-radius: 999px; padding: 1px 8px; background: var(--surface); }
+.effects em { color: var(--muted); font-style: normal; }
+
+/* Under the game: chat and ideas */
+.gbottom { margin: 18px 0 8px; background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 8px 14px 12px; }
+.chatlog { height: 180px; overflow-y: auto; padding: 6px 2px; font-size: 13.5px; display: grid; align-content: start; gap: 3px; }
+.cm.me { background: color-mix(in srgb, var(--accent) 7%, transparent); border-radius: 6px; padding: 0 4px; }
+.chatform { display: flex; gap: 8px; margin-top: 6px; }
+.chatform[hidden] { display: none; }
+.chatform input { flex: 1; font: inherit; padding: 6px 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--bg); color: var(--ink); }
+.ideas { max-width: 80ch; font-size: 14px; }
+.ideas h3 { margin: 10px 0 6px; } .ideas h4 { margin: 14px 0 4px; }
+.ideas ul { margin: 0; padding-left: 20px; } .ideas li { margin: 4px 0; }
+
+/* Quote board: step buttons either side of the slider */
+.qctl .qstep { min-width: 0; padding: 3px 10px; }
+/* The opened good's replay caption: one line, so the chart above never jumps */
+.tk-book .drctl { height: 26px; overflow: hidden; }
+.tk-book #dLabel { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+/* Net worth: progress to the goal */
+.goalbar { display: block; height: 6px; margin: 4px 0 2px; border-radius: 3px; background: var(--line); overflow: hidden; }
+.goalbar i { display: block; height: 100%; background: var(--accent); }

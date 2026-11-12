@@ -37,6 +37,7 @@ const NET = (() => {
       get: async path => at(read(), path),
       set: async (path, v) => put(path, v),
       txn: async (path, fn) => { const v = fn(at(read(), path)); if (v !== undefined) put(path, v); },
+      push: async (path, v) => put(`${path}/${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`, v),
     };
   }
   let fbReady = null;
@@ -54,6 +55,7 @@ const NET = (() => {
       // Firebase may first call fn with null before it knows the real value; returning null then makes
       // it fetch the real one and call fn again (if it really is null, nothing changes)
       txn: async (path, fn) => (await ref(path)).transaction(cur => cur === null ? null : fn(cur)),
+      push: async (path, v) => (await ref(path)).push(v),
     };
   }
   const db = ready ? (mock ? standIn() : firebaseDb()) : null;
@@ -100,5 +102,10 @@ const NET = (() => {
     return res;
   }
 
-  return { ready, mock, get user() { return user; }, players: ONLINE_PLAYERS, login, logout, watch, start, reset, submit };
+  // ----- Chat: kept apart from the game (sellersmarket/chat), newest last -----
+  const CHAT = `${ROOT}/chat`;
+  const watchChat = cb => db.watch(CHAT, v => cb(Object.values(v || {}).sort((a, b) => a.t - b.t).slice(-200)));
+  const say = text => user && text.trim() ? db.push(CHAT, { name: user, text: text.trim().slice(0, 500), t: Date.now() }) : Promise.resolve();
+
+  return { ready, mock, get user() { return user; }, players: ONLINE_PLAYERS, login, logout, watch, start, reset, submit, watchChat, say };
 })();

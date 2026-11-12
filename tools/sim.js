@@ -70,6 +70,8 @@ for (let g = 0; g < games; g++) {
   const traded = {}, vol = {};
   st.history.forEach(h => Object.entries(h.trades).forEach(([id, t]) => { traded[id] = (traded[id] || 0) + 1; vol[id] = (vol[id] || 0) + t.qty; }));
   out.push({
+    reached: st.players.some(p => G.netWorth(st, p) >= st.goal), endRound: st.round,
+    worth: st.players.map(p => G.netWorth(st, p)),
     delivered: st.players.map(p => p.delivered || 0), failed: st.players.map(p => p.failed || 0),
     earned: st.players.map(p => p.earned || 0), fees: st.players.map(p => p.fees || 0),
     boardMade: (st.nextContractId || 0), won: st.stats.won || 0, winning: st.stats.winning || [],
@@ -101,7 +103,8 @@ const mons = res.map(r => r.mon);
 const summary = {
   settings: overrides, games, players,
   ["money at end (10th / median / 90th pct; start " + GAME_START + ")"]: `${f(q(flat("cash"), .1))} / ${f(q(flat("cash"), .5))} / ${f(q(flat("cash"), .9))}`,
-  "winner's money (median)": f(q(res.map(r => Math.max(...r.cash)), .5)),
+  "winner's net worth (median)": f(q(res.map(r => Math.max(...r.worth)), .5)),
+  "someone reached the goal (share of games) / round it ended (median)": `${f(100 * res.filter(r => r.reached).length / res.length)}% / ${q(res.map(r => r.endRound), .5)}`,
   "contracts that got a winner (share of all put on the board)": f(100 * res.reduce((s, r) => s + r.won, 0) / Math.max(1, res.reduce((s, r) => s + r.boardMade, 0))) + "%",
   "bids per contract won (median)": q(res.flatMap(r => r.winning.map(w => w.bids)), .5),
   "winning bid ÷ cap (10th / median / 90th pct)": (a => `${f(q(a, .1), 2)} / ${f(q(a, .5), 2)} / ${f(q(a, .9), 2)}`)(res.flatMap(r => r.winning.map(w => w.price / w.cap))),

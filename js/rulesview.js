@@ -8,6 +8,8 @@
   const list = a => a.length < 2 ? a.join("") : `${a.slice(0, -1).join(", ")} and ${a.at(-1)}`;
   const special = {
     startGoods: () => list(Object.entries(S.startGoods).map(([c, q]) => `${q} ${name(c)}`)),
+    cardList: () => G.CARDS.map(c => `${c.icon} ${c.name}: ${c.text}`).join(" · "),
+    goalMoney: () => `€${S.goal.toLocaleString()}`,
     perRound: () => { const [a, b] = S.contracts.perRound; return a === b ? `${a}` : `${a} to ${b}`; },
     projects: () => list(PROJECTS.map(([n, , g]) => `${n.toLowerCase()} (${g.map(name).join(", ")})`)),
     failFee: () => { const f = S.contracts.failFee; return [f.base ? `${f.base}` : "", f.share ? `${Math.round(f.share * 100)}% of your bid` : ""].filter(Boolean).join(" + ") || "nothing"; },

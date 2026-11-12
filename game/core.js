@@ -165,7 +165,7 @@ const SMG = (() => {
   G.newGame = config => {
     const st = {
       version: 7, seed: config.seed ?? Math.floor(Math.random() * 1e9),
-      round: 1, rounds: config.rounds ?? S.rounds, phase: "day", over: false,
+      round: 1, rounds: config.rounds ?? S.rounds, goal: config.goal ?? S.goal, phase: "day", over: false,
       orders: {}, contracts: [],
       players: [], businesses: [], nextBizId: 1,
       log: [],
@@ -175,7 +175,7 @@ const SMG = (() => {
     config.players.forEach((c, i) => {
       st.players.push({ id: i + 1, name: c.name, colour: c.colour, bot: !!c.bot, strategy: c.strategy || "best",
         cash: S.startCash, space: S.startSpace, pos: c.start, stock: { ...S.startGoods },
-        contracts: [], delivered: 0, acted: false });
+        contracts: [], hand: [], delivered: 0, acted: false });
     });
     // Free starting businesses, where each player starts: the one they picked plus its partner,
     // so everyone begins with a small chain (see G.starterPartner)
@@ -268,9 +268,15 @@ const SMG = (() => {
       }));
       st.orders = {};
       st.phase = "night"; G.steps.night.forEach(f => f(st));
-      if (st.round >= st.rounds) { st.over = true; st.phase = "over"; G.log(st, "Game over."); return; }
+      // The first to the goal wins (two at once: the richer). A game nobody wins stops at the safety limit.
+      const there = st.goal ? st.players.filter(p => G.netWorth(st, p) >= st.goal) : [];
+      if (there.length || st.round >= st.rounds) {
+        st.over = true; st.phase = "over";
+        G.log(st, there.length ? `${G.ranking(st)[0].name} reached ${G.money(st.goal)} and wins!` : "Game over.");
+        return;
+      }
       st.round++; st.phase = "day";
-      st.players.forEach(p => { p.acted = false; });
+      st.players.forEach(p => { p.acted = false; p.moves = 0; });
       G.log(st, `Round ${st.round}.`);
       G.botOrders(st);
     } while (!st.over && !G.waitingFor(st).length && guard++ < 10000);
@@ -293,9 +299,12 @@ const SMG = (() => {
   };
 
   // ---------- Score ----------
-  // Most money wins: cash, including cash locked in orders.
+  // Money: cash, including cash locked in orders.
   G.totalCash = (st, p) => p.cash + G.lockedCash(st, p);
-  G.ranking = st => [...st.players].sort((a, b) => G.totalCash(st, b) - G.totalCash(st, a));
+  // Net worth: cash (including cash in orders) plus businesses at what they'd sell back for. The stockpile
+  // and contracts not yet delivered don't count. It's what the goal (settings.goal) is measured in.
+  G.netWorth = (st, p) => G.totalCash(st, p) + G.myBusinesses(st, p.id).reduce((s, b) => s + (G.resale ? G.resale(G.BIZ_BY[b.type]) : 0), 0);
+  G.ranking = st => [...st.players].sort((a, b) => G.netWorth(st, b) - G.netWorth(st, a));
 
   return G;
 })();

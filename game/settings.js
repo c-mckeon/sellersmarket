@@ -2,7 +2,9 @@
 // Change these freely, then check them with tools/sim.js.
 
 const GAME_SETTINGS = {
-  rounds: 30,              // the game ends after this many rounds; most money wins
+  goal: 5000,              // the first to this net worth at the end of a night wins: cash (with cash in orders) + businesses
+                           // at their sell-back value; the stockpile doesn't count
+  rounds: 200,             // a safety stop for games nobody wins (bots alone): then the richest wins
   startCash: 1000,         // the only money there will ever be: for trading and building businesses
   businessResale: 0.6,     // a business sells back for this share of its cost
   startBusinesses: 2,      // the business you pick, plus the one that goes with it (a farm and a flour mill…)

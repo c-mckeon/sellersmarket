@@ -44,13 +44,15 @@
       const p = G.player(st, biz.owner), b = G.BIZ_BY[biz.type];
       const say = m => (report[p.id] ||= []).push(m);
       st.stats.runs++;
+      const mod = G.outputMod ? G.outputMod(st, biz) : { shut: false, plus: 0 }; // cards: shut, or extra output
+      if (mod.shut) { st.stats.idle++; biz.idleFor = (biz.idleFor || 0) + 1; say(`${b.name} in ${G.TERR[biz.territory].name} stopped tonight`); return; }
       const full = own && G.bizRoom(biz) < Math.min(b.outputs[b.makes], S.businessSpace);
       if (full) { st.stats.idle++; biz.idleFor = (biz.idleFor || 0) + 1; say(`${b.name} idle: its stock is full (sell or use some of it)`); return; }
       const run = G.inputsFor(st, p, b);
       if (run.missing.length) { st.stats.idle++; biz.idleFor = (biz.idleFor || 0) + 1; say(`${b.name} idle: needs ${run.missing.map(([c, n]) => `${n} more ${G.COM[c].name}`).join(", ")}`); return; }
       const made = {}, subs = {};
       Object.entries(run.use).forEach(([c, q]) => { G.take(st, p, c, q); if (!(c in b.inputs)) subs[c] = q; });
-      Object.entries(b.outputs).forEach(([c, n]) => { if (own) G.addBiz(biz, c, n); else G.add(p, c, n); made[c] = n; });
+      Object.entries(b.outputs).forEach(([c, n]) => { if (c === b.makes) n += mod.plus; if (own) G.addBiz(biz, c, n); else G.add(p, c, n); made[c] = n; });
       biz.runs = (biz.runs || 0) + 1; biz.idleFor = 0;
       say(`${b.name} made ${Object.entries(made).map(([c, n]) => `${n} ${G.COM[c].name}`).join(" + ")}${Object.keys(subs).length ? `, using ${Object.entries(subs).map(([c, n]) => `${n} ${G.COM[c].name}`).join(" + ")} instead` : ""}`);
     });

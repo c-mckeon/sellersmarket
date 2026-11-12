@@ -44,8 +44,9 @@
       const n = dueBy(h.lots[cid], cid, st.round);
       if (n) { add(h, cid, -n); note(pid, cid, n); } // removing takes the oldest first: exactly the ones due
     });
-    st.players.forEach(p => spoil(p, p.id, G.add));
-    st.businesses.forEach(b => spoil(b, b.owner, G.addBiz));
+    const cold = pid => G.coldStore && G.coldStore(st, pid); // a cold store card: nothing of theirs goes off
+    st.players.forEach(p => { if (!cold(p.id)) spoil(p, p.id, G.add); });
+    st.businesses.forEach(b => { if (!cold(b.owner)) spoil(b, b.owner, G.addBiz); });
     // Sell orders: the goods on offer go off too (the order shrinks; an empty one is removed)
     st.book.filter(o => o.side === "sell" && o.lots).forEach(o => {
       const n = dueBy(o.lots, o.good, st.round);

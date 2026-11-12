@@ -79,7 +79,7 @@
   };
 
   function renderSetup() {
-    setup ||= { players: defaultPlayers(4), rounds: S.rounds };
+    setup ||= { players: defaultPlayers(4), goal: S.goal };
     // Online: the players who log in are the humans, everyone else is a computer
     if (online() && !setup.online) {
       setup.online = true;
@@ -90,7 +90,7 @@
     root.innerHTML = `
       <div class="gsetup">
         <h1>New game ${userBar()}</h1>
-        <p class="muted">Pick who's playing. Each player starts with ${S.startCash} cash, a ${S.startSpace}-row stockpile (first in, first out), ${S.startBusinesses > 1 ? "two free businesses where they start (the one picked here and the one that uses its output)" : "one free business where they start"}, and a board of contracts to bid for (a few at first, 0 to 2 more a night): win one, deliver it in time and you're paid your bid. Most money at the end wins. ${S.businessStock ? `What a business makes stays in its own stock (up to ${S.businessSpace} units) until you sell or use it. ` : ""}There's no price list: every price comes from what players bid and ask.</p>
+        <p class="muted">Pick who's playing. Each player starts with ${S.startCash} cash, a ${S.startSpace}-row stockpile (first in, first out), ${S.startBusinesses > 1 ? "two free businesses where they start (the one picked here and the one that uses its output)" : "one free business where they start"}, and a board of contracts to bid for (a few at first, 0 to 2 more a night): win one, deliver it in time and you're paid your bid. The first to ${m(S.goal)} net worth (cash plus businesses at their sell-back value; the stockpile doesn't count) wins. ${S.businessStock ? `What a business makes stays in its own stock (up to ${S.businessSpace} units) until you sell or use it. ` : ""}There's no price list: every price comes from what players bid and ask.</p>
         ${saved && saved.version === 7 && !saved.over ? `<div class="gresume">A game in round ${saved.round} is saved in this browser. <button class="gbtn" id="gResume">Continue it</button></div>` : ""}
         <table class="gplayers"><thead><tr><th></th><th>Name</th><th>Who</th><th>Starts in</th><th>Free businesses</th><th></th></tr></thead><tbody>
         ${setup.players.map((p, i) => {
@@ -109,7 +109,7 @@
         </tbody></table>
         <div class="grow">
           ${setup.players.length < 8 ? `<button class="gbtn ghost" id="gAdd">+ Add player</button>` : ""}
-          <label>Rounds <input type="number" id="gRounds" min="3" max="200" value="${setup.rounds}"></label>
+          <label>Play to €<input type="number" id="gGoal" min="1500" max="100000" step="500" value="${setup.goal}"></label>
           <button class="gbtn" id="gStart">Start game</button>
         </div>
       </div>`;
@@ -126,10 +126,10 @@
     }));
     root.querySelectorAll("[data-del]").forEach(b => b.addEventListener("click", () => { setup.players.splice(+b.dataset.del, 1); renderSetup(); }));
     root.querySelector("#gAdd")?.addEventListener("click", () => { setup.players.push(defaultPlayer(setup.players.length)); setup.players.at(-1).bot = true; renderSetup(); });
-    root.querySelector("#gRounds").addEventListener("change", e => setup.rounds = Math.max(3, Math.min(200, +e.target.value || S.rounds)));
+    root.querySelector("#gGoal").addEventListener("change", e => setup.goal = Math.max(1500, Math.min(100000, Math.round(+e.target.value) || S.goal)));
     root.querySelector("#gResume")?.addEventListener("click", () => { st = saved; render(); });
     root.querySelector("#gStart").addEventListener("click", () => {
-      const game = G.newGame({ players: setup.players, rounds: setup.rounds });
+      const game = G.newGame({ players: setup.players, goal: setup.goal });
       if (online()) { NET.start(game); return; } // everyone's screen picks it up from the database
       st = game; save(); render();
     });
@@ -165,6 +165,7 @@
     const a = o.args || {};
     if (o.name === "placeOrder" && G.isWaste(a.id)) return a.side === "buy" ? `Take ${a.qty} ${G.COM[a.id].name} for at least ${m(+a.price)} each` : `Pay up to ${m(+a.price)} each to get rid of ${a.qty} ${G.COM[a.id].name} <em>${m(a.qty * a.price)}</em>`;
     if (o.name === "placeOrder") return `${a.side === "buy" ? "Bid for" : "Offer"} ${a.qty} ${G.COM[a.id].name} at ${m(+a.price)} <em>${m(a.qty * a.price)}</em>`;
+    if (o.name === "playCard") { const c = G.CARD[a.card]; return c ? `Play ${c.icon} ${c.name}${targetName(a.target, c)}` : "Play a card"; }
     if (o.name === "sellBusiness") { const b = st.businesses.find(x => x.id === a.biz); return b ? `Sell your ${G.BIZ_BY[b.type].name.toLowerCase()} in ${G.TERR[b.territory].name} for ${m(G.resale(G.BIZ_BY[b.type]))}` : "Sell a business"; }
     if (o.name === "cancelOrder") { const x = st.book.find(y => y.id === a.order); return x ? `Cancel ${x.side === "buy" ? "bid for" : "offer of"} ${x.qty} ${G.COM[x.good].name} at ${m(x.price)}` : "Cancel an order"; }
     if (o.name === "bid") { const k = (st.contracts || []).find(x => x.id === a.contract); return `Bid ${m(a.amount)} for ${k ? `${G.contractItem(k).icon} ${esc(G.contractItem(k).name)}` : "a contract"}`; }
@@ -208,6 +209,7 @@
   }
 
   function render() {
+    startChat();
     if (online()) {
       if (!NET.user) return renderLogin();
       if (!watching || !loaded) return goOnline();
@@ -235,7 +237,7 @@
     const who = l => { if (!l.pid) return ""; const x = G.player(st, l.pid); return `<i class="ndot" style="background:${x.colour}"></i><b>${l.pid === p.id ? "You" : esc(x.name)}</b> `; };
     root.innerHTML = `
       <div class="gbar">
-        <span class="gphase day">Round ${st.round} of ${st.rounds} · trade, and move or build</span>
+        <span class="gphase day">Round ${st.round} · first to ${m(st.goal || S.goal)} net worth wins</span>
         <span class="gturn"><i style="background:${p.colour}"></i>${p.name === "You" ? "Your" : esc(p.name) + "'s"} orders</span>
         <span class="gready">${st.players.map(x => `<i title="${esc(x.name)}${st.orders[x.id] ? " is ready" : " is deciding"}" style="background:${x.colour};opacity:${st.orders[x.id] ? 1 : .25}"></i>`).join("")}</span>
         <span class="gsp"></span>
@@ -473,11 +475,9 @@
     const cards = d.goods.map(id => cardHTML(id, d, k, fresh.has(id)));
     if (open) cards.push(openHTML(ui.good));
     return `<section class="msec qboard">
-      <div class="qhead"><h3>Quote board <span class="muted small">each good's book: asks right, bids left, the dot is the last trade</span></h3>
-        <button class="gbtn ghost" id="qOpen" ${ui.qOpen ? "hidden" : ""}>▶ Replay</button></div>
-      <div class="qctl" ${ui.qOpen ? "" : "hidden"}><div class="gseg"><button data-rmode="last" class="${ui.rmode !== "game" ? "on" : ""}">Last auction</button><button data-rmode="game" class="${ui.rmode === "game" ? "on" : ""}">Whole game</button></div>
-        <button class="gbtn ghost" id="qPlay">▶ Replay</button><input type="range" id="qSlide" min="0" max="${d.auctions}" value="${d.auctions}" aria-label="Drag back to replay from that round">
-        <span id="qLabel" class="muted small">${d.frames[k].label}</span><button class="glink" id="qClose" title="Close the replay">✕</button></div>
+      <div class="qhead"><h3>Quote board <span class="muted small">each good's book: asks right, bids left, the dot is the last trade</span></h3></div>
+      <div class="qctl"><button class="gbtn ghost qstep" id="qBack" title="Back one step">◀</button><input type="range" id="qSlide" min="0" max="${d.auctions}" value="${d.auctions}" aria-label="Drag back to replay from that round" ${d.auctions ? "" : "disabled"}><button class="gbtn ghost qstep" id="qFwd" title="Forward one step" disabled>▶</button>
+        <span id="qLabel" class="muted small">${d.frames[k].label}</span></div>
       <div class="qgrid" id="qGrid">${cards.join("")}</div>
     </section>`;
   }
@@ -515,6 +515,7 @@
       if (t0 == null) t0 = now;
       const el = Math.max(0, now - t0), move = prev === k ? 0 : MOVE, hold = (d.frames[k].hold ?? 375) * (fast ? 0.4 : 1);
       showFrame(k, move && el < move ? ease(el / move) : 1, C, prev);
+      const qb = root.querySelector("#qBack"), qf = root.querySelector("#qFwd"); if (qb) qb.disabled = k <= 0; if (qf) qf.disabled = k >= d.frames.length - 1;
       if (el >= move + hold) { if (k >= to) return done(); prev = k; k++; t0 = now; }
       raf = requestAnimationFrame(tick);
     };
@@ -558,13 +559,63 @@
       <p class="dhint">Top row first out. ${over > 0 ? `<b class="bad">${over} more than fit: the oldest go tonight.</b> ` : ""}When it overflows, the oldest units are pushed out.</p>`;
   }
 
+  // ----- Cards: your hand, and what's in force -----
+  // " on Kev", " on Coal", " in Ruhr"… for a card's target
+  function targetName(t, c) {
+    if (t == null || !c) return "";
+    if (Array.isArray(c.target)) return c.target.map((k, i) => targetName(t[i], { target: k })).join("");
+    switch (c.target) {
+      case "player": return ` on ${esc(G.player(st, t)?.name || "?")}`;
+      case "good": case "raw": return ` on ${G.COM[t]?.name || t}`;
+      case "territory": return ` in ${G.TERR[t]?.name || t}`;
+      case "myBusiness": { const b = vw.businesses.find(x => x.id === t); return b ? ` on your ${G.BIZ_BY[b.type].name.toLowerCase()}` : ""; }
+      case "theirBusiness": { const b = st.businesses.find(x => x.id === t); return b ? ` on ${esc(G.player(st, b.owner)?.name || "?")}'s ${G.BIZ_BY[b.type].name.toLowerCase()}` : ""; }
+      case "myContract": case "boardContract": { const k = [...(vw.contracts || []), ...st.players.flatMap(x => x.contracts || [])].find(x => x.id === t); return k ? ` on ${esc(k.name)}` : ""; }
+    }
+    return "";
+  }
+  // The choices for a card's target, as <option>s
+  function targetOptions(p, c) {
+    const opt = (v, label) => `<option value="${v}">${esc(label)}</option>`;
+    switch (c.target) {
+      case "player": return vw.players.filter(x => x.id !== p.id).map(x => opt(x.id, x.name)).join("");
+      case "good": return COMMODITIES.filter(x => x.type !== "waste").map(x => opt(x.id, x.name)).join("");
+      case "raw": return COMMODITIES.filter(x => x.type === "raw").map(x => opt(x.id, x.name)).join("");
+      case "territory": return TERRITORIES.filter(t => !t.sea).sort((a, b) => a.name.localeCompare(b.name)).map(t => opt(t.id, t.name)).join("");
+      case "myBusiness": return vw.businesses.filter(b => b.owner === p.id).map(b => opt(b.id, `${G.BIZ_BY[b.type].name}, ${G.TERR[b.territory].name}`)).join("");
+      case "theirBusiness": return vw.businesses.filter(b => b.owner !== p.id).map(b => opt(b.id, `${G.player(vw, b.owner).name}'s ${G.BIZ_BY[b.type].name}, ${G.TERR[b.territory].name}`)).join("");
+      case "myContract": return (p.contracts || []).map(k => opt(k.id, k.name)).join("");
+      case "boardContract": return (vw.contracts || []).map(k => opt(k.id, k.name)).join("");
+    }
+    return "";
+  }
+  function cardsSection(p) {
+    const hand = p.hand || [], played = p.cardRound === vw.round && (p.cardsPlayed || 0) >= (S.cards?.perRound || 1);
+    const sel = hand.includes(ui.cardSel) ? ui.cardSel : null, c = sel && G.CARD[sel];
+    const live = (vw.effects || []).filter(e => e.until >= vw.round);
+    const left = e => e.until - vw.round + 1;
+    const kinds = c ? (Array.isArray(c.target) ? c.target : c.target ? [c.target] : []) : [];
+    const sels = kinds.map(k => targetOptions(p, { target: k })), missing = sels.some(o => !o);
+    return `<div class="dsec">
+      <h4 title="You get a card each time you deliver a contract. Play one a round, with your orders.">Cards <em>${hand.length} of ${S.cards?.hand || 5}${played ? " · played one this round" : ""}</em></h4>
+      ${hand.length ? `<div class="hand">${hand.map(id => { const k = G.CARD[id]; return `<button class="pcard g-${k.group.toLowerCase()}${id === sel ? " on" : ""}" data-cardsel="${id}" title="${esc(k.name)}: ${esc(k.text)}"><span class="pc-i">${k.icon}</span><span class="pc-n">${esc(k.name)}</span></button>`; }).join("")}</div>`
+        : `<p class="dnone">None yet: you get one each time you deliver a contract.</p>`}
+      ${c ? `<div class="pcard-play"><b>${c.icon} ${esc(c.name)}</b> <span class="muted small">${esc(c.group)}</span><p>${esc(c.text)}</p>
+        <div class="pcp-row">${missing ? `<span class="bad small">Nothing to play it on right now.</span>` : sels.map((o, i) => `<select class="gCardTarget" data-kind="${kinds[i]}">${o}</select>`).join("")}
+          <button class="gbtn" id="gPlayCard" ${played || missing ? "disabled" : ""} title="${played ? "One card a round" : "Play it with your orders"}">Play</button></div></div>` : ""}
+      ${live.length ? `<div class="effects"><b>In force</b>${live.map(e => { const k = G.CARD[e.card]; return `<span title="${k ? esc(k.text) : ""}">${k?.icon || "•"} ${esc(k?.name || e.type)}${e.good ? ` · ${G.COM[e.good].name}` : e.territory ? ` · ${G.TERR[e.territory].name}` : e.player && e.player !== e.by ? ` · ${esc(G.player(vw, e.player)?.name || "")}` : ""} <em>${left(e) <= 1 ? "tonight" : `${left(e)} nights`}</em></span>`; }).join("")}</div>` : ""}
+    </div>`;
+  }
+
   function dashboard(p) {
     const locked = G.lockedCash(vw, p);
     const biz = G.myBusinesses(vw, p.id);
     const pv = middayPreview(p);
     return `
       <div class="dtop">
-        <div><span>Money</span><b>${m(p.cash + locked)}</b>${locked ? `<small class="muted">${m(p.cash)} free · ${m(locked)} in orders</small>` : ""}</div>
+        <div title="Cash (with cash in your orders) plus your businesses at what they'd sell back for. The stockpile doesn't count."><span>Net worth</span><b>${m(G.netWorth(vw, p))}</b>
+          <small class="muted">${m(p.cash)} cash${locked ? ` + ${m(locked)} in orders` : ""} + ${m(G.netWorth(vw, p) - p.cash - locked)} businesses</small>
+          <span class="goalbar" title="${m(G.netWorth(vw, p))} of ${m(vw.goal || S.goal)}"><i style="width:${Math.max(0, Math.min(100, G.netWorth(vw, p) / (vw.goal || S.goal) * 100)).toFixed(1)}%"></i></span><small class="muted">goal ${m(vw.goal || S.goal)}</small></div>
         <div><span>From contracts</span><b>${m((p.earned || 0) - (p.fees || 0))}</b><small class="muted">${p.delivered || 0} delivered${p.failed ? ` · ${p.failed} failed` : ""}</small></div>
       </div>
       <div class="dsec">
@@ -575,6 +626,7 @@
         ${(() => { const all = p.made || [], done = (G.player(st, p.id).made || []).length; // the shelf of things made in earlier turns
           return (done ? `<div class="dmade" title="What you've made">${all.slice(0, done).map(x => `<span class="dthing" title="${esc(x.name)}: paid ${m(x.price ?? 0)}, round ${x.round}">${x.icon}</span>`).join("")}</div>` : ""); })()}
       </div>
+      ${cardsSection(p)}
       <div class="dsec">
         <h4>Businesses <em>${biz.length}${S.businessStock ? ` · each holds ${S.businessSpace}` : ""}</em></h4>
         ${biz.map(b => {
@@ -595,7 +647,7 @@
       <div class="dsec">
         <h4>Players</h4>
         ${G.ranking(st).map(x => `<div class="dplayer${x.id === p.id ? " me" : ""}"><span><i style="background:${x.colour}"></i>${x.id === p.id ? "You" : esc(x.name)}</span>
-          <span class="muted">${G.myBusinesses(st, x.id).map(b => G.BIZ_BY[b.type].name.toLowerCase()).join(", ") || "no businesses"} </span><b>${m(G.totalCash(st, x))}</b></div>`).join("")}
+          <span class="muted">${G.myBusinesses(st, x.id).map(b => G.BIZ_BY[b.type].name.toLowerCase()).join(", ") || "no businesses"} </span><b title="Net worth">${m(G.netWorth(st, x))}</b></div>`).join("")}
       </div>`;
   }
 
@@ -1043,20 +1095,20 @@
     const sel = ui.terr && ui.terr !== p.pos ? mapHighlightSVG(FID, ui.terr, "sel") : "";
     svg = svg.replace(`<g class="hl"></g></svg>`, `<g class="hl">${near.map(t => mapHighlightSVG(FID, t, "near")).join("")}${mapHighlightSVG(FID, p.pos, "here")}${sel}</g>`);
     // Markers under each name: pawns first, then businesses; up to 4 a row, kept inside the map
-    const [W] = MAP_SIZE, S = 28, step = 32, perRow = 4;
+    const [W] = MAP_SIZE, S = 18, step = 21, perRow = 5;
     const marks = {};
     vw.players.forEach(x => (marks[x.pos] ||= []).push({ kind: "pawn", x }));
     vw.businesses.forEach(b => (marks[b.territory] ||= []).push({ kind: "biz", b }));
     Object.entries(marks).forEach(([tid, list]) => {
-      const [x] = TERRITORY_LABELS[tid], show = list.slice(0, 8), rows = Math.ceil(show.length / perRow);
+      const [x] = TERRITORY_LABELS[tid], show = list.slice(0, 10), rows = Math.ceil(show.length / perRow);
       show.forEach((mk, i) => {
         const r = Math.floor(i / perRow), inRow = Math.min(perRow, show.length - r * perRow), k = i - r * perRow;
         const half = (inRow - 1) / 2 * step + S / 2 + 4;
-        const cx = Math.min(W - half, Math.max(half, x)) + (k - (inRow - 1) / 2) * step, cy = below[tid] + 22 + r * (S + 4);
-        if (mk.kind === "biz") { const o = G.player(vw, mk.b.owner), t = G.BIZ_BY[mk.b.type]; svg += `<g class="mk"><title>${esc(o.name)}: ${t.name}</title><rect x="${cx - S / 2}" y="${cy - S / 2}" width="${S}" height="${S}" rx="6" fill="${o.colour}" stroke="#fff" stroke-width="2"/>${iconSVG(BIZ_ICON[t.id], cx, cy, 19)}</g>`; }
-        else svg += `<g class="mk"><title>${esc(mk.x.name)}${mk.x.id === p.id ? " (you)" : ""}</title>${pawnSVG(cx, cy, mk.x.id === p.id ? 26 : 22, mk.x.colour, esc(mk.x.name[0] || "?").toUpperCase(), mk.x.id === p.id)}</g>`;
+        const cx = Math.min(W - half, Math.max(half, x)) + (k - (inRow - 1) / 2) * step, cy = below[tid] + 16 + r * (S + 3);
+        if (mk.kind === "biz") { const o = G.player(vw, mk.b.owner), t = G.BIZ_BY[mk.b.type]; svg += `<g class="mk"><title>${esc(o.name)}: ${t.name}</title><rect x="${cx - S / 2}" y="${cy - S / 2}" width="${S}" height="${S}" rx="4" fill="${o.colour}" stroke="#fff" stroke-width="1.5"/>${iconSVG(BIZ_ICON[t.id], cx, cy, 12.5)}</g>`; }
+        else svg += `<g class="mk"><title>${esc(mk.x.name)}${mk.x.id === p.id ? " (you)" : ""}</title>${pawnSVG(cx, cy, mk.x.id === p.id ? 22 : 19, mk.x.colour, esc(mk.x.name[0] || "?").toUpperCase(), mk.x.id === p.id)}</g>`;
       });
-      if (show.length < list.length) svg += `<text x="${x}" y="${below[tid] + 22 + rows * (S + 4) + 6}" text-anchor="middle" font-size="12" font-weight="700" fill="#4a4232" paint-order="stroke" stroke="#fff" stroke-width="3">+${list.length - show.length} more</text>`;
+      if (show.length < list.length) svg += `<text x="${x}" y="${below[tid] + 16 + rows * (S + 3) + 6}" text-anchor="middle" font-size="12" font-weight="700" fill="#4a4232" paint-order="stroke" stroke="#fff" stroke-width="3">+${list.length - show.length} more</text>`;
     });
     document.getElementById("gMap").innerHTML = `<div class="bd-scroll">${svg.replace(/<\/svg>$/, "")}</svg></div>`;
     document.querySelectorAll("#gMap .terr").forEach(g => {
@@ -1187,6 +1239,13 @@
       if (r && (r.bottom > innerHeight || r.top < 0)) box.scrollIntoView({ block: "nearest", behavior: "smooth" });
     }));
     root.querySelector("#gTicketClose")?.addEventListener("click", closeGood);
+    root.querySelectorAll("[data-cardsel]").forEach(b => b.addEventListener("click", () => { ui.cardSel = ui.cardSel === b.dataset.cardsel ? null : b.dataset.cardsel; render(); }));
+    root.querySelector("#gPlayCard")?.addEventListener("click", () => {
+      const c = G.CARD[ui.cardSel], num = ["player", "myBusiness", "theirBusiness", "myContract", "boardContract"];
+      const vals = [...root.querySelectorAll(".gCardTarget")].map(x => num.includes(x.dataset.kind) ? +x.value : x.value);
+      const target = Array.isArray(c.target) ? vals : vals.length ? vals[0] : null;
+      ui.cardSel = null; doAct("playCard", { card: c.id, target });
+    });
     root.querySelectorAll("[data-bin]").forEach(b => b.addEventListener("click", e => { e.stopPropagation(); doAct("dump", { id: b.dataset.bin, qty: 1 }); }));
     root.querySelectorAll("[data-bidfor]").forEach(b => b.addEventListener("click", () => {
       const inp = root.querySelector(`[data-bidinput="${b.dataset.bidfor}"]`), v = Math.round(+inp?.value);
@@ -1210,33 +1269,20 @@
     });
     // Quote board replay: ▶ animates through the auctions; the slider jumps to any moment
     qStop?.(); qStop = null;
-    const qPlay = root.querySelector("#qPlay"), qSlide = root.querySelector("#qSlide");
-    const stopReplay = () => { qStop?.(); qStop = null; if (qPlay) qPlay.textContent = "▶ Replay"; };
-    // Drag the slider back: it shows that round; let go and it replays from there to now
-    qSlide?.addEventListener("input", () => { stopReplay(); showFrame(Math.min(ui.board.frames.length - 1, 4 * +qSlide.value)); });
-    qSlide?.addEventListener("change", () => {
-      const k = Math.min(ui.board.frames.length - 1, 4 * +qSlide.value), end = ui.board.frames.length - 1;
-      if (k >= end) return;
-      qPlay.textContent = "❚❚ Pause";
-      qStop = playBoard(k, end, ui.rmode === "game", () => { qStop = null; qPlay.textContent = "▶ Replay"; });
-    });
-    // One ▶ Replay button: opens the controls and starts playing; ✕ puts them away and shows the book as it stands
-    root.querySelector("#qOpen")?.addEventListener("click", e => {
-      ui.qOpen = true; e.target.hidden = true; root.querySelector(".qctl").hidden = false; qPlay.click();
-    });
-    root.querySelector("#qClose")?.addEventListener("click", () => {
-      ui.qOpen = false; stopReplay(); showFrame(ui.board.frames.length - 1);
-      root.querySelector(".qctl").hidden = true; root.querySelector("#qOpen").hidden = false;
-    });
-    root.querySelectorAll("[data-rmode]").forEach(b => b.addEventListener("click", () => { ui.rmode = b.dataset.rmode; render(); }));
-    qPlay?.addEventListener("click", () => {
-      if (qStop) return stopReplay();
-      const end = ui.board.frames.length - 1;
-      const start = ui.rmode === "game" ? 0 : ui.board.lastStart;
-      const at = ui.boardK ?? end, k = at >= end ? start : at;
-      qPlay.textContent = "❚❚ Pause";
-      qStop = playBoard(k, end, ui.rmode === "game", () => { qStop = null; qPlay.textContent = "▶ Replay"; });
-    });
+    // The slider moves in rounds: drag it back and the board replays from there to now. ◀ ▶ step one
+    // moment at a time (each step glides, as in the replay); stepping stops any replay that's running.
+    const qSlide = root.querySelector("#qSlide"), qBack = root.querySelector("#qBack"), qFwd = root.querySelector("#qFwd");
+    const stopReplay = () => { qStop?.(); qStop = null; };
+    const lastK = () => ui.board.frames.length - 1;
+    const steps = () => { if (qBack) qBack.disabled = !(ui.boardK > 0); if (qFwd) qFwd.disabled = !(ui.boardK < lastK()); };
+    const goTo = (k, playOn) => { stopReplay(); qStop = playBoard(k, playOn ? lastK() : k, false, () => { qStop = null; steps(); }); steps(); };
+    qSlide?.addEventListener("input", () => { stopReplay(); showFrame(Math.min(lastK(), 4 * +qSlide.value)); steps(); });
+    qSlide?.addEventListener("change", () => { const k = Math.min(lastK(), 4 * +qSlide.value); if (k < lastK()) goTo(k, true); });
+    // A step skips the repeated moments of an auction where this board had no trades (they look the same)
+    const stepFrom = (k, dir) => { let j = k + dir; while (j > 0 && j < lastK() && ui.board.frames[j].hold === 0) j += dir; return Math.max(0, Math.min(lastK(), j)); };
+    qBack?.addEventListener("click", () => { const k = ui.boardK ?? lastK(); if (k > 0) goTo(stepFrom(k, -1), false); });
+    qFwd?.addEventListener("click", () => { const k = ui.boardK ?? lastK(); if (k < lastK()) goTo(stepFrom(k, 1), false); });
+    if (ui.board) steps();
     // Price chart: crosshair and tooltip on the nearest trade
     root.querySelectorAll(".pchart").forEach(box => {
       const pts = JSON.parse(box.dataset.pts), svg = box.querySelector("svg"), tip = box.querySelector(".ptip"), xh = svg.querySelector(".xhair");
@@ -1297,12 +1343,80 @@
     const rank = G.ranking(st);
     root.innerHTML = `<div class="gsetup">
       <h1>${esc(rank[0].name)} wins</h1>
-      <table class="gplayers"><thead><tr><th>#</th><th>Player</th><th class="n">Money</th><th class="n">Contracts delivered</th><th class="n">Failed</th><th class="n">Businesses</th></tr></thead><tbody>
-      ${rank.map((p, i) => `<tr><td>${i + 1}</td><td><i class="gdot" style="background:${p.colour}"></i>${esc(p.name)}</td><td class="n"><b>${m(G.totalCash(st, p))}</b></td><td class="n">${p.delivered || 0}</td><td class="n">${p.failed || 0}</td><td class="n">${G.myBusinesses(st, p.id).length}</td></tr>`).join("")}
+      <table class="gplayers"><thead><tr><th>#</th><th>Player</th><th class="n">Net worth</th><th class="n">Contracts delivered</th><th class="n">Failed</th><th class="n">Businesses</th></tr></thead><tbody>
+      ${rank.map((p, i) => `<tr><td>${i + 1}</td><td><i class="gdot" style="background:${p.colour}"></i>${esc(p.name)}</td><td class="n"><b>${m(G.netWorth(st, p))}</b></td><td class="n">${p.delivered || 0}</td><td class="n">${p.failed || 0}</td><td class="n">${G.myBusinesses(st, p.id).length}</td></tr>`).join("")}
       </tbody></table>
       <div class="grow"><button class="gbtn" id="gAgain">New game</button></div></div>`;
     root.querySelector("#gAgain").addEventListener("click", () => { if (online()) return NET.reset(); st = null; localStorage.removeItem(KEY); render(); });
   }
+
+  // ================= Under the game: chat, and ideas =================
+  // Built once and kept apart from the game screen, so a half-typed message survives the game redrawing.
+  // Online, messages go through the shared database (sellersmarket/chat); on one device, they're kept in
+  // this browser.
+  const bottom = document.getElementById("gameBottom");
+  const LOCAL_CHAT = "sellersmarket-chat-local";
+  const localChat = () => { try { return JSON.parse(localStorage.getItem(LOCAL_CHAT)) || []; } catch (e) { return []; } };
+  let chatMsgs = [], chatWatching = false;
+  const chatName = () => online() ? NET.user : (st && ui.seat && G.player(st, ui.seat)?.name) || "You";
+  const colourOf = name => st?.players.find(p => p.name === name)?.colour || "var(--muted)";
+  function drawChat() {
+    const log = document.getElementById("chatLog"), form = document.getElementById("chatForm");
+    if (!log) return;
+    const locked = online() && !NET.user;
+    form.hidden = locked;
+    const stick = log.scrollTop + log.clientHeight >= log.scrollHeight - 30;
+    const when = t => new Date(t).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+    log.innerHTML = locked ? `<p class="muted small">Log in to chat.</p>` : chatMsgs.map(x => `<div class="cm${x.name === chatName() ? " me" : ""}"><b style="color:${colourOf(x.name)}">${esc(x.name)}</b> <span class="muted small">${when(x.t)}</span> ${esc(x.text)}</div>`).join("") || `<p class="muted small">No messages yet. Say hello, or make an offer.</p>`;
+    if (stick) log.scrollTop = log.scrollHeight;
+  }
+  function startChat() {
+    if (online()) { if (NET.user && !chatWatching) { chatWatching = true; NET.watchChat(list => { chatMsgs = list; drawChat(); }); } }
+    else chatMsgs = localChat();
+    drawChat();
+  }
+  function sendChat(text) {
+    text = text.trim();
+    if (!text) return;
+    if (online()) return NET.say(text);
+    const list = [...localChat(), { name: chatName(), text: text.slice(0, 500), t: Date.now() }].slice(-200);
+    try { localStorage.setItem(LOCAL_CHAT, JSON.stringify(list)); } catch (e) {}
+    chatMsgs = list; drawChat();
+  }
+  const IDEAS = `<div class="ideas">
+    <h3>Ideas: giving players a reason to trade</h3>
+    <p>The problem: with two players and money as the score, any trade you can see helps your rival, so refusing to trade looks safe. The fix is to make refusing expensive, and to make most trades leave both players better off against something other than each other.</p>
+    <h4>1. Make not trading cost you</h4>
+    <ul><li><b>Nobody can be self-sufficient.</b> Every contract needs at least one good you can't produce yourself. A €400 contract that needs 2 steel you can't make is worth trading for even at a high price, and the seller gains too.</li>
+      <li><b>Unsold stock costs money.</b> Surplus already spoils and gets pushed out of the stockpile; add a small storage fee per occupied row each round, so sitting on goods is a steady loss and selling cheaply beats waiting.</li>
+      <li><b>Contracts pay well</b>, so most trades end in a contract the state pays for: both players get richer in absolute terms, not just one at the other's expense.</li></ul>
+    <h4>2. Someone else to trade with</h4>
+    <ul><li><b>Outside merchants with a wide spread.</b> The outside world always buys any good at a poor price and always sells at a steep one (say half and twice its cost basis). You're never stuck, but trading with each other anywhere inside that band beats the merchants for both of you: that gap is the gain from trade, and you split it rather than give it away.</li>
+      <li><b>Bots in the ranking.</b> Play with 2 or 3 bots as well. The book is anonymous, so you never know whether your counterparty is Kev or a bot; and if you both beat the bots by trading, the trade wasn't just a gift to your rival.</li></ul>
+    <h4>3. Rewards for trading itself</h4>
+    <ul><li><b>A card for every 10 units traded</b>, so active traders get more cards.</li>
+      <li><b>Or a small commission rebate:</b> the state pays both sides €1 a unit on every trade, which makes even a slightly unequal deal worth doing.</li></ul>
+    <h4>4. Direct deals between players</h4>
+    <ul><li>A "propose a deal" button: "I'll give you 3 coal and €50 for 2 iron." The other player accepts, rejects or counters. Haggling is where the fun of trading lives, and a deal both accept is one both thought was fair.</li></ul>
+    <h4>Also discussed: a futures market</h4>
+    <ul><li>Extra order books for delivery in 3 and 6 rounds: a trade is a promise with a deposit (say 25%), settled on the delivery night. Lets you lock in costs for a contract, sell output ahead, or bet on shortages. Needs bots to quote futures prices too, or the books stay empty with two players.</li></ul>
+    <p class="muted small">Suggested order: outside merchants and the storage fee first (they change the maths so trading is usually right), then direct deals.</p>
+  </div>`;
+  function renderBottom() {
+    if (!bottom) return;
+    bottom.innerHTML = `<section class="gbottom">
+      <div class="gtabs2"><button data-btab="chat" class="on">Chat</button><button data-btab="ideas">Ideas</button></div>
+      <div class="bpane" data-pane="chat"><div class="chatlog" id="chatLog"></div>
+        <form class="chatform" id="chatForm"><input id="chatIn" placeholder="Say something…" maxlength="500" autocomplete="off"><button class="gbtn" type="submit">Send</button></form></div>
+      <div class="bpane" data-pane="ideas" hidden>${IDEAS}</div>
+    </section>`;
+    bottom.querySelectorAll("[data-btab]").forEach(b => b.addEventListener("click", () => {
+      bottom.querySelectorAll("[data-btab]").forEach(x => x.classList.toggle("on", x === b));
+      bottom.querySelectorAll("[data-pane]").forEach(x => x.hidden = x.dataset.pane !== b.dataset.btab);
+    }));
+    bottom.querySelector("#chatForm").addEventListener("submit", e => { e.preventDefault(); const i = bottom.querySelector("#chatIn"); sendChat(i.value); i.value = ""; });
+  }
+  renderBottom();
 
   // Start: online (log in, then follow the shared game), or continue a game saved on this device, or set one up
   if (NET.ready) render();
