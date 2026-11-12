@@ -242,15 +242,12 @@
       const pf = allocate(inPayers, vol, (a, b) => b - a), qf = allocate(inPayees, vol, (a, b) => a - b);
       const bf = waste ? qf : pf, af = waste ? pf : qf; // buyers get the goods, sellers part with them
       const bought = {}, sold = {};
-      // The units sold keep their age: sellers part with their oldest first, and buyers get them in that order
-      const pool = [];
-      af.forEach((n, o) => pool.push(...G.takeLots(o.lots, n)));
-      pool.sort((a, b) => a[1] - b[1]);
+      // Sellers part with their oldest units first; buyers get them fresh: bought goods start their life
+      // again from tonight (so what you buy has its full time before it goes off)
+      af.forEach((n, o) => G.takeLots(o.lots, n));
       bf.forEach((n, o) => {
         const p = G.player(st, o.pid);
-        const got = G.takeLots(pool, n), known = got.reduce((s, l) => s + l[0], 0);
-        got.forEach(([k, made]) => G.add(p, id, k, made));
-        if (n > known) G.add(p, id, n - known);
+        G.add(p, id, n); // made now: a fresh countdown
         // A bid: refund what was locked above the clearing price. Taking waste: get paid the fee.
         p.cash = cents(p.cash + (waste ? P : o.price - P) * n);
         o.qty -= n; bought[p.id] = (bought[p.id] || 0) + n;
@@ -291,10 +288,14 @@
     st.stats.trades = (st.stats.trades || 0) + n;
   };
 
-  // Throw goods away (any phase). Not waste: someone has to be paid to take it, or it's kept till it goes off.
+  // Throw goods away (any phase), for settings.binFee a unit. Not waste: someone has to be paid to take it,
+  // or it's kept till it goes off.
   G.actions.dump = (st, p, { id, qty }) => {
     G.need(!G.isWaste(id), `${G.COM[id]?.name || id} can't just be thrown away: pay someone to take it, or keep it until it goes off.`);
     qty = Math.floor(+qty);
+    const fee = (S.binFee || 0) * qty;
+    G.need(p.cash >= fee, `Binning ${qty} costs ${G.money(fee)}; you have ${G.money(p.cash)} free.`);
+    p.cash -= fee;
     G.need(qty > 0 && G.have(st, p, id) >= qty, `You only have ${G.have(st, p, id)} ${G.COM[id]?.name || id} that isn't on offer.`);
     G.take(st, p, id, qty);
     return null;

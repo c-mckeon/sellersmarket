@@ -6,9 +6,10 @@
 // night, when the lowest bid so far is shown (not who made it).
 //   bid       { contract, amount }   any time you order; a new bid must be lower than your last one
 //   deliver   { contract }           a contract you've won: the goods leave your stockpile and you're paid your bid
-// After settings.contracts.bidRounds rounds the lowest bid wins (a tie: the earlier bid). A player can hold
+// Each contract has its own bidding time and delivery time (settings.contracts.tender and .deliver: at least
+// 2 rounds each, longer for bigger contracts). When bidding closes the lowest bid wins (a tie: the earlier bid). A player can hold
 // settings.contracts.maxHeld contracts at once; one who's full is skipped. No bids: it's replaced.
-// The winner has settings.contracts.deliverRounds rounds to deliver. If they don't, they pay legal fees:
+// The winner has the contract's delivery time to deliver. If they don't, they pay legal fees:
 // failFee.base + failFee.share × their bid, and the contract is gone.
 //
 // A contract is for a real job (js/projects.js) and asks for its goods, a few of each: some are simple,
@@ -90,7 +91,11 @@
     list.forEach(id => goods[id] = qlo + Math.floor(G.rand(st) * (qhi - qlo + 1)));
     const raw = list.reduce((s, id) => s + goods[id] * G.rawUnits(id), 0), avgT = list.reduce((s, id) => s + G.tier(id), 0) / list.length;
     st.nextContractId = (st.nextContractId || 0) + 1;
-    return { id: st.nextContractId, name, icon, goods, cap: Math.max(10, Math.round(raw * C.capPerRawUnit * (1 + (C.tierBonus || 0) * avgT))), drawn: st.round, bids: [] };
+    // Its own timings: longer for more goods (bidding) and more units (delivery), never under 2 rounds
+    const units = Object.values(goods).reduce((s, q) => s + q, 0), T = C.tender || {}, D = C.deliver || {};
+    const bidRounds = Math.max(2, Math.round((T.base ?? 2) + (T.perGood ?? 1) * (list.length - 1) + Math.floor(G.rand(st) * ((T.spread ?? 1) + 1))));
+    const deliverRounds = Math.max(2, Math.round((D.base ?? 2) + (D.perUnit ?? 0.35) * units + Math.floor(G.rand(st) * ((D.spread ?? 1) + 1))));
+    return { id: st.nextContractId, name, icon, goods, cap: Math.max(10, Math.round(raw * C.capPerRawUnit * (1 + (C.tierBonus || 0) * avgT))), drawn: st.round, bids: [], bidRounds, deliverRounds };
   };
 
   // Contracts coming next, drawn ahead of time (st.upcoming) so the "inside line" card can show them exactly.
@@ -101,7 +106,8 @@
   // The lowest bid on a board contract so far (public once the night has passed), or null
   G.lowestBid = k => k.bids.reduce((m, b) => !m || b.amount < m.amount || (b.amount === m.amount && b.round < m.round) ? b : m, null);
   // Rounds of bidding left on a board contract, counting this one
-  G.bidRoundsLeft = (st, k) => C.bidRounds - (st.round - k.drawn);
+  G.bidRoundsLeft = (st, k) => (k.bidRounds ?? C.bidRounds) - (st.round - k.drawn);
+  G.deliverRoundsOf = k => k.deliverRounds ?? C.deliverRounds;
   // Legal fees for not delivering a contract won at `price`
   G.failFee = price => Math.round((C.failFee.base || 0) + (C.failFee.share || 0) * price);
 
@@ -124,7 +130,7 @@
       st.contracts = st.contracts.filter(x => x !== k);
       if (!win) { G.log(st, `Nobody ${k.bids.length ? "with room " : ""}bid for ${item.icon} ${item.name}: it's off the board.`); return; }
       const p = G.player(st, win.pid);
-      (p.contracts ||= []).push({ id: k.id, name: k.name, icon: k.icon, goods: k.goods, cap: k.cap, price: win.amount, won: st.round, due: st.round + C.deliverRounds });
+      (p.contracts ||= []).push({ id: k.id, name: k.name, icon: k.icon, goods: k.goods, cap: k.cap, price: win.amount, won: st.round, due: st.round + G.deliverRoundsOf(k) });
       st.stats.won = (st.stats.won || 0) + 1;
       (st.stats.winning ||= []).push({ price: win.amount, cap: k.cap, bids: k.bids.length, goods: k.goods, round: st.round }); // for the simulator
       G.log(st, `${p.name} won ${item.icon} ${item.name} for ${G.money(win.amount)} (${k.bids.length} bid${k.bids.length === 1 ? "" : "s"})`);

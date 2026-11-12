@@ -17,11 +17,11 @@ const EXTRACTORS = [
   ["Iron mine",         "iron_ore",  1],
 ];
 
-// What each business costs to build, in cash: 120 to 170. Mines, pits and farms are cheapest; factories
+// What each business costs to build, in cash: 240 to 340. Mines, pits and farms are cheapest; factories
 // cost more the further along the chain their product is.
 const BUSINESS_COST = {
-  farm: 120, water_works: 120, sand_pit: 120, clay_pit: 120,
-  logging_camp: 125, limestone_quarry: 125, coal_mine: 135, iron_mine: 135,
-  flour_mill: 140, sawmill: 140, kiln: 145, glassworks: 145, blast_furnace: 150,
-  cement_kiln: 155, paper_mill: 155, bakery: 155, steelworks: 165, concrete_plant: 170,
+  farm: 240, water_works: 240, sand_pit: 240, clay_pit: 240,
+  logging_camp: 250, limestone_quarry: 250, coal_mine: 270, iron_mine: 270,
+  flour_mill: 280, sawmill: 280, kiln: 290, glassworks: 290, blast_furnace: 300,
+  cement_kiln: 310, paper_mill: 310, bakery: 310, steelworks: 330, concrete_plant: 340,
 };

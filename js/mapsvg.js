@@ -57,10 +57,13 @@ let hlIds = 0;
 function mapHighlightSVG(fid, tid, kind) {
   const t = TERRITORIES.find(x => x.id === tid);
   if (!t) return "";
-  const d = t.provinces.map(p => PROVINCE_PATHS[p]).join(" "), [W, H] = MAP_SIZE, id = `${fid}-m${++hlIds}`;
+  // Each province stays its own path (their outlines can't be joined into one: a path that starts with a
+  // relative move would land somewhere else); they're drawn together as a group.
+  const ds = t.provinces.map(p => PROVINCE_PATHS[p]), [W, H] = MAP_SIZE, id = `${fid}-m${++hlIds}`;
   const style = { here: ["#1d1d1b", 2.6, 0.9], near: ["#d4682a", 1.6, 0.9], sel: ["#2f6db5", 2.6, 0.95] }[kind] || ["#1d1d1b", 2, 0.9];
   const [colour, width, op] = style;
-  return `${kind === "near" ? `<path d="${d}" fill="${colour}" fill-opacity=".12"/>` : ""}
-    <mask id="${id}" maskUnits="userSpaceOnUse" x="0" y="0" width="${W}" height="${H}"><rect width="${W}" height="${H}" fill="#fff"/><path d="${d}" fill="#000"/></mask>
-    <path d="${d}" mask="url(#${id})" fill="${colour}" stroke="${colour}" stroke-width="${width * 2}" stroke-linejoin="round" opacity="${op}"/>`;
+  const paths = attrs => ds.map(d => `<path d="${d}" ${attrs}/>`).join("");
+  return `${kind === "near" ? `<g fill="${colour}" fill-opacity=".12">${paths("")}</g>` : ""}
+    <mask id="${id}" maskUnits="userSpaceOnUse" x="0" y="0" width="${W}" height="${H}"><rect width="${W}" height="${H}" fill="#fff"/>${paths('fill="#000" stroke="#000" stroke-width=".6"')}</mask>
+    <g mask="url(#${id})" opacity="${op}">${paths(`fill="${colour}" stroke="${colour}" stroke-width="${width * 2}" stroke-linejoin="round"`)}</g>`;
 }

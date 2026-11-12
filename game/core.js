@@ -57,8 +57,8 @@ const SMG = (() => {
   // ---------- Goods age (settings.depreciation, game/depreciation.js) ----------
   // Each holder (a player, or a business with its own stock) keeps, beside its counts, when its units
   // were made: holder.lots[good] = [[qty, round made], …], oldest first. Goods are always used, sold and
-  // delivered oldest first, and keep their age wherever they go (into a sell order, to a buyer, back
-  // again). G.clock is the round now; it's set wherever the game runs (actions, steps, a new game).
+  // delivered oldest first, and keep their age in a sell order and when given back; bought goods start
+  // their life again (game/market.js). G.clock is the round now; it's set wherever the game runs (actions, steps, a new game).
   G.clock = 0;
   const lotsOn = () => !!S.depreciation?.on;
   // Make the ages match the count (units put in some other way count as made now)

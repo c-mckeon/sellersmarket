@@ -2,14 +2,12 @@
 // ONLINE_PLAYERS (game/online-config.js), each on their own device.
 //
 // Stored under sellersmarket/ in the database:
-//   users/<name>/hash   a hash of their password (set the first time they log in)
 //   game                the whole game, as JSON text (null: no game yet)
 // Orders are sent with a transaction: the game is read, your orders are added with SMG.submit, and if
 // that was the last player the round is played out, all in one step, so two players submitting at
 // the same moment can't overwrite each other.
 //
-// Passwords are checked in the browser (anyone who can open the database could get round them):
-// they keep honest people out of each other's seat, nothing more.
+// There are no passwords: each player just picks their name.
 //
 // Testing without Firebase: add ?mock to the page address. A stand-in database lives in this browser
 // (shared between its tabs), so two tabs can play Con and Kev.
@@ -61,24 +59,15 @@ const NET = (() => {
   const db = ready ? (mock ? standIn() : firebaseDb()) : null;
 
   // ----- Logging in -----
-  const hash = async (name, pw) => {
-    const buf = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(`sellersmarket:${name}:${pw}`));
-    return [...new Uint8Array(buf)].map(b => b.toString(16).padStart(2, "0")).join("");
-  };
   let user = null;
   try { user = localStorage.getItem(USER_KEY); } catch (e) {}
   if (!ONLINE_PLAYERS.includes(user)) user = null;
 
-  async function login(name, pw) {
+  // No passwords: you pick who you are. (Anyone with the site can pick either name.)
+  async function login(name) {
     if (!ONLINE_PLAYERS.includes(name)) return { ok: false, msg: "Unknown player." };
-    if (!pw) return { ok: false, msg: "Type your password." };
-    try {
-      const h = await hash(name, pw), path = `${ROOT}/users/${name.toLowerCase()}/hash`, saved = await db.get(path);
-      if (saved && saved !== h) return { ok: false, msg: "Wrong password." };
-      if (!saved) await db.set(path, h); // first login: this becomes the password
-      user = name; try { localStorage.setItem(USER_KEY, name); } catch (e) {}
-      return { ok: true, first: !saved };
-    } catch (e) { return { ok: false, msg: `Couldn't reach the database: ${e.message}` }; }
+    user = name; try { localStorage.setItem(USER_KEY, name); } catch (e) {}
+    return { ok: true };
   }
   const logout = () => { user = null; try { localStorage.removeItem(USER_KEY); } catch (e) {} };
 

@@ -8,7 +8,8 @@ const GAME_SETTINGS = {
   startCash: 1000,         // the only money there will ever be: for trading and building businesses
   businessResale: 0.6,     // a business sells back for this share of its cost
   startBusinesses: 2,      // the business you pick, plus the one that goes with it (a farm and a flour mill…)
-  startSpace: 25,          // your stockpile: 25 rows, one unit of anything in each
+  startSpace: 30,          // your stockpile: 30 rows, one unit of anything in each
+  binFee: 3,               // binning a unit from your stockpile costs this much (waste can't be binned)
                            // first in, first out: when it overflows, the oldest units are pushed out
   businessStock: false,    // false: what your businesses make goes straight into your stockpile
   businessSpace: 10,       // (only with businessStock: how many units each business holds)
@@ -33,15 +34,20 @@ const GAME_SETTINGS = {
   // ---------- Contracts (game/contracts.js) ----------
   contracts: {
     start: 3,              // contracts on the board when the game starts…
-    perRound: [0, 2],      // …then this many new ones each night (fewest, most; random)…
-    open: 4,               // …up to this many on the board at once
-    bidRounds: 4,          // bidding stays open this many rounds; then the lowest bid wins
-    deliverRounds: 5,      // the winner has this many rounds to deliver
+    perRound: [1, 2],      // …then this many new ones each night (fewest, most; random)…
+    open: 5,               // …up to this many on the board at once
+    // Each contract has its own timings (never under 2 rounds); bigger ones get longer:
+    //   bidding stays open  tender.base + tender.perGood × (goods asked for − 1) + 0…tender.spread rounds
+    //   delivery time       deliver.base + deliver.perUnit × units asked for + 0…deliver.spread rounds
+    tender: { base: 2, perGood: 1, spread: 1 },
+    deliver: { base: 2, perUnit: 0.35, spread: 1 },
+    bidRounds: 4,          // (older games: one length for every contract)
+    deliverRounds: 5,
     maxHeld: 3,            // contracts a player can hold at once
-    failFee: { base: 50, share: 0.5 }, // not delivered in time: legal fees of base + share × the winning bid
+    failFee: { base: 0, share: 0.25 }, // not delivered in time: legal fees of base + share × the winning bid
     goodsPerContract: [1, 4], // fewest and most different goods a contract asks for (jobs: js/projects.js)…
     unitsPerGood: [2, 4],  // …and how many of each
-    capPerRawUnit: 40,     // the most the client pays: this much per raw-material unit in it (see G.rawUnits)…
+    capPerRawUnit: 60,     // the most the client pays: this much per raw-material unit in it (see G.rawUnits)…
     tierBonus: 0.25,       // …+ this share for each processing step (raw 0, lumber 1, steel 2…)
     // The raw materials that spread-out starts hand out, one region's each (G.spreadStarts)
     raws: ["wood", "sand", "clay", "limestone", "coal", "iron_ore"],
@@ -52,12 +58,12 @@ const GAME_SETTINGS = {
   // 0 = never. Lifetimes need to be longer than it takes to gather a contract or a big build.
   depreciation: {
     on: true,
-    life: 8,
-    byType: { raw: 8, made: 8, waste: 3 },
+    life: 12,
+    byType: { raw: 12, made: 12, waste: 3 },
     goods: {
-      wheat: 4, water: 3, flour: 4, bread: 2,               // food and water spoil quickly
-      iron: 12, steel: 15,                                  // metals keep
-      glass: 12, ceramic: 12, concrete: 12,
+      wheat: 6, water: 5, flour: 6, bread: 4,               // food and water spoil quickly
+      iron: 18, steel: 22,                                  // metals keep
+      glass: 18, ceramic: 18, concrete: 18,
     },
   },
 

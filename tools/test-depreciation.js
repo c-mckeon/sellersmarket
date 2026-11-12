@@ -1,5 +1,5 @@
 // Checks depreciation (game/depreciation.js):  node tools/test-depreciation.js
-// Goods go off after their life, oldest first, wherever they are, and keep their age when traded.
+// Goods go off after their life, oldest first, wherever they are. Bought goods start their life again.
 const E = require("./engine")({ "depreciation.goods.wood": 3, "depreciation.goods.steel": 0 });
 const G = E.G;
 let fails = 0, passes = 0;
@@ -27,7 +27,7 @@ const night = (st, round) => { st.round = round; G.clock = round; G.expire(st); 
   G.clock = 2; G.take(st, p, "wood", 3);
   night(st, 3); eq("used the oldest first: nothing left to go off", p.stock.wood, 3);
 }
-{ // On the book, goods keep ageing; a buyer gets them with their age
+{ // On the book, goods keep ageing; a buyer gets them fresh
   const st = fresh(), [a, b] = st.players;
   G.clock = 1; G.add(a, "wood", 5); st.round = 2; st.phase = "day";
   G.act(st, a.id, "placeOrder", { id: "wood", side: "sell", price: 5, qty: 5 });
@@ -36,8 +36,8 @@ const night = (st, round) => { st.round = round; G.clock = round; G.expire(st); 
   G.act(st, a.id, "placeOrder", { id: "wood", side: "sell", price: 5, qty: 4 });
   G.act(st, b.id, "placeOrder", { id: "wood", side: "buy", price: 5, qty: 4 });
   G.auction(st);
-  eq("buyer gets the goods with their age", b.lots.wood, [[4, 2]]);
-  night(st, 4); eq("and they go off on time", b.stock.wood, undefined);
+  eq("buyer gets the goods fresh (made now)", b.lots.wood, [[4, 3]]);
+  night(st, 4); eq("so they don't go off with the seller's old age", b.stock.wood, 4);
 }
 { // Cancelling gives goods back with their age
   const st = fresh(), a = st.players[0];

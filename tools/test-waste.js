@@ -41,6 +41,7 @@ const order = (st, pid, side, price, qty, id = "slag") => G.act(st, pid, "placeO
   eq("cancel returns the fee and the waste", [a.cash, a.stock.slag], [1000, 3]);
   eq("can't dump waste", G.act(st, 1, "dump", { id: "slag", qty: 1 }).ok, false);
   eq("can still dump other goods", (G.add(a, "clay", 2), G.act(st, 1, "dump", { id: "clay", qty: 1 }).ok), true);
+  eq("binning costs the bin fee", a.cash, 1000 - E.S.binFee);
 }
 { // Waste that goes off while on offer needs no fee: the lock comes back
   const st = fresh(), [a] = st.players;

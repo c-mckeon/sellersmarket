@@ -91,8 +91,8 @@
         <ul>
           <li>Contracts arrive on a board everyone sees: <span data-s="contracts.start"></span> at the start, then <b><span data-s="perRound"></span> new ones each night</b>, up to <span data-s="contracts.open"></span> at once. Each asks for 1 to 4 different goods, a few of each, so some are simple and some complex.</li>
           <li><b>Bid</b> what you'd want to be paid for one. Bids are sealed until the night, when the lowest bid so far is shown (never who made it); a new bid of yours must be lower than your last. The client pays at most a cap, shown on the board: raw materials in it × <span data-s="contracts.capPerRawUnit"></span> × (1 + <span data-s="contracts.tierBonus" data-f="pct"></span> for each processing step).</li>
-          <li>After <b><span data-s="contracts.bidRounds"></span> rounds</b> the lowest bid wins (a tie: the earlier bid). You can hold <span data-s="contracts.maxHeld"></span> contracts at once; if you're full, the next lowest bidder gets it. No bids: it's replaced.</li>
-          <li>The winner has <b><span data-s="contracts.deliverRounds"></span> rounds</b> to deliver it, from their stockpile (goods in sell orders don't count), and is paid their bid. Miss the deadline and you pay <b>legal fees</b>: <span data-s="failFee"></span>.</li>
+          <li>Each contract has its own timings, never under 2 rounds: bidding stays open longer for contracts asking for more goods (2–6 rounds), and the winner gets longer to deliver bigger ones (2–8 rounds). When bidding closes the lowest bid wins (a tie: the earlier bid). You can hold <span data-s="contracts.maxHeld"></span> contracts at once; if you're full, the next lowest bidder gets it. No bids: it's replaced.</li>
+          <li>The winner has the contract's delivery time to deliver it, from their stockpile (goods in sell orders don't count), and is paid their bid. Miss the deadline and you pay <b>legal fees</b>: <span data-s="failFee"></span>.</li>
           <li>Every contract is for a real job, from a bulk order of one material to a building or machine that needs four: <span data-s="projects"></span>.</li>
           <li>Competition sets the prices: a contract only you can make goes for close to its cap; one everyone can make gets bid down.</li>
         </ul>
@@ -121,7 +121,7 @@
         <h2>Goods go off</h2>
         <ul>
           <li>Every unit remembers when it was made and goes off at the end of its life: <span data-s="lifetimes"></span>. Each stockpile row counts down to it.</li>
-          <li>Goods are used, sold and delivered oldest first, and keep their age in sell orders and when bought, so holding goods back has a cost.</li>
+          <li>Goods are used, sold and delivered oldest first, and keep their age in sell orders, so holding goods back has a cost. Goods you <b>buy</b> arrive fresh: their life starts again from the round you bought them.</li>
         </ul>
       </section>
 

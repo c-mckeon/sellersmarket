@@ -24,7 +24,7 @@ const all = (st, orders) => st.players.forEach(p => G.submit(st, p.id, orders[p.
   all(st, { 1: [{ name: "bid", args: { contract: id, amount: 80 } }], 2: [{ name: "bid", args: { contract: id, amount: 60 } }] });
   eq("still on the board after round 1", st.contracts.some(x => x.id === id), true);
   eq("the lowest bid is public after the night", G.lowestBid(st.contracts.find(x => x.id === id)).amount, 60);
-  for (let r = 1; r < C.bidRounds; r++) all(st, {});
+  for (let r = 1, n = st.contracts.find(x => x.id === id)?.bidRounds ?? C.bidRounds; r < n; r++) all(st, {});
   eq("gone from the board", st.contracts.some(x => x.id === id), false);
   eq("new contracts arrive, within the limits", st.contracts.length >= 0 && st.contracts.length <= C.open, true);
   const won = G.player(st, 2).contracts.find(x => x.id === id);
@@ -40,10 +40,10 @@ const all = (st, orders) => st.players.forEach(p => G.submit(st, p.id, orders[p.
 { // Not delivered in time: legal fees
   const st = fresh(), id = st.contracts[0].id;
   all(st, { 3: [{ name: "bid", args: { contract: id, amount: 100 } }] });
-  for (let r = 1; r < C.bidRounds; r++) all(st, {});
+  for (let r = 1, n = st.contracts.find(x => x.id === id)?.bidRounds ?? C.bidRounds; r < n; r++) all(st, {});
   eq("P3 holds it", G.player(st, 3).contracts.length, 1);
   const cash = G.player(st, 3).cash;
-  for (let r = 0; r < C.deliverRounds; r++) all(st, {});
+  for (let r = 0, n = G.player(st, 3).contracts[0].due - st.round + 1; r < n; r++) all(st, {});
   eq("fees paid", G.player(st, 3).cash, cash - G.failFee(100));
   eq("contract gone", G.player(st, 3).contracts.length, 0);
 }
@@ -51,7 +51,7 @@ const all = (st, orders) => st.players.forEach(p => G.submit(st, p.id, orders[p.
   const st = fresh(), id = st.contracts[0].id;
   all(st, { 1: [{ name: "bid", args: { contract: id, amount: 10 } }], 2: [{ name: "bid", args: { contract: id, amount: 90 } }] });
   G.player(st, 1).contracts = Array.from({ length: C.maxHeld }, (_, i) => ({ id: 900 + i, goods: { clay: 1 }, price: 1, won: st.round, due: st.round + 99, cap: 9 }));
-  for (let r = 1; r < C.bidRounds; r++) all(st, {});
+  for (let r = 1, n = st.contracts.find(x => x.id === id)?.bidRounds ?? C.bidRounds; r < n; r++) all(st, {});
   eq("P2 gets it", G.player(st, 2).contracts.some(x => x.id === id), true);
   if (!st.contracts.length) st.contracts.push(G.newContract(st)); // the board can be empty some nights
   eq("full player can't bid", G.act(G.draft(st, 1, []).state, 1, "bid", { contract: st.contracts[0].id, amount: 5 }).ok, false);

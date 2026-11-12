@@ -160,8 +160,8 @@
       play: (st, p, [kid, pid]) => { const k = st.contracts.find(x => x.id === kid), v = G.player(st, pid), low = G.lowestBid(k);
         st.contracts = st.contracts.filter(x => x !== k);
         const price = low ? low.amount : Math.round(k.cap * 0.6);
-        (v.contracts ||= []).push({ id: k.id, name: k.name, icon: k.icon, goods: k.goods, cap: k.cap, price, won: st.round, due: st.round + S.contracts.deliverRounds });
-        say(st, `was ordered to make ${k.name} for ${G.money(price)}: deliver it by round ${st.round + S.contracts.deliverRounds}`, v.id); } },
+        (v.contracts ||= []).push({ id: k.id, name: k.name, icon: k.icon, goods: k.goods, cap: k.cap, price, won: st.round, due: st.round + G.deliverRoundsOf(k) });
+        say(st, `was ordered to make ${k.name} for ${G.money(price)}: deliver it by round ${st.round + G.deliverRoundsOf(k)}`, v.id); } },
     { id: "inside_line", name: "Inside line", icon: "☎️", group: "Contracts", rarity: "common", target: null,
       text: "See the next two contracts that will come to the board (only you see them).",
       play: (st, p) => say(st, `the next contracts: ${G.upcoming(st, 2).map(k => `${k.icon} ${k.name} (${Object.entries(k.goods).map(([c, q]) => `${q} ${G.COM[c].name}`).join(", ")}; client pays up to ${G.money(k.cap)})`).join(" · then ")}`, p.id) },

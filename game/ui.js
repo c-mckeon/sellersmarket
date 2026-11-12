@@ -24,17 +24,31 @@
   // screen follows the game as it changes. "Play on this device" goes back to the local game.
   const online = () => NET.ready && !ui.offline;
   const mySeat = () => st && NET.user ? st.players.find(p => p.name === NET.user && !p.bot) : null;
+  // The rules in brief (numbers from the settings), for the login page
+  function rulesBrief() {
+    const C = S.contracts, costs = G.BIZ.map(b => b.cost);
+    return `<section class="brief"><h2>How to play</h2><ul>
+      <li><b>Goal:</b> the first to <b>${m(S.goal)} net worth</b> wins: your cash plus your businesses at what they'd sell back for. Everyone starts with ${m(S.startCash)} and two businesses.</li>
+      <li><b>Each round</b> you both send your orders in secret: trades, deliveries, a card, and one move or build. Nothing happens until everyone has sent theirs; then it all happens at once, overnight.</li>
+      <li><b>The market:</b> there are no set prices. Place bids and asks; each night a sealed auction trades every good at one price. Orders stay on the book until they fill or you cancel them.</li>
+      <li><b>Businesses</b> make 1 of their product a round; factories turn 1 of each input into it. Building costs ${m(Math.min(...costs))}–${m(Math.max(...costs))}, and each territory allows only certain businesses. You can sell one back for ${Math.round((S.businessResale ?? 1) * 100)}% of its cost.</li>
+      <li><b>Contracts</b> are how you earn: bid what you'd want to be paid, and when bidding closes (2–6 rounds, longer for bigger contracts) the lowest bid wins. Deliver the goods in time (2–8 rounds, depending on size) to be paid your bid; miss it and you pay legal fees.</li>
+      <li><b>Your stockpile</b> has ${S.startSpace} rows, first in, first out: when it overflows the oldest go. Goods go off with age; binning one costs ${m(S.binFee || 0)}, and waste (slag, sawdust) has to be paid away.</li>
+      <li><b>Cards:</b> you get one each time you deliver a contract, and can play one a round: harvests and strikes, tariffs and embargoes, theft and takeovers…</li>
+    </ul><p class="small muted">The full rules are on the <a href="#/mechanics/gameplay">Mechanics</a> pages.</p></section>`;
+  }
   function renderLogin(msg = "") {
     root.innerHTML = `<div class="gsetup glogin">
       <h1>Who's playing?</h1>
-      <p class="muted">The first time you log in, the password you type becomes yours.${NET.mock ? " (Test mode: a stand-in database in this browser.)" : ""}</p>
-      ${NET.players.map(n => `<form class="glog" data-name="${esc(n)}"><button class="gbtn" type="submit">${esc(n)}</button><input type="password" placeholder="Password" autocomplete="current-password" aria-label="${esc(n)}'s password"></form>`).join("")}
+      ${NET.mock ? `<p class="muted">Test mode: a stand-in database in this browser.</p>` : ""}
+      ${NET.players.map(n => `<form class="glog" data-name="${esc(n)}"><span class="glog-n">${esc(n)}</span><button class="gbtn" type="submit">Log in</button></form>`).join("")}
       ${msg ? `<p class="bad">${esc(msg)}</p>` : ""}
       <p class="small"><button class="glink" id="gOffline">Play on this device instead</button></p>
+      ${rulesBrief()}
     </div>`;
     root.querySelectorAll(".glog").forEach(f => f.addEventListener("submit", async e => {
       e.preventDefault();
-      const r = await NET.login(f.dataset.name, f.querySelector("input").value);
+      const r = await NET.login(f.dataset.name);
       if (!r.ok) return renderLogin(r.msg);
       goOnline();
     }));
@@ -90,7 +104,7 @@
     root.innerHTML = `
       <div class="gsetup">
         <h1>New game ${userBar()}</h1>
-        <p class="muted">Pick who's playing. Each player starts with ${S.startCash} cash, a ${S.startSpace}-row stockpile (first in, first out), ${S.startBusinesses > 1 ? "two free businesses where they start (the one picked here and the one that uses its output)" : "one free business where they start"}, and a board of contracts to bid for (a few at first, 0 to 2 more a night): win one, deliver it in time and you're paid your bid. The first to ${m(S.goal)} net worth (cash plus businesses at their sell-back value; the stockpile doesn't count) wins. ${S.businessStock ? `What a business makes stays in its own stock (up to ${S.businessSpace} units) until you sell or use it. ` : ""}There's no price list: every price comes from what players bid and ask.</p>
+        <p class="muted">Pick who's playing. Each player starts with ${S.startCash} cash, a ${S.startSpace}-row stockpile (first in, first out), ${S.startBusinesses > 1 ? "two free businesses where they start (the one picked here and the one that uses its output)" : "one free business where they start"}, and a board of contracts to bid for (a few at first, then ${S.contracts.perRound.join("–")} more a night, up to ${S.contracts.open}): win one, deliver it in time and you're paid your bid. The first to ${m(S.goal)} net worth (cash plus businesses at their sell-back value; the stockpile doesn't count) wins. ${S.businessStock ? `What a business makes stays in its own stock (up to ${S.businessSpace} units) until you sell or use it. ` : ""}There's no price list: every price comes from what players bid and ask.</p>
         ${saved && saved.version === 7 && !saved.over ? `<div class="gresume">A game in round ${saved.round} is saved in this browser. <button class="gbtn" id="gResume">Continue it</button></div>` : ""}
         <table class="gplayers"><thead><tr><th></th><th>Name</th><th>Who</th><th>Starts in</th><th>Free businesses</th><th></th></tr></thead><tbody>
         ${setup.players.map((p, i) => {
@@ -170,7 +184,7 @@
     if (o.name === "cancelOrder") { const x = st.book.find(y => y.id === a.order); return x ? `Cancel ${x.side === "buy" ? "bid for" : "offer of"} ${x.qty} ${G.COM[x.good].name} at ${m(x.price)}` : "Cancel an order"; }
     if (o.name === "bid") { const k = (st.contracts || []).find(x => x.id === a.contract); return `Bid ${m(a.amount)} for ${k ? `${G.contractItem(k).icon} ${esc(G.contractItem(k).name)}` : "a contract"}`; }
     if (o.name === "deliver") { const k = (G.player(st, ui.seat).contracts || []).find(x => x.id === a.contract); if (!k) return "Deliver a contract"; const it = G.contractItem(k); return `Deliver ${it.icon} ${esc(it.name)} for ${m(k.price)}`; }
-    if (o.name === "dump") return `Bin ${a.qty} ${G.COM[a.id].name}`;
+    if (o.name === "dump") return `Bin ${a.qty} ${G.COM[a.id].name} <em>${m((S.binFee || 0) * a.qty)}</em>`;
     if (o.name === "move") return `Move to ${G.TERR[a.to].name}`;
     if (o.name === "build") return `Build a ${G.BIZ_BY[a.type].name.toLowerCase()}`;
     return o.name;
@@ -234,7 +248,6 @@
     vw = G.draft(st, ui.seat, ui.orders).state;
     const p = me();
     const news = st.log.slice(ui.seenBy[p.id] ?? st.log.length);
-    const who = l => { if (!l.pid) return ""; const x = G.player(st, l.pid); return `<i class="ndot" style="background:${x.colour}"></i><b>${l.pid === p.id ? "You" : esc(x.name)}</b> `; };
     root.innerHTML = `
       <div class="gbar">
         <span class="gphase day">Round ${st.round} · first to ${m(st.goal || S.goal)} net worth wins</span>
@@ -246,8 +259,7 @@
         <button class="gbtn ghost" id="gNew" title="Start a new game">New game</button>${userBar()}
       </div>
       ${flashMsg ? `<div class="gflash">${esc(flashMsg)}</div>` : ""}
-      ${news.length ? (n => fold("news", "gnews", `<b>What happened since your last orders <span class="muted small">${n.length} event${n.length === 1 ? "" : "s"}</span></b><button class="glink" id="gNewsOk" title="Dismiss">✕</button>`,
-        n.map(l => `<span class="${l.pid === p.id ? "mine" : l.pid ? "" : "pub"}">${who(l)}${esc(l.msg)}</span>`).join("")))(news.filter(l => !/^Round \d/.test(l.msg)).slice(-40)) : ""}
+      ${(n => n.count ? fold("news", "gnews", `<b>What happened since your last orders <span class="muted small">${n.count} thing${n.count === 1 ? "" : "s"}</span></b><button class="glink" id="gNewsOk" title="Dismiss">✕</button>`, n.html) : "")(newsList(news, p))}
       <div class="glay">
         <div class="gmain ${st.phase}">
           <div class="gmap" id="gMap"></div>
@@ -267,6 +279,45 @@
     wire(p);
     placeOpen();
     keepPlace();
+  }
+
+  // ----- What happened since your last orders: a short list per round -----
+  // Shows your own news (trades, deliveries, contracts, what was done to you, private tips), what other
+  // players did in public (moves, builds, cards, contract wins), and the market in a line. Your businesses'
+  // output is added up into one line; other players' private news (their trades, output, tips) is left out.
+  function newsList(log, p) {
+    const rounds = {};
+    const add = (r, kind, html) => (rounds[r] ||= { pub: [], mine: [], made: {}, idle: [] })[kind].push(html);
+    log.forEach(l => {
+      const r = l.round, m = l.msg;
+      if (/^Round \d|^Game started/.test(m)) return;
+      if (l.pid == null) {
+        const mk = m.match(/^Market: (.*)\.$/);
+        if (mk) { if (!/nothing traded/.test(m)) add(r, "pub", `Market: ${mk[1].split(", ").length} good${mk[1].split(", ").length === 1 ? "" : "s"} traded`); return; }
+        add(r, "pub", esc(m)); return;
+      }
+      if (l.pid !== p.id) { // someone else: only what they did in public
+        if (/^(moved to|built a|delivered|sold a)/.test(m)) add(r, "pub", `<b style="color:${G.player(st, l.pid)?.colour}">${esc(G.player(st, l.pid)?.name || "?")}</b> ${esc(m.replace(/ and was paid .*$/, ""))}`);
+        return;
+      }
+      // Yours. Production adds up into one line; idle and stopped businesses into another.
+      const made = m.match(/^(.+?) made (.+?)(, using .*)?$/);
+      if (made && !/^Building/.test(made[1])) { const R = rounds[r] ||= { pub: [], mine: [], made: {}, idle: [] };
+        made[2].split(" + ").forEach(x => { const q = x.match(/^(\d+) (.+)$/); if (q) R.made[q[2]] = (R.made[q[2]] || 0) + +q[1]; }); return; }
+      const idle = m.match(/^(.+?) idle: (.*)$/) || m.match(/^(.+?) in .+ stopped tonight$/);
+      if (idle) { add(r, "idle", `${esc(idle[1])}${idle[2] ? ` (${esc(idle[2].replace(/^needs /, "needs ").replace(/ more /g, " "))})` : " (stopped)"}`); return; }
+      add(r, "mine", esc(m.charAt(0).toUpperCase() + m.slice(1)));
+    });
+    let count = 0;
+    const html = Object.keys(rounds).sort((a, b) => a - b).map(r => {
+      const R = rounds[r], items = [...R.pub.map(x => `<li class="pub">${x}</li>`), ...R.mine.map(x => `<li class="mine">${x}</li>`)];
+      const made = Object.entries(R.made);
+      if (made.length) items.push(`<li class="mine">Your businesses made ${made.map(([c, n]) => `${n} ${c}`).join(", ")}</li>`);
+      if (R.idle.length) items.push(`<li class="mine muted">Idle: ${R.idle.join(", ")}</li>`);
+      count += items.length;
+      return items.length ? `<div class="nround"><b>Round ${r}</b><ul>${items.join("")}</ul></div>` : "";
+    }).join("");
+    return { count, html };
   }
 
   function renderPass(seat) {
@@ -539,7 +590,9 @@
       const lots = o.lots?.length ? o.lots : [[o.qty, vw.round]];
       lots.forEach(([k, made]) => { for (let i = 0; i < k; i++) rows.push({ c: o.good, made, offer: true }); });
     });
-    rows.sort((a, b) => a.made - b.made || a.c.localeCompare(b.c));
+    rows.sort((a, b) => a.made - b.made || a.c.localeCompare(b.c)); // first in, first out: the order they leave in
+    // Sorted by good instead (a toggle): grouped by name, oldest first within each. The order they leave in is still oldest first.
+    if (ui.stockByGood) rows.sort((a, b) => G.COM[a.c].name.localeCompare(G.COM[b.c].name) || a.made - b.made);
     const reserved = G.reserved(vw, p);
     const life = r => {
       const L = G.lifeOf ? G.lifeOf(r.c) : 0;
@@ -550,13 +603,13 @@
     const out = [];
     for (let i = 0; i < p.space; i++) {
       const r = rows[i];
-      if (r) out.push(`<li class="${r.offer ? "offer" : ""}"><span class="sl-n">${i + 1}</span><button class="sl-good" data-good="${r.c}" title="Open ${G.COM[r.c].name} in the market">${G.COM[r.c].name}${r.offer ? ` <small>on offer</small>` : ""}</button>${life(r)}${r.offer ? `<span></span>` : G.isWaste(r.c) ? `<button class="sl-bin" disabled title="Waste can't be binned: pay someone to take it, or keep it until it goes off">🗑</button>` : `<button class="sl-bin" data-bin="${r.c}" title="Bin one ${G.COM[r.c].name.toLowerCase()}">🗑</button>`}</li>`);
+      if (r) out.push(`<li class="${r.offer ? "offer" : ""}"><span class="sl-n">${i + 1}</span><button class="sl-good" data-good="${r.c}" title="Open ${G.COM[r.c].name} in the market">${G.COM[r.c].name}${r.offer ? ` <small>on offer</small>` : ""}</button>${life(r)}${r.offer ? `<span></span>` : G.isWaste(r.c) ? `<button class="sl-bin" disabled title="Waste can't be binned: pay someone to take it, or keep it until it goes off">🗑</button>` : `<button class="sl-bin" data-bin="${r.c}" title="Bin one ${G.COM[r.c].name.toLowerCase()} (costs ${m(S.binFee || 0)})">🗑</button>`}</li>`);
       else if (i < rows.length + reserved) out.push(`<li class="resv"><span class="sl-n">${i + 1}</span><span class="sl-good">kept free for a buy order</span><span></span><span></span></li>`);
       else out.push(`<li class="empty"><span class="sl-n">${i + 1}</span><span class="sl-good">empty</span><span></span><span></span></li>`);
     }
     const over = rows.length - p.space;
     return `<ol class="dstock">${out.join("")}</ol>
-      <p class="dhint">Top row first out. ${over > 0 ? `<b class="bad">${over} more than fit: the oldest go tonight.</b> ` : ""}When it overflows, the oldest units are pushed out.</p>`;
+      <p class="dhint">${ui.stockByGood ? "Grouped by good; the oldest still go first." : "Top row first out."} ${over > 0 ? `<b class="bad">${over} more than fit: the oldest go tonight.</b> ` : ""}When it overflows, the oldest units are pushed out.</p>`;
   }
 
   // ----- Cards: your hand, and what's in force -----
@@ -612,11 +665,13 @@
     const biz = G.myBusinesses(vw, p.id);
     const pv = middayPreview(p);
     return `
-      <div class="dtop">
-        <div title="Cash (with cash in your orders) plus your businesses at what they'd sell back for. The stockpile doesn't count."><span>Net worth</span><b>${m(G.netWorth(vw, p))}</b>
-          <small class="muted">${m(p.cash)} cash${locked ? ` + ${m(locked)} in orders` : ""} + ${m(G.netWorth(vw, p) - p.cash - locked)} businesses</small>
-          <span class="goalbar" title="${m(G.netWorth(vw, p))} of ${m(vw.goal || S.goal)}"><i style="width:${Math.max(0, Math.min(100, G.netWorth(vw, p) / (vw.goal || S.goal) * 100)).toFixed(1)}%"></i></span><small class="muted">goal ${m(vw.goal || S.goal)}</small></div>
-        <div><span>From contracts</span><b>${m((p.earned || 0) - (p.fees || 0))}</b><small class="muted">${p.delivered || 0} delivered${p.failed ? ` · ${p.failed} failed` : ""}</small></div>
+      <div class="dtop dworth" title="Net worth: cash (with cash in your orders) plus your businesses at what they'd sell back for. The stockpile doesn't count.">
+        <div class="dw-top"><span>Net worth</span><b>${m(G.netWorth(vw, p))}</b></div>
+        <dl class="dw-rows">
+          <div><dt>Cash</dt><dd>${m(p.cash)}</dd></div>
+          <div><dt>In businesses</dt><dd>${m(G.netWorth(vw, p) - p.cash - locked)}</dd></div>
+          <div><dt>Locked for trade</dt><dd>${m(locked)}</dd></div>
+        </dl>
       </div>
       <div class="dsec">
         <h4>Your contracts <em>${(p.contracts || []).length} of ${S.contracts.maxHeld} · <button class="glink" data-tab="contracts">board →</button></em></h4>
@@ -641,7 +696,7 @@
         ${pv && pv.length ? `<div class="dprev"><b>Tonight</b>${pv.map(x => `<span>${esc(x)}</span>`).join("")}</div>` : ""}
       </div>
       <div class="dsec">
-        <h4>Your stockpile <em>${Math.min(p.space, G.used(p) + G.offered(vw, p) + G.reserved(vw, p))} of ${p.space} rows</em></h4>
+        <h4>Your stockpile <em>${Math.min(p.space, G.used(p) + G.offered(vw, p) + G.reserved(vw, p))} of ${p.space} rows · <button class="glink" id="gStockSort" title="Show the stockpile ${ui.stockByGood ? "oldest first (the order it's used and pushed out in)" : "grouped by good"}">${ui.stockByGood ? "by good" : "oldest first"} ⇅</button></em></h4>
         ${stockList(p)}
       </div>
       <div class="dsec">
@@ -1026,7 +1081,7 @@
         <header><small>${esc(agency)}</small><b>INVITATION TO TENDER № ${String(k.id).padStart(4, "0")}</b></header>
         <h3>${it.icon} ${esc(it.name)}</h3>
         ${goodsList(p, k)}
-        <dl><div><dt>Client pays at most</dt><dd>${m(k.cap)}</dd></div><div><dt>Lowest tender</dt><dd>${low ? `${m(low.amount)} <small>(${past.length} bid${past.length === 1 ? "" : "s"})</small>` : "none yet"}</dd></div><div><dt>Tenders close</dt><dd class="${left <= 1 ? "bad" : ""}">${left <= 1 ? "tonight" : `in ${left} rounds`}</dd></div></dl>
+        <dl><div><dt>Client pays at most</dt><dd>${m(k.cap)}</dd></div><div><dt>Lowest tender</dt><dd>${low ? `${m(low.amount)} <small>(${past.length} bid${past.length === 1 ? "" : "s"})</small>` : "none yet"}</dd></div><div><dt>Tenders close</dt><dd class="${left <= 1 ? "bad" : ""}">${left <= 1 ? "tonight" : `in ${left} rounds`}</dd></div><div><dt>Delivery time</dt><dd>${G.deliverRoundsOf(k)} rounds once won</dd></div></dl>
         ${stamp(agency.length > 26 ? abbr + " · tenders" : agency, abbr, ink, (k.id * 23) % 50 - 25, k.id)}
         ${left <= 1 ? bigStamp("Closes tonight", "#b8323a", 6) : ""}
         <footer><span class="sig">${esc(pick(SIGNERS, k, 1))}</span><small>Clerk of Tenders</small>
@@ -1035,7 +1090,7 @@
             <button class="gbtn" data-bidfor="${k.id}" ${full ? `disabled title="You hold ${C.maxHeld} contracts already"` : ""}>Tender</button></div></footer>
       </article>`;
     }).join("");
-    return `<div class="ghead"><h3>Contracts</h3><span class="muted">Bid what you'd want to be paid: after ${C.bidRounds} rounds the lowest tender wins. Deliver within ${C.deliverRounds} rounds to be paid; late costs legal fees. You can hold ${C.maxHeld}.</span></div>
+    return `<div class="ghead"><h3>Contracts</h3><span class="muted">Bid what you'd want to be paid: when tenders close the lowest wins. Deliver in time to be paid; late costs legal fees. Bigger contracts get longer for both. You can hold ${C.maxHeld}.</span></div>
       ${held ? `<h4 class="gsub">Yours</h4><div class="pinboard">${held}</div>` : ""}
       <h4 class="gsub">Open for tenders</h4><div class="pinboard">${board}</div>`;
   }
@@ -1246,6 +1301,7 @@
       const target = Array.isArray(c.target) ? vals : vals.length ? vals[0] : null;
       ui.cardSel = null; doAct("playCard", { card: c.id, target });
     });
+    root.querySelector("#gStockSort")?.addEventListener("click", () => { ui.stockByGood = !ui.stockByGood; render(); });
     root.querySelectorAll("[data-bin]").forEach(b => b.addEventListener("click", e => { e.stopPropagation(); doAct("dump", { id: b.dataset.bin, qty: 1 }); }));
     root.querySelectorAll("[data-bidfor]").forEach(b => b.addEventListener("click", () => {
       const inp = root.querySelector(`[data-bidinput="${b.dataset.bidfor}"]`), v = Math.round(+inp?.value);
@@ -1405,15 +1461,11 @@
   function renderBottom() {
     if (!bottom) return;
     bottom.innerHTML = `<section class="gbottom">
-      <div class="gtabs2"><button data-btab="chat" class="on">Chat</button><button data-btab="ideas">Ideas</button></div>
-      <div class="bpane" data-pane="chat"><div class="chatlog" id="chatLog"></div>
-        <form class="chatform" id="chatForm"><input id="chatIn" placeholder="Say something…" maxlength="500" autocomplete="off"><button class="gbtn" type="submit">Send</button></form></div>
-      <div class="bpane" data-pane="ideas" hidden>${IDEAS}</div>
-    </section>`;
-    bottom.querySelectorAll("[data-btab]").forEach(b => b.addEventListener("click", () => {
-      bottom.querySelectorAll("[data-btab]").forEach(x => x.classList.toggle("on", x === b));
-      bottom.querySelectorAll("[data-pane]").forEach(x => x.hidden = x.dataset.pane !== b.dataset.btab);
-    }));
+      <h3 class="bhead">Chat</h3>
+      <div class="chatlog" id="chatLog"></div>
+      <form class="chatform" id="chatForm"><input id="chatIn" placeholder="Say something…" maxlength="500" autocomplete="off"><button class="gbtn" type="submit">Send</button></form>
+    </section>
+    <details class="gbottom gideas"><summary><h3>Ideas</h3> <span class="muted small">giving players a reason to trade</span></summary>${IDEAS}</details>`;
     bottom.querySelector("#chatForm").addEventListener("submit", e => { e.preventDefault(); const i = bottom.querySelector("#chatIn"); sendChat(i.value); i.value = ""; });
   }
   renderBottom();

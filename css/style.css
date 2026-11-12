@@ -387,7 +387,6 @@ code { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; fo
 .gorder em { font-style: normal; font-weight: 400; color: var(--muted); }
 .gorder button { border: none; background: none; color: var(--muted); cursor: pointer; font-size: 12px; }
 .gnews { background: var(--surface); border: 1px solid var(--line); border-left: 4px solid var(--accent); border-radius: 8px; padding: 8px 12px; margin-bottom: 10px; display: grid; gap: 2px; font-size: 13px; max-height: 220px; overflow-y: auto; }
-.gnews > div { display: flex; justify-content: space-between; }
 .gnews span { color: var(--muted); }
 .gpass { text-align: center; padding: 70px 16px; }
 .gpass h2 { font-size: 28px; margin: 14px 0 6px; }
@@ -395,8 +394,6 @@ code { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; fo
 
 /* game: dashboard extras, broker, news */
 .ndot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 4px; }
-.gnews span.mine { color: var(--ink); }
-.gnews span.pub { color: var(--accent); font-weight: 600; }
 
  
 .dprev { margin-top: 6px; font-size: 12.5px; }
@@ -707,7 +704,7 @@ details.gnews[open] { display: grid; }
 /* Online: logging in */
 .glogin { max-width: 420px; }
 .glog { display: flex; gap: 8px; margin: 8px 0; }
-.glog .gbtn { min-width: 84px; }
+.glog { align-items: center; } .glog-n { flex: 1; font-size: 17px; font-weight: 700; } .glog .gbtn { min-width: 96px; }
 .glog input { flex: 1; font: inherit; padding: 6px 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); color: var(--ink); }
 .guser { font-size: 13px; font-weight: 600; color: var(--muted); margin-left: 8px; white-space: nowrap; }
 .gsetup h1 .guser { font-size: 14px; vertical-align: middle; }
@@ -857,3 +854,42 @@ details.gnews[open] { display: grid; }
 /* Net worth: progress to the goal */
 .goalbar { display: block; height: 6px; margin: 4px 0 2px; border-radius: 3px; background: var(--line); overflow: hidden; }
 .goalbar i { display: block; height: 100%; background: var(--accent); }
+
+/* The rules in brief, on the login page */
+.glogin { max-width: 640px; }
+.glogin .glog { max-width: 420px; }
+.brief { margin-top: 22px; padding-top: 14px; border-top: 1px solid var(--line); }
+.brief h2 { margin: 0 0 8px; font-size: 18px; }
+.brief ul { margin: 0; padding-left: 20px; font-size: 14.5px; line-height: 1.5; }
+.brief li { margin: 6px 0; }
+
+.gbottom .bhead { margin: 4px 0 2px; font-size: 15px; }
+.gideas summary { cursor: pointer; display: flex; align-items: baseline; gap: 8px; padding: 4px 0; }
+.gideas summary h3 { margin: 0; font-size: 15px; display: inline; }
+.gideas .ideas h3 { display: none; }
+.gideas summary::before { content: "▸"; color: var(--muted); transition: transform .15s; }
+.gideas[open] summary::before { transform: rotate(90deg); }
+.gideas summary::-webkit-details-marker { display: none; }
+
+/* Net worth and its parts: one line each, € amounts lined up on the right */
+.dtop.dworth { display: block; }
+.dworth .dw-top { display: flex; justify-content: space-between; align-items: baseline; white-space: nowrap; }
+.dworth .dw-top span { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: .05em; }
+.dworth .dw-top b { font-size: 22px; font-variant-numeric: tabular-nums; }
+.dworth .dw-rows { margin: 4px 0 0; display: grid; gap: 1px; }
+.dworth .dw-rows div { display: flex; justify-content: space-between; gap: 8px; white-space: nowrap; font-size: 13px; line-height: 1.45; }
+.dworth dt { color: var(--muted); }
+.dworth dd { margin: 0; font-variant-numeric: tabular-nums; text-align: right; }
+
+/* Quote board controls: a fixed layout, so a long caption never moves the slider or buttons */
+.qboard .qctl { display: grid; grid-template-columns: auto minmax(120px, 1fr) auto 260px; align-items: center; gap: 8px; flex-wrap: nowrap; }
+.qboard .qctl input[type=range] { width: 100%; min-width: 0; }
+.qboard #qLabel { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+@media (max-width: 700px) { .qboard .qctl { grid-template-columns: auto minmax(80px, 1fr) auto; } .qboard #qLabel { grid-column: 1 / -1; } }
+
+/* What happened since your last orders */
+.gnews .nround { display: block; margin: 4px 0 6px; }
+.gnews .nround > b { font-size: 11px; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); }
+.gnews ul { margin: 2px 0 0; padding-left: 18px; font-size: 13px; line-height: 1.45; }
+.gnews li { margin: 1px 0; }
+.gnews li.pub { color: var(--ink); }
